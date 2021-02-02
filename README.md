@@ -55,16 +55,50 @@ Setup native with OSX or Ubuntu
 (e.g.:  <a target="_blank" href="https://www.tensorflow.org/install/gpu">Tensorflow</a>)
 
 ### Local setup
-- Clone repository
+### Create a new project from the template:
+------------
+
+0. Clone repository
 ```
-git clone %reponame%
-cd %reponame%
+git clone %repo-name%
+cd %repo-name%
 ```
-- Create a virtual environment either via virtualenv or conda
+1. Create a new environment or from an environment.yaml file
 ```
-make environment
+conda create --name %PROJEKTNAME% --python=3.8
+or
+conda env create --file environment.yaml
 ```
-- Install dependencies via requirements.txt
+
+2. Activate environment
 ```
-make requirement
+conda activate ax2sax
 ```
+3. Install a helper to automatically change the working directory to the project root directory
+```
+pip install --extra-index-url https://test.pypi.org/simple/ ProjectRoot
+```
+4. Create a jupyter kernel from the activated environment, this kernel will be visible in the jupyter lab started from the base environment
+```
+pip install ipykernel
+python -m ipykernel install --user --name ax2sax --display-name "ax2sax kernel"
+```
+5. Deactivate the current environment and run Jupyter lab
+```
+conda deactivate
+jupyter lab
+```
+
+### Enable interactive widgets in Jupyterlab
+
+Pre-condition: nodejs installed globally or into the conda environment. e.g.:
+```
+conda install -c conda-forge nodejs
+```
+Install the jupyterlab-manager which enables the use of interactive widgets
+```
+jupyter labextension install @jupyter-widgets/jupyterlab-manager
+```
+
+Further infos on how to enable the jupyterlab-extensions:
+[JupyterLab](https://ipywidgets.readthedocs.io/en/latest/user_install.html#installing-the-jupyterlab-extension)
