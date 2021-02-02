@@ -1,0 +1,15 @@
+# local packages if available
+-e .
+
+# set the project root as working directory for all jupyter notebooks 
+# external requirements
+--extra-index-url https://test.pypi.org/simple/projectroot
+ProjectRoot
+
+# standard libs
+jupyterlab
+matplotlib
+numpy
+pandas
+
+
