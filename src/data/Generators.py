@@ -47,22 +47,30 @@ class BaseGenerator(tensorflow.keras.utils.Sequence):
         if y is not None:  # return x, y
             assert (len(x) == len(y)), 'len(X) != len(Y)'
 
+        def normalise_paths(elem):
+            """
+            recursive helper to clean filepaths
+            """
+            if isinstance(elem, list):
+                return [normalise_paths(el) for el in elem]
+            elif isinstance(elem, str):
+                return os.path.normpath(x)
+            else:
+                return x
+
         # linux/windows cleaning
         if platform.system() == 'Linux':
-            x = [os.path.normpath(x) for x in x if type(x) is str]
-            y = [os.path.normpath(y) for y in y if type(y) is str]
+            x = normalise_paths(x)
+            y = normalise_paths(y)
 
-        ids = []
-        for i in range(len(x)):
-            ids.append(i)
-            X_dict[i] = x[i]
-            Y_dict[i] = y[i]
+        ids = list(range(len(x)))
+
 
         # override if necessary
         self.SINGLE_OUTPUT = config.get('SINGLE_OUTPUT', False)
 
-        self.labels = Y_dict
-        self.images = X_dict
+        self.labels = x
+        self.images = y
         self.LIST_IDS = ids
 
         # if streamhandler loglevel is set to debug, print each pre-processing step
@@ -413,35 +421,18 @@ class MotionDataGenerator(DataGenerator):
     e.g.: AX --> AXtoSAX --> AXtoSAXtoAX
     """
 
-    def __init__(self, x=None, y=None, x2=None, y2=None, config=None):
-
-        # create a second set of dicts for the second set of files,
-        # This enables index based access to the file names in __data_generation__()
-        self.x2 = {}
-        self.y2 = {}
-
-        if y2 is not None:  # x,y,x2 and y2 needs to have the same number of files
-            assert (len(x2) == len(y2)), 'len(X) != len(Y)'
-            assert (len(x2) == len(x)), 'len(x2) != len(x)'
-
-        # linux/windows file path cleaning
-        if platform.system() == 'Linux':
-            x2 = [os.path.normpath(x) for x in x2 if type(x) is str]
-            y2 = [os.path.normpath(y) for y in y2 if type(y) is str]
-
-        # transform the list into a dict
-        ids = []
-        for i in range(len(x2)):
-            ids.append(i)
-            self.x2[i] = x2[i]
-            self.y2[i] = y2[i]
+    def __init__(self, x=None, y=None, config=None):
 
         if config is None:
             config = {}
         super(MotionDataGenerator, self).__init__(x=x, y=y, config=config)
 
-        self.X_SHAPE = np.empty((self.BATCHSIZE, *self.DIM, self.IMG_CHANNELS), dtype=np.float32)
-        self.Y_SHAPE = np.empty((self.BATCHSIZE, *self.DIM, self.IMG_CHANNELS), dtype=np.float32)
+        if isinstance(x[0], list):
+            model_input_volumes = len(x[0])
+            model_output_volumes = len(y[0])
+            self.X_SHAPE = np.empty((self.BATCHSIZE, model_input_volumes, *self.DIM, self.IMG_CHANNELS), dtype=np.float32)
+            self.Y_SHAPE = np.empty((self.BATCHSIZE, model_output_volumes, *self.DIM, self.IMG_CHANNELS), dtype=np.float32)
+
         self.MASKS = None # need to check if this is still necessary!
 
     def __data_generation__(self, list_IDs_temp):
@@ -497,30 +488,31 @@ class MotionDataGenerator(DataGenerator):
 
         logging.debug('Batchsize: {} preprocessing took: {:0.3f} sec'.format(self.BATCHSIZE, time() - t0))
 
-        ident = np.eye(4, dtype=np.float32)[:3, :]
-        return tuple([[x.astype(np.float32), x2.astype(np.float32)],
-                      [y.astype(np.float32), y2.astype(np.float32), empty.astype(np.float32), empty.astype(np.float32),
-                       empty.astype(np.float32), ident, ident]])
+        return tuple(x, y)
 
     def __preprocess_one_image__(self, i, ID):
 
         t0 = time()
+
+        x = images[ID]
+        y = labels[ID]
+
+        if not isinstance(x, list):
+            x = [x]
+        if not isinstance(y, list):
+            y = [y]
+
         # use the load_masked_img wrapper to enable masking of the images, not necessary for the TMI paper
         # load image
-        sitk_ax = load_masked_img(sitk_img_f=self.images[ID], mask=self.MASKING_IMAGE,
-                                  masking_values=self.MASKING_VALUES, replace=self.REPLACE_WILDCARD)
-        # load ax2sax
-        sitk_ax2sax = load_masked_img(sitk_img_f=self.labels[ID], mask=self.MASKING_IMAGE,
-                                      masking_values=self.MASKING_VALUES, replace=self.REPLACE_WILDCARD)
-        # load sax
-        sitk_sax = load_masked_img(sitk_img_f=self.x2[ID], mask=self.MASKING_IMAGE,
-                                      masking_values=self.MASKING_VALUES, replace=self.REPLACE_WILDCARD)
-        # load sax2ax
-        sitk_sax2ax = load_masked_img(sitk_img_f=self.y2[ID], mask=self.MASKING_IMAGE,
-                                      masking_values=self.MASKING_VALUES, replace=self.REPLACE_WILDCARD)
+        model_inputs = list(map(lambda x: load_masked_img(sitk_img_f=x, mask=self.MASKING_IMAGE,
+                                  masking_values=self.MASKING_VALUES, replace=self.REPLACE_WILDCARD), x))
+
+        model_outputs = list(map(lambda x: load_masked_img(sitk_img_f=x, mask=self.MASKING_IMAGE,
+                                  masking_values=self.MASKING_VALUES, replace=self.REPLACE_WILDCARD), y))
+
         # test to train on ax,sax image pairs without ax2sax transformation
 
-        self.__plot_state_if_debug__(sitk_ax, sitk_ax2sax, t0, 'raw')
+        self.__plot_state_if_debug__(model_inputs[0], model_outputs[0], t0, 'raw')
         t1 = time()
 
         if self.RESAMPLE:
@@ -528,104 +520,75 @@ class MotionDataGenerator(DataGenerator):
             # calc new size after resample image with given new spacing
             # sitk.spacing has the opposite order than np.shape and tf.shape
             # we use the numpy order z, y, x
-            old_spacing_img = list(reversed(sitk_ax.GetSpacing()))
-            old_size_img = list(reversed(sitk_ax.GetSize()))  # after reverse: z, y, x
 
-            old_spacing_msk = list(reversed(sitk_ax2sax.GetSpacing()))
-            old_size_msk = list(reversed(sitk_ax2sax.GetSize()))  # after reverse: z, y, x
+            old_input_spacings = list(map(lambda x: list(reversed(x.GetSpacing())), model_inputs))
+            old_input_sizes = list(map(lambda x: list(reversed(x.GetSize())), model_inputs))# after reverse: z, y, x
 
-            old_spacing_sax3d = list(reversed(sitk_sax.GetSpacing()))
-            old_size_sax3d = list(reversed(sitk_sax.GetSize()))  # after reverse: z, y, x
-
-            old_spacing_saxtoax3d = list(reversed(sitk_sax2ax.GetSpacing()))
-            old_size_saxtoax3d = list(reversed(sitk_sax2ax.GetSize()))  # after reverse: z, y, x
+            old_output_spacings = list(map(lambda x: list(reversed(x.GetSpacing())), model_outputs))
+            old_output_sizes = list(map(lambda x: list(reversed(x.GetSize())), model_outputs))# after reverse: z, y, x
 
             if sitk_ax.GetDimension() == 3:
-                # round up
-                x_s_img = (old_size_img[2] * old_spacing_img[2]) / self.SPACING[2]
-                y_s_img = (old_size_img[1] * old_spacing_img[1]) / self.SPACING[1]
-                z_s_img = (old_size_img[0] * old_spacing_img[0]) / self.SPACING[0]
-                new_size_img = (int(np.round(x_s_img)), int(np.round(y_s_img)), int(np.round(z_s_img)))
+                # calc the new size of all input and output volumes
+                # after resample, so that we dont need to crop here, round up
+                new_size_inputs = list(map(lambda x: np.int(np.round((x[0] * x[1]) / self.SPACING)),
+                                           zip(old_input_sizes, old_input_spacings)))
 
-                x_s_msk = (old_size_msk[2] * old_spacing_msk[2]) / self.SPACING[2]
-                y_s_msk = (old_size_msk[1] * old_spacing_msk[1]) / self.SPACING[1]
-                z_s_msk = (old_size_msk[0] * old_spacing_msk[0]) / self.SPACING[0]
-                new_size_msk = (int(np.round(x_s_msk)), int(np.round(y_s_msk)), int(np.round(z_s_msk)))
-
-                x_s_sax3d = (old_size_sax3d[2] * old_spacing_sax3d[2]) / self.SPACING[2]
-                y_s_sax3d = (old_size_sax3d[1] * old_spacing_sax3d[1]) / self.SPACING[1]
-                z_s_sax3d = (old_size_sax3d[0] * old_spacing_sax3d[0]) / self.SPACING[0]
-                new_size_sax3d = (int(np.round(x_s_sax3d)), int(np.round(y_s_sax3d)), int(np.round(z_s_sax3d)))
-
-                x_s_saxtoax3d = (old_size_saxtoax3d[2] * old_spacing_saxtoax3d[2]) / self.SPACING[2]
-                y_s_saxtoax3d = (old_size_saxtoax3d[1] * old_spacing_saxtoax3d[1]) / self.SPACING[1]
-                z_s_saxtoax3d = (old_size_saxtoax3d[0] * old_spacing_saxtoax3d[0]) / self.SPACING[0]
-                new_size_saxtoax3d = (
-                    int(np.round(x_s_saxtoax3d)), int(np.round(y_s_saxtoax3d)), int(np.round(z_s_saxtoax3d)))
-
+                new_size_outputs = list(map(lambda x: np.int(np.round((x[0] * x[1]) / self.SPACING)),
+                                           zip(old_output_sizes, old_output_spacings)))
 
             else:
                 raise NotImplementedError('dimension not supported: {}'.format(sitk_ax.GetDimension()))
 
-            logging.debug('dimension: {}'.format(sitk_ax.GetDimension()))
-            logging.debug('Size before resample: {}'.format(sitk_ax.GetSize()))
+            logging.debug('dimension: {}'.format(model_inputs[0].GetDimension()))
+            logging.debug('Size before resample: {}'.format(model.GetSize()))
 
-            # resample the image to given spacing increase/decrease the size according to new spacing
-            sitk_ax = resample_3D(sitk_img=sitk_ax, size=new_size_img, spacing=list(reversed(self.SPACING)),
-                                  interpolate=sitk.sitkLinear)
 
-            # resample the image to given spacing and size
-            sitk_sax = resample_3D(sitk_img=sitk_sax, size=new_size_sax3d, spacing=list(reversed(self.SPACING)),
-                                   interpolate=sitk.sitkLinear)
+            model_inputs = list(map(lambda x:
+                                    resample_3D(sitk_img=x,
+                                                size=new_size_img,
+                                                spacing=list(reversed(self.SPACING)),
+                                                interpolate=sitk.sitkLinear),
+                                    model_inputs))
 
-            # resample the image to given spacing and size
-            sitk_sax2ax = resample_3D(sitk_img=sitk_sax2ax, size=new_size_saxtoax3d,
-                                      spacing=list(reversed(self.SPACING)),
-                                      interpolate=sitk.sitkLinear)
+            model_outputs = list(map(lambda x:
+                                    resample_3D(sitk_img=x,
+                                                size=new_size_img,
+                                                spacing=list(reversed(self.SPACING)),
+                                                interpolate=sitk.sitkLinear),
+                                    model_outputs))
 
-            sitk_ax2sax = resample_3D(sitk_img=sitk_ax2sax, size=new_size_msk, spacing=list(reversed(self.SPACING)),
-                                      interpolate=sitk.sitkLinear)
-
-        logging.debug('Spacing after resample: {}'.format(sitk_ax.GetSpacing()))
-        logging.debug('Size after resample: {}'.format(sitk_ax.GetSize()))
+        logging.debug('Spacing after resample: {}'.format(model_inputs[0].GetSpacing()))
+        logging.debug('Size after resample: {}'.format(model_inputs[0].GetSize()))
 
         # transform to nda for further processing
-        nda_ax = sitk.GetArrayFromImage(sitk_ax)
-        nda_sax = sitk.GetArrayFromImage(sitk_sax)
-        nda_sax2ax = sitk.GetArrayFromImage(sitk_sax2ax)
-        nda_ax2sax = sitk.GetArrayFromImage(sitk_ax2sax)
+        model_inputs = list(map(lambda x: sitk.GetArrayFromImage(x),model_inputs))
+        model_outputs = list(map(lambda x: sitk.GetArrayFromImage(x), model_outputs))
 
-        self.__plot_state_if_debug__(nda_ax, t1, 'resampled')
-
-        if self.AUGMENT_GRID:  # augment with grid transform from albumenation
-            # TODO: implement augmentation, remember params and apply to the other images
-            raise NotImplementedError
+        self.__plot_state_if_debug__(model_inputs[0], t1, 'resampled')
 
         if self.AUGMENT:  # augment data with albumentation
-            # TODO: implement augmentation, remember params and apply to the other images
-            raise NotImplementedError
+            # use albumentation to apply random rotation scaling and shifts
+            model_inputs = list(map(lambda x: augmentation_compose_2D_or3D(img=x, mask=None, probabillity=0.8), model_inputs))
+            model_outputs = list(map(lambda x: augmentation_compose_2D_or3D(img=x, mask=None, probabillity=0.8), model_outputs))
 
-        nda_ax, nda_ax2sax, nda_sax, nda_sax2ax = map(lambda x: clip_quantile(x, .99),
-                                                      [nda_ax, nda_ax2sax, nda_sax, nda_sax2ax])
-        nda_ax, nda_ax2sax, nda_sax, nda_sax2ax = map(lambda x: normalise_image(x, normaliser=self.SCALER),
-                                                      [nda_ax, nda_ax2sax, nda_sax, nda_sax2ax])
+            self.__plot_state_if_debug__(model_inputs[0], model_outputs[0], t1, 'augmented')
+            t1 = time()
 
-        nda_ax, nda_ax2sax, nda_sax, nda_sax2ax = map(lambda x: pad_and_crop(x, target_shape=self.DIM),
-                                                      [nda_ax, nda_ax2sax, nda_sax, nda_sax2ax])
+        # TODO: check if the newaxis command is still used
+        # clip, pad/crop and normalise & extend last axis
+        model_inputs = map(lambda x: clip_quantile(x, .99), model_inputs)
+        model_inputs = map(lambda x: pad_and_crop(x, target_shape=self.DIM), model_inputs)
+        model_inputs = map(lambda x: normalise_image(x, normaliser=self.SCALER)[..., np.newaxis], model_inputs)
 
-        self.__plot_state_if_debug__(nda_ax, nda_ax2sax, t1, 'crop and pad')
+        model_outputs = map(lambda x: clip_quantile(x, .99), model_outputs)
+        model_outputs = map(lambda x: pad_and_crop(x, target_shape=self.DIM), model_outputs)
+        model_outputs = map(lambda x: normalise_image(x, normaliser=self.SCALER)[...,np.newaxis], model_outputs)
 
-        # clipping and normalise after cropping
-        nda_ax, nda_ax2sax, nda_sax, nda_sax2ax = map(lambda x: normalise_image(x, normaliser=self.SCALER),
-                                                      [nda_ax, nda_ax2sax, nda_sax, nda_sax2ax])
+        self.__plot_state_if_debug__(model_inputs[0], model_outputs[0], t1, 'clip crop and pad')
 
-        self.__plot_state_if_debug__(nda_ax, nda_ax2sax, t1, 'clipped and normalized')
 
-        return nda_ax[..., np.newaxis], \
-               nda_ax2sax[..., np.newaxis], \
-               nda_sax[..., np.newaxis], \
-               nda_sax2ax[..., np.newaxis], \
-               i, ID, time() - t0
+        return np.stack(model_inputs), np.stack(model_outputs), i, ID, time() - t0
+
 
 class old_VAEImageGenerator(DataGenerator):
     """

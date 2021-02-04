@@ -18,21 +18,28 @@ from albumentations.augmentations.transforms import PadIfNeeded, GaussNoise, Ran
 
 
 def load_masked_img(sitk_img_f, mask=False, masking_values = [1,2,3], replace=('img','msk'), mask_labels=[0,1,2,3]):
-                
+
     """
-    opens an sitk image, mask it if mask = True and masking values are given
+    Wrapper for opening a dicom image, this wrapper could also load the corresponding segmentation map and mask the loaded image on the fly
+     if mask == True use the replace wildcard to open the corresponding segmentation mask
+     Use the values given in mask_labels to transform the one-hot-encoded mask into channel based binary mask
+     Mask/cut the CMR image/volume by the given labels in masking_values
+
+    Parameters
+    ----------
+    sitk_img_f : full filename for a dicom image/volume, could be any format supported by sitk
+    mask : bool, if the sitk image loaded should be cropped by any label of the corresponding mask
+    masking_values : list of int, defines the area/labels which should be cropped from the original CMR
+    replace : tuple of replacement string to get from the image filename to the mask filename
+    mask_labels : list of int
     """
 
-    sitk_mask_f = sitk_img_f.replace(replace[0], replace[1])
-
-                
     assert os.path.isfile(sitk_img_f), 'no valid image: {}'.format(sitk_img_f)
-                
     img_original = sitk.ReadImage(sitk_img_f, sitk.sitkFloat32)
-    
-                
+
     if mask:
-        msk_original = sitk.ReadImage(sitk_mask_f, sitk.sitkFloat32)
+        sitk_mask_f = sitk_img_f.replace(replace[0], replace[1])
+        msk_original = sitk.ReadImage(sitk_mask_f)
         
         img_nda = sitk.GetArrayFromImage(img_original)
         msk_nda = transform_to_binary_mask(sitk.GetArrayFromImage(msk_original), mask_values=mask_labels)
