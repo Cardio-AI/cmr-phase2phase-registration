@@ -2,14 +2,14 @@ import logging
 import sys
 import os
 import SimpleITK as sitk
-from sklearn.preprocessing import MinMaxScaler
+
 from sklearn.preprocessing import RobustScaler
 from sklearn.preprocessing import StandardScaler
 from skimage.transform import resize
 from src.data.Dataset import describe_sitk, get_metadata_maybe
 import numpy as np
 from src.visualization.Visualize import plot_3d_vol
-from albumentations import GridDistortion, RandomRotate90, Compose, Flip, Transpose, OneOf, IAAAdditiveGaussianNoise, \
+from albumentations import GridDistortion, RandomRotate90, Compose, ReplayCompose, Flip, Transpose, OneOf, IAAAdditiveGaussianNoise, \
     MotionBlur, MedianBlur, Blur, OpticalDistortion, IAAPiecewiseAffine, CLAHE, IAASharpen, IAAEmboss, \
     RandomBrightnessContrast, HueSaturationValue, ElasticTransform, CenterCrop, PadIfNeeded, RandomBrightness, Downscale, ShiftScaleRotate
 import cv2
@@ -151,6 +151,10 @@ def resample_3D(sitk_img, size=(256, 256, 12), spacing=(1.25, 1.25, 8), interpol
 
     assert (isinstance(sitk_img, sitk.Image)), 'wrong image type: {}'.format(type(sitk_img))
 
+    # make sure to have the correct data types
+    size = [int(elem) for elem in size]
+    spacing = [float(elem) for elem in spacing]
+
     #if len(size) == 3 and size[0] < size[-1]: # 3D data, but numpy shape and size, reverse order for sitk
         # bug if z is lonnger than x or y
     #    size = tuple(reversed(size))
@@ -230,7 +234,7 @@ def random_rotate90_2D_or_3D(img, mask, probabillity=0.8):
 
     return augmented['image'], augmented['mask']
 
-def augmentation_compose_2D_or3D(img, mask, probabillity=1):
+def augmentation_compose_2d_3d_4d(img, mask, probabillity=1, get_params=False):
     """
     Apply an compisition of different augmentation steps,
     either on 2D or 3D image/mask pairs,
@@ -241,7 +245,7 @@ def augmentation_compose_2D_or3D(img, mask, probabillity=1):
     :return: augmented image, mask
     """
     #logging.debug('random rotate for: {}'.format(img.shape))
-    augmented = {'image': None, 'mask': None}
+    return_image_and_mask = True
 
     if isinstance(img, sitk.Image):
         img = sitk.GetArrayFromImage(img).astype(np.float32)
@@ -252,14 +256,16 @@ def augmentation_compose_2D_or3D(img, mask, probabillity=1):
     # dont print anything if no images nor masks are given
     if img is None and mask is None:
         logging.error('No image data given')
-        raise ('No image data given in grid dissortion')
+        raise ('No image data given in augmentation compose')
 
     # replace mask with empty slice if none is given
     if mask is None:
+        return_image_and_mask = False
         mask = np.zeros(img.shape)
 
     # replace image with empty slice if none is given
     if img is None:
+        return_image_and_mask = False
         img = np.zeros(mask.shape)
 
     targets = {}
@@ -284,9 +290,25 @@ def augmentation_compose_2D_or3D(img, mask, probabillity=1):
             targets['{}{}'.format(img_placeholder,z)] = 'image'
             targets['{}{}'.format(mask_placeholder, z)] = 'mask'
 
+    if img.ndim ==4:
+        # take an image, mask pair from the middle part of the volume and time
+        data = {"image": img[img.shape[0]//2][img.shape[1]//2], "mask": mask[mask.shape[0]//2][mask.shape[1]//2]}
+
+        for t in range(img.shape[0]):
+            # add each slice of the image/mask stacks into the data dictionary
+            for z in range(img.shape[1]):
+                # add the other slices to the data dict
+                data['{}_{}_{}'.format(img_placeholder, t, z)] = img[t,z, ...]
+                data['{}_{}_{}'.format(mask_placeholder, t, z)] = mask[t,z, ...]
+                # define the target group,
+                # which slice is a mask and which an image (different interpolation)
+                targets['{}_{}_{}'.format(img_placeholder, t, z)] = 'image'
+                targets['{}_{}{}'.format(mask_placeholder, t,z)] = 'mask'
+
+
+
     # create a callable augmentation composition
     aug = _create_aug_compose(p=probabillity, targets=targets)
-
     # apply the augmentation
     augmented = aug(**data)
 
@@ -300,15 +322,36 @@ def augmentation_compose_2D_or3D(img, mask, probabillity=1):
         augmented['image'] = np.stack(images,axis=0)
         augmented['mask'] = np.stack(masks, axis=0)
 
-    return augmented['image'], augmented['mask']
+    if img.ndim == 4:
+        img_4d = []
+        mask_4d = []
+        for t in range(img.shape[0]):
+            images = []
+            masks = []
+            for z in range(img.shape[1]):
+                # extract the augmented slices in the correct order
+                images.append(augmented['{}_{}_{}'.format(img_placeholder,t,z)])
+                masks.append(augmented['{}_{}_{}'.format(mask_placeholder,t, z)])
+            img_4d.append(np.stack(images,axis=0))
+            mask_4d.append(np.stack(masks, axis=0))
+
+        augmented['image'] = np.stack(img_4d,axis=0)
+        augmented['mask'] = np.stack(mask_4d, axis=0)
+
+
+    if return_image_and_mask:
+        return augmented['image'], augmented['mask']
+    else:
+        # dont return the fake augmented masks if none where given
+        return augmented['image']
 
 
 def _create_aug_compose(p=1, border_mode=cv2.BORDER_CONSTANT, val=0, targets={}):
-    return Compose([
+    return ReplayCompose([
         RandomRotate90(p=0.2),
         #Flip(0.1),
         #Transpose(p=0.1),
-        ShiftScaleRotate(p=p, rotate_limit=0,shift_limit=0.025, scale_limit=0.1,value=val, border_mode=border_mode),
+        ShiftScaleRotate(p=p, rotate_limit=0,shift_limit=0.025, scale_limit=0,value=val, border_mode=border_mode),
         GridDistortion(p=p, value=val,border_mode=border_mode),
         #CenterCrop(height=target_dim[0], width=target_dim[1], p=1),
         # HueSaturationValue(p=1)

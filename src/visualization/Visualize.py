@@ -4,8 +4,7 @@ import sys
 import matplotlib.pyplot as plt
 import numpy as np
 import SimpleITK as sitk
-from sklearn.metrics import confusion_matrix
-from src.utils.utils_io import save_plot, ensure_dir
+from src.utils.Utils_io import save_plot, ensure_dir
 import SimpleITK as sitk
 from matplotlib.ticker import PercentFormatter
 from collections import Counter
@@ -405,6 +404,10 @@ def plot_confusion_matrix(y_true, y_pred, classes,
     This function prints and plots the confusion matrix.
     Normalization can be applied by setting `normalize=True`.
     """
+    try:
+        from sklearn.metrics import confusion_matrix
+    except Exception as e:
+        print(str(e))
     if not title:
         if normalize:
             title = 'Normalized confusion matrix'
