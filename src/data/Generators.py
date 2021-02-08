@@ -410,8 +410,7 @@ class DataGenerator(BaseGenerator):
 
 class MotionDataGenerator(DataGenerator):
     """
-    yields ([AX], [AXtoSAX, AXtoSAXtoAX, m]) for cycle motion loss
-    e.g.: AX --> AXtoSAX --> AXtoSAXtoAX
+    yields n input volumes and n output volumes
     """
 
     def __init__(self, x=None, y=None, config=None):
