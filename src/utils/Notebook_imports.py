@@ -1,5 +1,5 @@
 # central way to get all standard library available in one import
-
+SEED = 42
 import logging
 import numpy as np
 import pandas as pd
@@ -15,6 +15,9 @@ import random
 from collections import Counter
 import seaborn as sb
 import matplotlib.pyplot as plt
+import random
+random.seed(SEED)
+np.random.seed(SEED)
 
 from src.utils.Utils_io import Console_and_file_logger, ensure_dir
 

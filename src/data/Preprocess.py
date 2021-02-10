@@ -246,6 +246,9 @@ def augmentation_compose_2d_3d_4d(img, mask, probabillity=1, get_params=False):
     """
     #logging.debug('random rotate for: {}'.format(img.shape))
     return_image_and_mask = True
+    img_given = True
+    mask_given = True
+
 
     if isinstance(img, sitk.Image):
         img = sitk.GetArrayFromImage(img).astype(np.float32)
@@ -261,12 +264,12 @@ def augmentation_compose_2d_3d_4d(img, mask, probabillity=1, get_params=False):
     # replace mask with empty slice if none is given
     if mask is None:
         return_image_and_mask = False
-        mask = np.zeros(img.shape)
+        mask_given = False
 
     # replace image with empty slice if none is given
     if img is None:
         return_image_and_mask = False
-        img = np.zeros(mask.shape)
+        img_given = False
 
     targets = {}
     data = {}
@@ -277,50 +280,63 @@ def augmentation_compose_2d_3d_4d(img, mask, probabillity=1, get_params=False):
         data = {"image": img, "mask": mask}
 
     if img.ndim == 3:
+        middle_z = len(img)//2
+        if mask_given:
+            m_ = mask[middle_z]
+        else:
+            m_ = mask
         # take an image, mask pair from the middle part of the volume
-        data = {"image": img[len(img)//2], "mask": mask[len(img)//2]}
+        data = {"image": img[middle_z], "mask": m_}
 
         # add each slice of the image/mask stacks into the data dictionary
         for z in range(img.shape[0]):
             # add the other slices to the data dict
-            data['{}{}'.format(img_placeholder,z)] = img[z,...]
-            data['{}{}'.format(mask_placeholder, z)] = mask[z, ...]
+            if img_given: data['{}{}'.format(img_placeholder,z)] = img[z,...]
+            if mask_given:data['{}{}'.format(mask_placeholder, z)] = mask[z, ...]
             # define the target group,
             # which slice is a mask and which an image (different interpolation)
-            targets['{}{}'.format(img_placeholder,z)] = 'image'
-            targets['{}{}'.format(mask_placeholder, z)] = 'mask'
+            if img_given: targets['{}{}'.format(img_placeholder,z)] = 'image'
+            if mask_given: targets['{}{}'.format(mask_placeholder, z)] = 'mask'
 
     if img.ndim ==4:
+        middle_t = img.shape[0] // 2
+        middle_z = img.shape[1] // 2
         # take an image, mask pair from the middle part of the volume and time
-        data = {"image": img[img.shape[0]//2][img.shape[1]//2], "mask": mask[mask.shape[0]//2][mask.shape[1]//2]}
+        if mask_given:
+            data = {"image": img[middle_t][middle_z], "mask": m_}
+        else:
+            data = {"image": img[middle_t][middle_z]}
+
 
         for t in range(img.shape[0]):
             # add each slice of the image/mask stacks into the data dictionary
             for z in range(img.shape[1]):
                 # add the other slices to the data dict
-                data['{}_{}_{}'.format(img_placeholder, t, z)] = img[t,z, ...]
-                data['{}_{}_{}'.format(mask_placeholder, t, z)] = mask[t,z, ...]
+                if img_given: data['{}_{}_{}'.format(img_placeholder, t, z)] = img[t,z, ...]
+                if mask_given:data['{}_{}_{}'.format(mask_placeholder, t, z)] = mask[t,z, ...]
                 # define the target group,
                 # which slice is a mask and which an image (different interpolation)
-                targets['{}_{}_{}'.format(img_placeholder, t, z)] = 'image'
-                targets['{}_{}{}'.format(mask_placeholder, t,z)] = 'mask'
+                if img_given: targets['{}_{}_{}'.format(img_placeholder, t, z)] = 'image'
+                if mask_given: targets['{}_{}{}'.format(mask_placeholder, t,z)] = 'mask'
 
 
 
     # create a callable augmentation composition
     aug = _create_aug_compose(p=probabillity, targets=targets)
+
     # apply the augmentation
     augmented = aug(**data)
+    logging.debug(augmented['replay'])
 
     if img.ndim == 3:
         images = []
         masks = []
         for z in range(img.shape[0]):
             # extract the augmented slices in the correct order
-            images.append(augmented['{}{}'.format(img_placeholder,z)])
-            masks.append(augmented['{}{}'.format(mask_placeholder, z)])
-        augmented['image'] = np.stack(images,axis=0)
-        augmented['mask'] = np.stack(masks, axis=0)
+            if img_given: images.append(augmented['{}{}'.format(img_placeholder,z)])
+            if mask_given:masks.append(augmented['{}{}'.format(mask_placeholder, z)])
+        if img_given: augmented['image'] = np.stack(images,axis=0)
+        if mask_given: augmented['mask'] = np.stack(masks, axis=0)
 
     if img.ndim == 4:
         img_4d = []
@@ -330,13 +346,13 @@ def augmentation_compose_2d_3d_4d(img, mask, probabillity=1, get_params=False):
             masks = []
             for z in range(img.shape[1]):
                 # extract the augmented slices in the correct order
-                images.append(augmented['{}_{}_{}'.format(img_placeholder,t,z)])
-                masks.append(augmented['{}_{}_{}'.format(mask_placeholder,t, z)])
-            img_4d.append(np.stack(images,axis=0))
-            mask_4d.append(np.stack(masks, axis=0))
+                if img_given: images.append(augmented['{}_{}_{}'.format(img_placeholder,t,z)])
+                if mask_given: masks.append(augmented['{}_{}_{}'.format(mask_placeholder,t, z)])
+            if img_given: img_4d.append(np.stack(images,axis=0))
+            if mask_given: mask_4d.append(np.stack(masks, axis=0))
 
-        augmented['image'] = np.stack(img_4d,axis=0)
-        augmented['mask'] = np.stack(mask_4d, axis=0)
+        if img_given: augmented['image'] = np.stack(img_4d,axis=0)
+        if mask_given: augmented['mask'] = np.stack(mask_4d, axis=0)
 
 
     if return_image_and_mask:
@@ -1021,7 +1037,9 @@ def normalise_image(img_nda, normaliser='minmax'):
     normaliser = normaliser.lower()
 
     if normaliser == 'standard':
-        return StandardScaler(copy=False, with_mean=True, with_std=True).fit_transform(img_nda)
+        return (img_nda - np.mean(img_nda)) / (np.std(img_nda) + sys.float_info.epsilon)
+
+        #return StandardScaler(copy=False, with_mean=True, with_std=True).fit_transform(img_nda)
     elif normaliser == 'robust':
         return RobustScaler(copy=False, quantile_range=(0.0, 95.0), with_centering=True,
                             with_scaling=True).fit_transform(img_nda)
@@ -1044,7 +1062,7 @@ def pad_and_crop(ndarray, target_shape=(10, 10, 10)):
     -------
 
     """
-    empty = np.zeros(target_shape)
+    cropped = np.zeros(target_shape)
     target_shape = np.array(target_shape)
     logging.debug('input shape, crop_and_pad: {}'.format(ndarray.shape))
     logging.debug('target shape, crop_and_pad: {}'.format(target_shape))
@@ -1073,5 +1091,6 @@ def pad_and_crop(ndarray, target_shape=(10, 10, 10)):
     crop = tuple(slice(i[0], -i[1]) if i[1] != None else slice(i[0], i[1]) for i in crop)
 
     # crop and pad in one step
-    empty[pad] = ndarray[crop]
-    return empty
+    cropped[pad] = ndarray[crop]
+    return cropped
+

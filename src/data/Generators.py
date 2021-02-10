@@ -2,9 +2,11 @@ import logging
 import platform
 import os
 import random
+import re
 
 import tensorflow.keras
 import numpy as np
+import pandas as pd
 import SimpleITK as sitk
 #from skimage.transform import resize
 import matplotlib.pyplot as plt
@@ -15,7 +17,8 @@ from src.data.Preprocess import resample_3D, crop_to_square_2d, center_crop_or_r
     clip_quantile, normalise_image, grid_dissortion_2D_or_3D, crop_to_square_2d_or_3d, center_crop_or_resize_2d_or_3d, \
     transform_to_binary_mask, load_masked_img, random_rotate_2D_or_3D, random_rotate90_2D_or_3D, \
     elastic_transoform_2D_or_3D, augmentation_compose_2d_3d_4d, pad_and_crop
-from src.data.Dataset import describe_sitk, get_t_position_from_filename, get_z_position_from_filename
+from src.data.Dataset import describe_sitk, get_t_position_from_filename, get_z_position_from_filename, \
+    split_one_4d_sitk_in_list_of_3d_sitk
 #    get_patient, get_img_msk_files_from_split_dir
 
 import concurrent.futures
@@ -44,9 +47,7 @@ class BaseGenerator(tensorflow.keras.utils.Sequence):
             """
             recursive helper to clean filepaths, could handle list of lists and list of tuples
             """
-            if isinstance(elem, list):
-                return [normalise_paths(el) for el in elem]
-            if isinstance(elem, tuple):
+            if type(elem) in [list, tuple]:
                 return [normalise_paths(el) for el in elem]
             elif isinstance(elem, str):
                 return os.path.normpath(elem)
@@ -112,7 +113,7 @@ class BaseGenerator(tensorflow.keras.utils.Sequence):
         else:
             logging.info('No augmentation')
 
-    def __plot_state_if_debug__(self, img, mask, start_time, step='raw'):
+    def __plot_state_if_debug__(self, img, mask=None, start_time=None, step='raw'):
 
         if self.DEBUG_MODE:
 
@@ -128,8 +129,9 @@ class BaseGenerator(tensorflow.keras.utils.Sequence):
                     show_2D_or_3D(img)
                     plt.show()
                     # maybe this crashes sometimes, but will be caught
-                    show_2D_or_3D(mask)
-                    plt.show()
+                    if mask:
+                        show_2D_or_3D(mask)
+                        plt.show()
 
             except Exception as e:
                 logging.debug('plot image state failed: {}'.format(str(e)))
@@ -419,12 +421,13 @@ class MotionDataGenerator(DataGenerator):
             config = {}
         super(MotionDataGenerator, self).__init__(x=x, y=y, config=config)
 
+
         if type(x[0]) in [tuple, list]:
             # if this is the case we have a sequence of 3D volumes or a sequence of 2D images
-            model_input_volumes = len(x[0])
-            model_output_volumes = len(y[0])
-            self.X_SHAPE = np.empty((self.BATCHSIZE, model_input_volumes, *self.DIM), dtype=np.float32)
-            self.Y_SHAPE = np.empty((self.BATCHSIZE, model_output_volumes, *self.DIM), dtype=np.float32)
+            self.INPUT_VOLUMES = len(x[0])
+            self.OUTPUT_VOLUMES = len(y[0])
+            self.X_SHAPE = np.empty((self.BATCHSIZE, self.INPUT_VOLUMES, *self.DIM), dtype=np.float32)
+            self.Y_SHAPE = np.empty((self.BATCHSIZE, self.OUTPUT_VOLUMES, *self.DIM), dtype=np.float32)
 
         self.MASKS = None # need to check if this is still necessary!
 
@@ -568,26 +571,224 @@ class MotionDataGenerator(DataGenerator):
             combined  = np.stack(model_inputs + model_outputs, axis=0)
             combined = augmentation_compose_2d_3d_4d(img=combined, mask=None, probabillity=self.AUGMENT_PROB)
             model_inputs, model_outputs = np.split(combined, indices_or_sections=2, axis=0)
-            #model_inputs, model_outputs = combined[:len(combined)//2], combined[len(combined)//2:]
 
             self.__plot_state_if_debug__(img=model_inputs[0], mask=model_outputs[0], start_time=t1, step='augmented')
             t1 = time()
 
         # TODO: check if the newaxis command is still used
         # clip, pad/crop and normalise & extend last axis
-        model_inputs = map(lambda x: clip_quantile(x, .99), model_inputs)
-        model_inputs = map(lambda x: pad_and_crop(x, target_shape=self.DIM), model_inputs)
-        model_inputs = list(map(lambda x: normalise_image(x, normaliser=self.SCALER), model_inputs))
+        model_inputs = map(lambda x: clip_quantile(x, .9999), model_inputs)
+        model_inputs = list(map(lambda x: pad_and_crop(x, target_shape=self.DIM), model_inputs))
+        #model_inputs = list(map(lambda x: normalise_image(x, normaliser=self.SCALER), model_inputs)) # normalise per volume
+        model_inputs = normalise_image(np.stack(model_inputs), normaliser=self.SCALER) # normalise per 4D
 
-        model_outputs = map(lambda x: clip_quantile(x, .99), model_outputs)
-        model_outputs = map(lambda x: pad_and_crop(x, target_shape=self.DIM), model_outputs)
-        model_outputs = list(map(lambda x: normalise_image(x, normaliser=self.SCALER), model_outputs))
-
+        model_outputs = map(lambda x: clip_quantile(x, .9999), model_outputs)
+        model_outputs = list(map(lambda x: pad_and_crop(x, target_shape=self.DIM), model_outputs))
+        #model_outputs = list(map(lambda x: normalise_image(x, normaliser=self.SCALER), model_outputs)) # normalise per volume
+        model_outputs = normalise_image(np.stack(model_outputs), normaliser=self.SCALER) # normalise per 4D
         self.__plot_state_if_debug__(model_inputs[0], model_outputs[0], t1, 'clipped cropped and pad')
 
 
         return np.stack(model_inputs), np.stack(model_outputs), i, ID, time() - t0
 
+class PhaseRegressionGenerator(DataGenerator):
+    """
+    yields n input volumes and n output volumes
+    """
+
+    def __init__(self, x=None, y=None, config=None):
+
+        if config is None:
+            config = {}
+        super(PhaseRegressionGenerator, self).__init__(x=x, y=y, config=config)
+
+        self.T_SHAPE = config.get('T_SHAPE', 10)
+        # if this is the case we have a sequence of 3D volumes or a sequence of 2D images
+        self.X_SHAPE = np.empty((self.BATCHSIZE, self.T_SHAPE, *self.DIM), dtype=np.float32)
+        self.Y_SHAPE = np.empty((self.BATCHSIZE, 5, self.T_SHAPE), dtype=np.float32)
+
+        # opens a dataframe with cleaned phases per patient
+        self.METADATA_FILE = config.get('DF_META', '/mnt/ssd/data/gcn/02_imported_4D_unfiltered_old/SAx_3D_dicomTags_phase')
+        df = pd.read_csv(self.METADATA_FILE)
+        self.DF_METADATA = df[['patient', 'ED#', 'MS#', 'ES#', 'PF#', 'MD#']]
+
+        self.TARGET_SMOOTHING = config.get('TARGET_SMOOTHING', False)
+        self.SMOOTHING_KERNEL_SIZE = config.get('SMOOTHING_KERNEL_SIZE',5)
+        self.SMOOTHING_LOWER_BORDER = config.get('SMOOTHING_LOWER_BORDER',0.2)
+        self.SMOOTHING_UPPER_BORDER = config.get('SMOOTHING_UPPER_BORDER',0.4)
+        # create a 1D kernel with linearly increasing/decreasing values in the range(lower,upper),
+        # insert a '1' in the middle, as this reflect the correct idx
+        self.KERNEL = np.concatenate([np.linspace(self.SMOOTHING_LOWER_BORDER,self.SMOOTHING_UPPER_BORDER,self.SMOOTHING_KERNEL_SIZE//2),
+                                      [1],
+                                      np.linspace(self.SMOOTHING_UPPER_BORDER,self.SMOOTHING_LOWER_BORDER,self.SMOOTHING_KERNEL_SIZE//2)])
+        logging.info(self.KERNEL)
+        self.MASKS = None # need to check if this is still necessary!
+
+        # define a random seed for albumentations
+        random.seed(config.get('SEED', 42))
+
+    def __data_generation__(self, list_IDs_temp):
+
+        """
+        Loads and pre-process one entity of x and y
+
+
+        :param list_IDs_temp:
+        :return: X : (batchsize, *dim, n_channels), Y : (batchsize, *dim, number_of_classes)
+        """
+
+        # Initialization
+        x = np.empty_like(self.X_SHAPE)  # model input
+        y = np.empty_like(self.Y_SHAPE)  # model output
+
+        futures = set()
+
+        # spawn one thread per worker
+        with concurrent.futures.ThreadPoolExecutor(max_workers=self.MAX_WORKERS) as executor:
+
+            t0 = time()
+            ID = ''
+            # Generate data
+            for i, ID in enumerate(list_IDs_temp):
+
+                try:
+                    # remember the ordering of the shuffled indexes,
+                    # otherwise files, that take longer are always at the batch end
+                    futures.add(executor.submit(self.__preprocess_one_image__, i, ID))
+
+                except Exception as e:
+                    logging.error(
+                        'Exception {} in datagenerator with: image: {} or mask: {}'.format(str(e), self.images[ID],
+                                                                                           self.labels[ID]))
+
+        for i, future in enumerate(as_completed(futures)):
+            # use the indexes to order the batch
+            # otherwise slower images will always be at the end of the batch
+            try:
+                x_, y_, i, ID, needed_time = future.result()
+                x[i,], y[i,] = x_, y_
+                logging.debug('img finished after {:0.3f} sec.'.format(needed_time))
+            except Exception as e:
+                # write these files into a dedicated error log
+                PrintException()
+                print(e)
+                logging.error(
+                    'Exception {} in datagenerator with:\n'
+                    'image:\n'
+                    '{}\n'
+                    'mask:\n'
+                    '{}'.format(str(e), self.images[ID],self.labels[ID]))
+
+        logging.debug('Batchsize: {} preprocessing took: {:0.3f} sec'.format(self.BATCHSIZE, time() - t0))
+
+        return x, y
+
+    def __preprocess_one_image__(self, i, ID):
+
+        t0 = time()
+
+        x = self.images[ID]
+        y = self.labels[ID]
+
+
+        # use the load_masked_img wrapper to enable masking of the images, not necessary for the TMI paper
+        # load image
+        model_inputs = load_masked_img(sitk_img_f=x, mask=self.MASKING_IMAGE,
+                                  masking_values=self.MASKING_VALUES, replace=self.REPLACE_WILDCARD)
+        # this is necessary to define the filter indicies
+        #model_inputs_mask = load_masked_img(sitk_img_f=x.replace('_clean', '_mask'), mask=self.MASKING_IMAGE,
+        #                          masking_values=self.MASKING_VALUES, replace=self.REPLACE_WILDCARD)
+
+        # TODO:
+        # create target vector or one-hot encoding
+        model_inputs =  split_one_4d_sitk_in_list_of_3d_sitk(model_inputs)
+
+        # search for the 8 digits-patient ID which should start with '_' and end with '-'
+        patient_str = re.search('-(.{8})_', x).group(1)
+        assert(len(patient_str) == 8), 'matched patient ID from the phase sheet has a length of: {}'.format(len(patient_str))
+        # returns the indices in the following order: 'ED#', 'MS#', 'ES#', 'PF#', 'MD#'
+        # reduce by one, as the indexes start at 0, the excel-sheet at 1
+        indices = self.DF_METADATA[self.DF_METADATA.patient.str.contains(patient_str)][['ED#', 'MS#', 'ES#', 'PF#', 'MD#']].values[0].astype(int) -1
+        logging.info(indices)
+        onehot = np.zeros((indices.size, indices.max() + 1))
+        onehot[np.arange(indices.size), indices] = 1
+        logging.info(onehot)
+
+        if self.TARGET_SMOOTHING:
+            # smooth each phase vector along the indices.
+            # By this we avoid hard borders
+            # divide the smoothed vectors by the sum to make sure they are usable as one hot-vectors
+            for idx in range(onehot.shape[0]):
+                smoothed = np.convolve(onehot[idx], self.KERNEL, mode='same')
+                smoothed = smoothed / (sum(smoothed) + sys.float_info.epsilon)
+                onehot[idx] = smoothed
+        logging.info(onehot)
+        self.__plot_state_if_debug__(img=model_inputs[len(model_inputs)//2], start_time=t0, step='raw')
+        t1 = time()
+
+        if self.RESAMPLE:
+            if model_inputs[0].GetDimension() in [2,3]:
+
+                # calc new size after resample image with given new spacing
+                # sitk.spacing has the opposite order than np.shape and tf.shape
+                # In the config we use the numpy order z, y, x which needs to be reversed for sitk
+                def calc_resampled_size(sitk_img, target_spacing):
+                    if type(target_spacing) in [list, tuple]:
+                        target_spacing = np.array(target_spacing)
+                    old_size = np.array(sitk_img.GetSize())
+                    old_spacing = np.array(sitk_img.GetSpacing())
+                    logging.debug('old size: {}, old spacing: {}, target spacing: {}'.format(old_size, old_spacing, target_spacing))
+                    new_size = (old_size * old_spacing) / target_spacing
+                    return list(np.around(new_size).astype(np.int))
+
+                # transform the spacing from numpy representation towards the sitk representation
+                target_spacing = list(reversed(self.SPACING))
+                new_size_inputs = list(map(lambda elem: calc_resampled_size(elem, target_spacing), model_inputs))
+
+            else:
+                raise NotImplementedError('dimension not supported: {}'.format(model_inputs[0].GetDimension()))
+
+            logging.debug('dimension: {}'.format(model_inputs[0].GetDimension()))
+            logging.debug('Size before resample: {}'.format(model_inputs[0].GetSize()))
+
+            model_inputs = list(map(lambda x:
+                                    resample_3D(sitk_img=x[0],
+                                                size=x[1],
+                                                spacing=target_spacing,
+                                                interpolate=sitk.sitkLinear),
+                                    zip(model_inputs, new_size_inputs)))
+
+
+        logging.debug('Spacing after resample: {}'.format(model_inputs[0].GetSpacing()))
+        logging.debug('Size after resample: {}'.format(model_inputs[0].GetSize()))
+
+        # transform to nda for further processing
+        model_inputs = list(map(lambda x: sitk.GetArrayFromImage(x),model_inputs))
+
+        self.__plot_state_if_debug__(img=model_inputs[len(model_inputs)//2], start_time=t1, step='resampled')
+
+        if self.AUGMENT:  # augment data with albumentation
+            # use albumentation to apply random rotation scaling and shifts
+
+            model_inputs = augmentation_compose_2d_3d_4d(img=np.stack(model_inputs, axis=0), mask=None, probabillity=self.AUGMENT_PROB)
+
+            self.__plot_state_if_debug__(img=model_inputs[0], start_time=t1, step='augmented')
+            t1 = time()
+
+        # TODO: check if the newaxis command is still used
+        # clip, pad/crop and normalise & extend last axis
+        model_inputs = list(map(lambda x: clip_quantile(x, .9999), model_inputs))
+        model_inputs = np.stack(model_inputs)
+        model_inputs = pad_and_crop(model_inputs, target_shape=(self.T_SHAPE,*self.DIM))
+        model_inputs = normalise_image(model_inputs, normaliser=self.SCALER) # normalise per 4D
+
+        # we assume that this works as expected
+        onehot = pad_and_crop(onehot, target_shape=(5,self.T_SHAPE))
+
+        self.__plot_state_if_debug__(img=model_inputs[len(model_inputs)//2], start_time=t1, step='clipped cropped and pad')
+
+
+        return model_inputs, onehot, i, ID, time() - t0
 
 
 import linecache

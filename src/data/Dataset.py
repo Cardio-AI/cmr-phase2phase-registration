@@ -94,8 +94,8 @@ def copy_meta_and_save(new_image, reference_sitk_img, full_filename=None, overri
                 new_image = sitk.JoinSeries(new_image)
             else:
                 new_image = sitk.GetImageFromArray(new_image)
-
-        ensure_dir(os.path.dirname(os.path.abspath(full_filename)))
+        if full_filename:
+            ensure_dir(os.path.dirname(os.path.abspath(full_filename)))
 
         if reference_sitk_img is not None:
             assert (isinstance(reference_sitk_img, sitk.Image)), 'no reference image given'
@@ -147,7 +147,7 @@ def copy_meta_and_save(new_image, reference_sitk_img, full_filename=None, overri
             if override_spacing:
                 new_image.SetSpacing(override_spacing)
 
-        if full_filename != None:
+        if full_filename:
 
             # copy uid
             writer = sitk.ImageFileWriter()
@@ -156,12 +156,11 @@ def copy_meta_and_save(new_image, reference_sitk_img, full_filename=None, overri
             writer.Execute(new_image)
             logging.debug('image saved: {:0.3f}s'.format(time() - t1))
             return True
+        else:
+            return new_image
     except Exception as e:
         logging.error('Error with saving file: {} - {}'.format(full_filename, str(e)))
         return False
-
-    else:
-        return new_image
 
 
 def create_4d_volumes_from_4d_files(img_f, mask_f, full_path='data/raw/GCN/3D/', slice_threshold=2):
@@ -195,6 +194,27 @@ def create_4d_volumes_from_4d_files(img_f, mask_f, full_path='data/raw/GCN/3D/',
     copy_meta_and_save(mask_4d_nda, img_4d_sitk, os.path.join(full_path, mask_file))
 
     return [masked_t, list(img_4d_nda.shape)]
+
+
+def split_one_4d_sitk_in_list_of_3d_sitk(img_4d_sitk):
+    """
+    Splits a 4D dicom image into a list of 3D sitk images, copy alldicom metadata
+    Parameters
+    ----------
+    img_4d_sitk :
+    mask_4d_sitk :
+    slice_treshhold :
+
+    Returns list of 3D-sitk objects
+    -------
+    """
+
+    img_4d_nda = sitk.GetArrayFromImage(img_4d_sitk)
+
+    # create t 3d volumes
+    list_of_3dsitk = [copy_meta_and_save(new_image=img_3d, reference_sitk_img=img_4d_sitk, full_filename = None, override_spacing = None, copy_direction = True) for img_3d in img_4d_nda]
+
+    return list_of_3dsitk
 
 
 def create_3d_volumes_from_4d_files(img_f, mask_f, full_path='data/raw/tetra/3D/', slice_treshhold=2):
