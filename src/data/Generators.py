@@ -603,9 +603,12 @@ class PhaseRegressionGenerator(DataGenerator):
         super(PhaseRegressionGenerator, self).__init__(x=x, y=y, config=config)
 
         self.T_SHAPE = config.get('T_SHAPE', 10)
+        self.PHASES = config.get('PHASES', 5)
+        self.TARGET_SHAPE = (self.T_SHAPE, self.PHASES)
+        self.TARGET_CROP_SHAPE = (self.T_SHAPE, self.PHASES-1)
         # if this is the case we have a sequence of 3D volumes or a sequence of 2D images
         self.X_SHAPE = np.empty((self.BATCHSIZE, self.T_SHAPE, *self.DIM), dtype=np.float32)
-        self.Y_SHAPE = np.empty((self.BATCHSIZE, 5, self.T_SHAPE), dtype=np.float32)
+        self.Y_SHAPE = np.empty((self.BATCHSIZE, *self.TARGET_SHAPE), dtype=np.float32)
 
         # opens a dataframe with cleaned phases per patient
         self.METADATA_FILE = config.get('DF_META', '/mnt/ssd/data/gcn/02_imported_4D_unfiltered_old/SAx_3D_dicomTags_phase')
@@ -709,10 +712,12 @@ class PhaseRegressionGenerator(DataGenerator):
         # returns the indices in the following order: 'ED#', 'MS#', 'ES#', 'PF#', 'MD#'
         # reduce by one, as the indexes start at 0, the excel-sheet at 1
         indices = self.DF_METADATA[self.DF_METADATA.patient.str.contains(patient_str)][['ED#', 'MS#', 'ES#', 'PF#', 'MD#']].values[0].astype(int) -1
-        logging.info(indices)
+        logging.debug('indices: \n{}'.format(indices))
         onehot = np.zeros((indices.size, indices.max() + 1))
         onehot[np.arange(indices.size), indices] = 1
-        logging.info(onehot)
+
+        onehot = np.concatenate([onehot, onehot],axis=1)
+        logging.debug('one-hot: \n{}'.format(onehot))
 
         if self.TARGET_SMOOTHING:
             # smooth each phase vector along the indices.
@@ -720,9 +725,14 @@ class PhaseRegressionGenerator(DataGenerator):
             # divide the smoothed vectors by the sum to make sure they are usable as one hot-vectors
             for idx in range(onehot.shape[0]):
                 smoothed = np.convolve(onehot[idx], self.KERNEL, mode='same')
-                smoothed = smoothed / (sum(smoothed) + sys.float_info.epsilon)
                 onehot[idx] = smoothed
-        logging.info(onehot)
+            logging.debug('convolved:\n{}'.format(onehot))
+            # transform into a index based target vector index2phase
+        first, second = np.split(onehot,indices_or_sections=2, axis=1)
+        onehot = np.maximum(first, second)
+        onehot = onehot.T
+        #onehot = onehot/(sum(onehot)+ sys.float_info.epsilon)
+        logging.debug('transposed: \n{}'.format(onehot))
         self.__plot_state_if_debug__(img=model_inputs[len(model_inputs)//2], start_time=t0, step='raw')
         t1 = time()
 
@@ -775,15 +785,24 @@ class PhaseRegressionGenerator(DataGenerator):
             self.__plot_state_if_debug__(img=model_inputs[0], start_time=t1, step='augmented')
             t1 = time()
 
-        # TODO: check if the newaxis command is still used
         # clip, pad/crop and normalise & extend last axis
         model_inputs = list(map(lambda x: clip_quantile(x, .9999), model_inputs))
         model_inputs = np.stack(model_inputs)
         model_inputs = pad_and_crop(model_inputs, target_shape=(self.T_SHAPE,*self.DIM))
         model_inputs = normalise_image(model_inputs, normaliser=self.SCALER) # normalise per 4D
 
-        # we assume that this works as expected
-        onehot = pad_and_crop(onehot, target_shape=(5,self.T_SHAPE))
+        # we crop and pad the 4D volume and the target vectors into the same size
+        onehot = pad_and_crop(onehot, target_shape=self.TARGET_CROP_SHAPE)
+        # create a 6th class for the empty padded corner volumes
+        nonempty_timesteps = (np.sum(onehot, axis=1) == 0).astype(float)
+        onehot = np.concatenate([onehot, nonempty_timesteps[:, None]], axis=1)
+        logging.debug('background: \n{}'.format(onehot))
+        # normalise the target vectors per timestep (sum(timestep_i) == 1)
+        for idx in range(onehot.shape[0]):
+            smoothed = onehot[idx]
+            smoothed = smoothed / (sum(smoothed) + sys.float_info.epsilon)
+            onehot[idx] = smoothed
+        logging.debug('normalised (sum phases per timestep == 1): \n{}'.format(onehot))
 
         self.__plot_state_if_debug__(img=model_inputs[len(model_inputs)//2], start_time=t1, step='clipped cropped and pad')
 
