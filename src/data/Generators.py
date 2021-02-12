@@ -715,7 +715,7 @@ class PhaseRegressionGenerator(DataGenerator):
         # reduce by one, as the indexes start at 0, the excel-sheet at 1
         indices = self.DF_METADATA[self.DF_METADATA.patient.str.contains(patient_str)][['ED#', 'MS#', 'ES#', 'PF#', 'MD#']]
         indices = indices.values[0].astype(int) -1
-        onehot = np.zeros((indices.size, len(model_inputs) + 1))
+        onehot = np.zeros((indices.size, len(model_inputs)))
         onehot[np.arange(indices.size), indices] = 1
 
         # fake the ring functionality by first, concat, second smooth, than split+maximise on both matrices
