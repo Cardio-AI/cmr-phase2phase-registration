@@ -607,11 +607,11 @@ class PhaseRegressionGenerator(DataGenerator):
         self.TARGET_SHAPE = (self.T_SHAPE, self.PHASES)
         self.TARGET_CROP_SHAPE = (self.T_SHAPE, self.PHASES-1)
         # if this is the case we have a sequence of 3D volumes or a sequence of 2D images
-        self.X_SHAPE = np.empty((self.BATCHSIZE, self.T_SHAPE, *self.DIM), dtype=np.float32)
+        self.X_SHAPE = np.empty((self.BATCHSIZE, self.T_SHAPE, *self.DIM, 1), dtype=np.float32)
         self.Y_SHAPE = np.empty((self.BATCHSIZE, *self.TARGET_SHAPE), dtype=np.float32)
 
         # opens a dataframe with cleaned phases per patient
-        self.METADATA_FILE = config.get('DF_META', '/mnt/ssd/data/gcn/02_imported_4D_unfiltered_old/SAx_3D_dicomTags_phase')
+        self.METADATA_FILE = config.get('DF_META', '/mnt/ssd/data/gcn/02_imported_4D_unfiltered/SAx_3D_dicomTags_phase')
         df = pd.read_csv(self.METADATA_FILE)
         self.DF_METADATA = df[['patient', 'ED#', 'MS#', 'ES#', 'PF#', 'MD#']]
 
@@ -660,6 +660,8 @@ class PhaseRegressionGenerator(DataGenerator):
                     futures.add(executor.submit(self.__preprocess_one_image__, i, ID))
 
                 except Exception as e:
+                    PrintException()
+                    print(e)
                     logging.error(
                         'Exception {} in datagenerator with: image: {} or mask: {}'.format(str(e), self.images[ID],
                                                                                            self.labels[ID]))
@@ -707,15 +709,16 @@ class PhaseRegressionGenerator(DataGenerator):
         model_inputs =  split_one_4d_sitk_in_list_of_3d_sitk(model_inputs)
 
         # search for the 8 digits-patient ID which should start with '_' and end with '-'
-        patient_str = re.search('-(.{8})_', x).group(1)
+        patient_str = re.search('-(.{8})_', x).group(1).upper()
         assert(len(patient_str) == 8), 'matched patient ID from the phase sheet has a length of: {}'.format(len(patient_str))
         # returns the indices in the following order: 'ED#', 'MS#', 'ES#', 'PF#', 'MD#'
         # reduce by one, as the indexes start at 0, the excel-sheet at 1
-        indices = self.DF_METADATA[self.DF_METADATA.patient.str.contains(patient_str)][['ED#', 'MS#', 'ES#', 'PF#', 'MD#']].values[0].astype(int) -1
-        logging.debug('indices: \n{}'.format(indices))
+        indices = self.DF_METADATA[self.DF_METADATA.patient.str.contains(patient_str)][['ED#', 'MS#', 'ES#', 'PF#', 'MD#']]
+        indices = indices.values[0].astype(int) -1
         onehot = np.zeros((indices.size, indices.max() + 1))
         onehot[np.arange(indices.size), indices] = 1
 
+        # fake the ring functionality by first, concat, second smooth, than split+maximise on both matrices
         onehot = np.concatenate([onehot, onehot],axis=1)
         logging.debug('one-hot: \n{}'.format(onehot))
 
@@ -807,7 +810,7 @@ class PhaseRegressionGenerator(DataGenerator):
         self.__plot_state_if_debug__(img=model_inputs[len(model_inputs)//2], start_time=t1, step='clipped cropped and pad')
 
 
-        return model_inputs, onehot, i, ID, time() - t0
+        return model_inputs[...,None], onehot, i, ID, time() - t0
 
 
 import linecache
