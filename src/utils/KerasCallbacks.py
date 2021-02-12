@@ -12,8 +12,8 @@ from tensorflow.keras.callbacks import Callback
 from tensorflow.keras.callbacks import EarlyStopping, ModelCheckpoint, ReduceLROnPlateau, LearningRateScheduler
 from src.visualization.Visualize import plot_3d_vol
 from src.visualization.Visualize import show_slice_transparent as show_slice
-from src.utils.utils_io import ensure_dir
-from src.data.Generators import get_samples
+from src.utils.Utils_io import ensure_dir
+
 from src.data.Preprocess import normalise_image
 
 
@@ -45,8 +45,8 @@ def get_callbacks(config={}, batch_generator=None, validation_generator=None, me
                                                                              validation_generator),
                              flow=config.get('FLOW', False)))
 
-
-    callbacks.append(
+    # dont save the testing models
+    """callbacks.append(
         WeightsSaver(config.get('MODEL_PATH', 'temp/models'),
                      model_freq=2))
     callbacks.append(
@@ -56,7 +56,7 @@ def get_callbacks(config={}, batch_generator=None, validation_generator=None, me
                         save_weights_only=True,
                         monitor=config.get('SAVE_MODEL_FUNCTION', 'loss'),
                         mode=config.get('SAVE_MODEL_MODE', 'min'),
-                        save_freq='epoch'))
+                        save_freq='epoch'))"""
 
     callbacks.append(
         tensorflow.keras.callbacks.ReduceLROnPlateau(monitor=config.get('MONITOR_FUNCTION', 'loss'),
@@ -77,7 +77,7 @@ def get_callbacks(config={}, batch_generator=None, validation_generator=None, me
 
     callbacks.append(
         LRTensorBoard(log_dir=config.get('TENSORBOARD_LOG_DIR', 'temp/tf_log'),
-                                               histogram_freq=2,
+                                               histogram_freq=0,
                                                write_graph=False,
                                                write_images=False,
                                                update_freq='epoch',
@@ -130,25 +130,6 @@ def feed_inputs_4_tensorboard(config, batch_generator=None, validation_generator
     feed = {}
     # training config includes the generator args
     generator_args = config
-
-    # build a feed dict for later tensorboard visualisation
-    # use special slices from the lower, middle and upper area
-    if config.get('ARCHITECTURE', '2D') == '2D' and False:
-        
-        feed['train_lower'] = get_samples(config['TRAIN_PATH'], samples=samples, part='lower',
-                                          generator_args=generator_args)
-        feed['val_lower'] = get_samples(config['VAL_PATH'], samples=samples, part='lower',
-                                        generator_args=generator_args)
-
-        feed['train_middle'] = get_samples(config['TRAIN_PATH'], samples=samples, part='middle',
-                                           generator_args=generator_args)
-        feed['val_middle'] = get_samples(config['VAL_PATH'], samples=samples, part='middle',
-                                         generator_args=generator_args)
-
-        feed['train_upper'] = get_samples(config['TRAIN_PATH'], samples=samples, part='upper',
-                                          generator_args=generator_args)
-        feed['val_upper'] = get_samples(config['VAL_PATH'], samples=samples, part='upper',
-                                        generator_args=generator_args)
 
     # use the batch- and validation-generator for the feeds
     if batch_generator is not None:
@@ -299,7 +280,6 @@ def finetune_with_SGD(config, train_g, val_g, model, metrics, epoch_init):
     :return:
     """
     import tensorflow as tf
-    from src.utils.my_metrics import dice_coef_labels_loss
     loss_f = config.get('LOSS_FUNCTION', tf.keras.metrics.binary_crossentropy)
     #loss_f = dice_coef_labels_loss
     lr = config.get('LEARNING_RATE', 0.001)

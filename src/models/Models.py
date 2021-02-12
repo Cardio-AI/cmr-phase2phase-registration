@@ -66,6 +66,7 @@ def create_PhaseRegressionModel(config, networkname='PhaseRegressionModel'):
 
         # unstack along the temporal axis
         inputs = tf.unstack(input_tensor,axis=1)
+        inputs = [i for i in inputs if i.sum()>0]
         inputs = [encoder(vol)[0] for vol in inputs]
         print(inputs[0].shape)
         # Shrink the encoding towards the euler angles and translation params,
@@ -76,16 +77,18 @@ def create_PhaseRegressionModel(config, networkname='PhaseRegressionModel'):
         inputs = tf.stack(inputs, axis=1)
         print('concat all')
         print(inputs.shape)
-        inputs = tf.keras.layers.Conv1D(filters=256, kernel_size=5, strides=1, padding='same', activation=activation)(inputs)
+        inputs = tf.keras.layers.Conv1D(filters=32, kernel_size=1, strides=1, padding='same', activation=activation)(inputs)
+        inputs = tf.keras.layers.BatchNormalization()(inputs)
         print('conv1d 256, 5, 2')
         print(inputs.shape)
-        inputs = tf.keras.layers.Conv1D(filters=256, kernel_size=3, strides=1, padding='same', activation=activation)(inputs)
+        inputs = tf.keras.layers.Conv1D(filters=32, kernel_size=3, strides=1, padding='same', activation=activation)(inputs)
         print(inputs.shape)
-        inputs = tf.keras.layers.Conv1D(filters=6, kernel_size=1, strides=1, padding='same', activation='softmax')(inputs)
+        inputs = tf.keras.layers.Conv1D(filters=6, kernel_size=3, strides=1, padding='same', activation='relu')(inputs)
         print(inputs.shape)
         outputs = [inputs]
 
         model = Model(inputs=[input_tensor], outputs=outputs, name=networkname)
-        model.compile(optimizer=get_optimizer(config, networkname), loss=tf.keras.losses.categorical_crossentropy)
+        model.compile(optimizer=get_optimizer(config, networkname), loss='mse',
+                      metrics=[tf.keras.metrics.CategoricalAccuracy(), tf.keras.metrics.Accuracy()])
 
         return model
