@@ -47,7 +47,7 @@ def create_PhaseRegressionModel(config, networkname='PhaseRegressionModel'):
         dropouts = list(np.linspace(drop_1, drop_3, depth))
         dropouts = [round(i, 1) for i in dropouts]
 
-        encoder = ConvEncoder(activation=activation,
+        spatial_encoder = ConvEncoder(activation=activation,
                               batch_norm=batch_norm,
                               bn_first=bn_first,
                               depth=depth,
@@ -60,35 +60,61 @@ def create_PhaseRegressionModel(config, networkname='PhaseRegressionModel'):
                               ndims=ndims,
                               pad=pad)
 
+        temporal_encoder = ConvEncoder(activation=activation,
+                                      batch_norm=batch_norm,
+                                      bn_first=bn_first,
+                                      depth=depth,
+                                      drop_3=drop_3,
+                                      dropouts=dropouts,
+                                      f_size=f_size,
+                                      filters=filters,
+                                      kernel_init=kernel_init,
+                                      m_pool=m_pool,
+                                      ndims=ndims,
+                                      pad=pad)
+
 
         gap = tensorflow.keras.layers.GlobalAveragePooling3D()
 
 
         # unstack along the temporal axis
-        inputs = tf.unstack(input_tensor,axis=1)
-        inputs = [i for i in inputs if i.sum()>0]
-        inputs = [encoder(vol)[0] for vol in inputs]
-        print(inputs[0].shape)
-        # Shrink the encoding towards the euler angles and translation params,
-        # no additional dense layers before the GAP layer
-        inputs = [gap(vol) for vol in inputs]  # m.shape --> batchsize, timesteps, 6
+        # unstack along t, yielding a list of 3D volumes
+        inputs_spatial = tf.unstack(input_tensor,axis=1)
+        inputs_spatial = [spatial_encoder(vol)[0] for vol in inputs_spatial]
+        print(inputs_spatial[0].shape)
+        inputs_spatial = [gap(vol) for vol in inputs_spatial]  # m.shape --> batchsize, timesteps, 6
+        print(inputs_spatial[0].shape)
+        inputs_spatial = tf.stack(inputs_spatial, axis=1)
+        print(inputs_spatial.shape)
+
+        # unstack along Z yielding a list of 2D+t slices
+        inputs_temporal = tf.unstack(input_tensor, axis=2)
+        inputs_temporal = [temporal_encoder(vol)[0] for vol in inputs_temporal]
+        inputs_temporal = tf.stack(inputs_temporal, axis=2)
+        inputs_temporal = tf.unstack(inputs_temporal, axis=1)
+        print(inputs_temporal[0].shape)
+        inputs_temporal = [gap(vol) for vol in inputs_temporal]
+        print(inputs_temporal[0].shape)
+        inputs_temporal = tf.stack(inputs_temporal, axis=1)
+        print(inputs_temporal.shape)
+
+        inputs = tf.keras.layers.concatenate([inputs_spatial, inputs_temporal], axis=-1)
         print('gap elem 0')
         print(inputs[0].shape)
-        inputs = tf.stack(inputs, axis=1)
-        print('concat all')
-        print(inputs.shape)
-        inputs = tf.keras.layers.Conv1D(filters=32, kernel_size=1, strides=1, padding='same', activation=activation)(inputs)
+        inputs = tf.keras.layers.Conv1D(filters=64, kernel_size=5, strides=1, padding='same', activation=activation)(inputs)
         inputs = tf.keras.layers.BatchNormalization()(inputs)
-        print('conv1d 256, 5, 2')
+        inputs = tf.keras.layers.Dropout(rate=0.3)(inputs)
+        print('conv1d 32, 1, 1')
         print(inputs.shape)
         inputs = tf.keras.layers.Conv1D(filters=32, kernel_size=3, strides=1, padding='same', activation=activation)(inputs)
+        print('conv1d 32 3,1')
         print(inputs.shape)
-        inputs = tf.keras.layers.Conv1D(filters=6, kernel_size=3, strides=1, padding='same', activation='relu')(inputs)
+        inputs = tf.keras.layers.Conv1D(filters=5, kernel_size=1, strides=1, padding='same', activation='softmax')(inputs)
         print(inputs.shape)
         outputs = [inputs]
 
         model = Model(inputs=[input_tensor], outputs=outputs, name=networkname)
-        model.compile(optimizer=get_optimizer(config, networkname), loss='mse',
-                      metrics=[tf.keras.metrics.CategoricalAccuracy(), tf.keras.metrics.Accuracy()])
+        model.compile(optimizer=get_optimizer(config, networkname), loss=tf.keras.losses.categorical_crossentropy,
+                      metrics=[tf.keras.metrics.CategoricalAccuracy(), tf.keras.metrics.mse, tf.keras.metrics.mae])
 
         return model

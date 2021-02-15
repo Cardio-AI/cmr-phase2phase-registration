@@ -131,21 +131,23 @@ def feed_inputs_4_tensorboard(config, batch_generator=None, validation_generator
     # training config includes the generator args
     generator_args = config
 
+    samples = min(config['BATCHSIZE'], samples)
     # use the batch- and validation-generator for the feeds
     if batch_generator is not None:
         x_t, y_t = batch_generator.__getitem__(0)
+
         if y_t is not None:
             x_t, y_t = x_t[0:samples], y_t[0:samples]
         else:
             x_t, y_t = x_t[0:samples], []
 
-        feed['train_generator'] = (x_t, y_t)
+        feed['gen_train'] = (x_t, y_t)
 
     if validation_generator is not None:
         x_v, y_v = validation_generator.__getitem__(0)
         x_v, y_v = x_v[0:samples], y_v[0:samples]
 
-        feed['val_generator'] = (x_v, y_v)
+        feed['gen_val'] = (x_v, y_v)
 
     logging.info('feed 4 Tensorboard is ready')
     return feed
@@ -526,6 +528,108 @@ class CustomImageWritertf2(Callback):
             # del xs, ys, pred
 
             # self.writer.add_summary(tf.Summary(value=summary_str), global_step=self.e)
+
+
+class PhaseRegressionCallback(Callback):
+
+    # Keras Callback for training progress visualisation in the Tensorboard
+    # Creates a new summary file
+    # Usage:
+    # custom_image_writer = CustomImageWriter(experiment_path, 10, create_feeds_for_tensorboard(batch_generator, val_generator)
+    # model.fit_generator(batch_generator, val_generator, *args, callbacks=[custom_image_writer, ...]
+    # original code from:
+    # https://stackoverflow.com/questions/43784921/how-to-display-custom-images-in-tensorboard-using-keras?rq=1
+
+    def __init__(self, log_dir='./logs/tmp/', image_freq=10, feed_inputs_4_display=None, flow=False, dpi=200,f_size=(5,5), interpol='bilinear', force_plot_first_n_epochs=1):
+
+        """
+        This callback gets a dict with key: x,y entries
+        When the on_epoch_end callback is invoked this callback predicts the current output for all xs
+        Afterwards it writes the image, gt and prediction into a summary file to make the learning visually in the Tensorboard
+        :param log_dir: String, path - folder for the tensorboard summary file Imagewriter will create a subdir "images" for the imagesummary file
+        :param image_freq: int - run this callback every n epoch to save disk space and increase speed
+        :param feed_inputs_4_display: dict {'train':(x_tensor,y_tensor), 'val' : (x_tensor. y_tensor)}
+        x and ys to predict and visualise + key for summary description
+        x_tensor and y_tensor have the shape n, x, y, 1 or classes for y, they are grouped by a key, eg. 'train', 'val'
+        """
+
+        super(PhaseRegressionCallback, self).__init__()
+        self.freq = image_freq
+        self.f_size = f_size
+        self.dpi = dpi
+        self.interpol = interpol
+        self.flow = flow
+        self.e = 0
+        self.every_n_in_z = 5
+        self.n_start_epochs = force_plot_first_n_epochs
+        self.feed_inputs_4_display = feed_inputs_4_display
+        log_dir = os.path.join(log_dir, 'images')  # create a subdir for the imagewriter summary file
+        ensure_dir(log_dir)
+        self.writer = tensorflow.summary.create_file_writer(log_dir)
+        self.xs, self.ys = zip(*self.feed_inputs_4_display.values())
+        self.keys = self.feed_inputs_4_display.keys()
+
+        # reshape x to predict in one step
+        x_ = np.stack(self.xs, axis=0)
+        self.x_ = x_.reshape((x_.shape[0] * x_.shape[1], *x_.shape[2:]))
+
+    def custom_set_feed_input_to_display(self, feed_inputs_display):
+
+        """
+        sets the feeding data for TensorBoard visualization;
+        :param feed_inputs_display: dict {'train':(x_tensor,y_tensor), 'val' : (x_tensor. y_tensor)}
+        x and ys to predict and visualise + key for summary description
+        x_tensor and y_tensor have the shape n, x, y, 1 or classes for y, they are grouped by a key, eg. 'train', 'val'
+        :return: None
+        """
+
+        self.feed_inputs_display = feed_inputs_display
+
+
+    def on_epoch_end(self, epoch, logs=None):
+
+        """
+        Keras will call this methods after each epoch on all Callbacks provided to the method fit or fit_generator
+        A callback has access to its associated model through the class property self.model.
+        :param epoch:
+        :param logs:
+        :return:
+        """
+
+        logs = logs or {}
+        self.e += 1
+        if self.e % self.freq == 0 or self.e < self.n_start_epochs:  # every n epoch (and the first 20 epochs), write pred in a TensorBorad summary file;
+            summary_str = []
+
+            # xs and ys have the shape n, x, y, 1, they are grouped by the key
+            # xs will have the shape: (len(keys), samples, z, x, y, 1)
+            predictions = self.model(self.x_, training=False)
+
+            # create one tensorboard entry per key in feed_inputs_display
+            pred_i = 0
+            with self.writer.as_default():
+
+                for key, x, y in zip(self.keys, self.xs, self.ys):
+                    # xs and ys have the shape n, x, y, 1, they are grouped by the key
+                    # count the samples provided by each key to sort them
+                    for i in range(x.shape[0]):
+                        # pred has the same order as x and y but no grouping tag (e.g. 'train_generator')
+                        # keep track of the matching
+                        if len(x.shape) == 3:  # work with 2d data
+                            pred = predictions[pred_i]
+                            tensorflow.summary.image(name='plot/{}/{}/_pred'.format(key, i),
+                                                         data=pred,
+                                                         step=epoch)
+                            if self.e ==1:
+                                tensorflow.summary.image(name='plot/{}/{}/_gt'.format(key, i),
+                                                         data=y[i],
+                                                         step=0)
+                            pred_i += 1
+            # del xs, ys, pred
+
+            # self.writer.add_summary(tf.Summary(value=summary_str), global_step=self.e)
+
+
 
 
 class ImageSaver(Callback):

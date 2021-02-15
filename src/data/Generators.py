@@ -602,10 +602,11 @@ class PhaseRegressionGenerator(DataGenerator):
             config = {}
         super(PhaseRegressionGenerator, self).__init__(x=x, y=y, config=config)
 
+        self.AUGMENT_PHASES = config.get('AUGMENT_PHASES', False)
         self.T_SHAPE = config.get('T_SHAPE', 10)
         self.PHASES = config.get('PHASES', 5)
         self.TARGET_SHAPE = (self.T_SHAPE, self.PHASES)
-        self.TARGET_CROP_SHAPE = (self.T_SHAPE, self.PHASES-1)
+        self.TARGET_CROP_SHAPE = (self.T_SHAPE, self.PHASES)
         # if this is the case we have a sequence of 3D volumes or a sequence of 2D images
         self.X_SHAPE = np.empty((self.BATCHSIZE, self.T_SHAPE, *self.DIM, 1), dtype=np.float32)
         self.Y_SHAPE = np.empty((self.BATCHSIZE, *self.TARGET_SHAPE), dtype=np.float32)
@@ -624,7 +625,9 @@ class PhaseRegressionGenerator(DataGenerator):
         self.KERNEL = np.concatenate([np.linspace(self.SMOOTHING_LOWER_BORDER,self.SMOOTHING_UPPER_BORDER,self.SMOOTHING_KERNEL_SIZE//2),
                                       [1],
                                       np.linspace(self.SMOOTHING_UPPER_BORDER,self.SMOOTHING_LOWER_BORDER,self.SMOOTHING_KERNEL_SIZE//2)])
-        logging.info(self.KERNEL)
+        logging.info('Smoothing kernel: \n{}'.format(self.KERNEL))
+        logging.info('Temporal phase augmentation: {}'.format(self.AUGMENT_PHASES))
+
         self.MASKS = None # need to check if this is still necessary!
 
         # define a random seed for albumentations
@@ -700,13 +703,10 @@ class PhaseRegressionGenerator(DataGenerator):
         # load image
         model_inputs = load_masked_img(sitk_img_f=x, mask=self.MASKING_IMAGE,
                                   masking_values=self.MASKING_VALUES, replace=self.REPLACE_WILDCARD)
-        # this is necessary to define the filter indicies
-        #model_inputs_mask = load_masked_img(sitk_img_f=x.replace('_clean', '_mask'), mask=self.MASKING_IMAGE,
-        #                          masking_values=self.MASKING_VALUES, replace=self.REPLACE_WILDCARD)
 
-        # TODO:
-        # create target vector or one-hot encoding
+
         model_inputs =  split_one_4d_sitk_in_list_of_3d_sitk(model_inputs)
+        reps = int(np.ceil(self.T_SHAPE / len(model_inputs)))
 
         # search for the 8 digits-patient ID which should start with '_' and end with '-'
         patient_str = re.search('-(.{8})_', x).group(1).upper()
@@ -718,8 +718,14 @@ class PhaseRegressionGenerator(DataGenerator):
         onehot = np.zeros((indices.size, len(model_inputs)))
         onehot[np.arange(indices.size), indices] = 1
 
+        if self.AUGMENT_PHASES:
+            rand = random.randint(0, onehot.shape[1])
+            logging.debug(rand)
+            onehot = np.concatenate([onehot[:, rand:], onehot[:, :rand]], axis=1)
+            model_inputs[rand:].extend(model_inputs[:rand])
+
         # fake the ring functionality by first, concat, second smooth, than split+maximise on both matrices
-        onehot = np.concatenate([onehot, onehot],axis=1)
+        onehot = np.tile(onehot, (1, reps * 2))
         logging.debug('one-hot: \n{}'.format(onehot))
 
         if self.TARGET_SMOOTHING:
@@ -731,10 +737,12 @@ class PhaseRegressionGenerator(DataGenerator):
                 onehot[idx] = smoothed
             logging.debug('convolved:\n{}'.format(onehot))
             # transform into a index based target vector index2phase
+        # we split and maximize two times the expected output vector size, by this we make sure to get a smoothing
         first, second = np.split(onehot,indices_or_sections=2, axis=1)
         onehot = np.maximum(first, second)
+        onehot = onehot[:,:self.T_SHAPE]
         onehot = onehot.T
-        #onehot = onehot/(sum(onehot)+ sys.float_info.epsilon)
+
         logging.debug('transposed: \n{}'.format(onehot))
         self.__plot_state_if_debug__(img=model_inputs[len(model_inputs)//2], start_time=t0, step='raw')
         t1 = time()
@@ -776,39 +784,39 @@ class PhaseRegressionGenerator(DataGenerator):
         logging.debug('Size after resample: {}'.format(model_inputs[0].GetSize()))
 
         # transform to nda for further processing
-        model_inputs = list(map(lambda x: sitk.GetArrayFromImage(x),model_inputs))
+        # repeat the 3D volumes along t (we did the same with the onehot vector)
+        model_inputs = list(map(lambda x: sitk.GetArrayFromImage(x),model_inputs)) * reps
 
         self.__plot_state_if_debug__(img=model_inputs[len(model_inputs)//2], start_time=t1, step='resampled')
 
-        if self.AUGMENT:  # augment data with albumentation
+        if self.AUGMENT:
             # use albumentation to apply random rotation scaling and shifts
-
             model_inputs = augmentation_compose_2d_3d_4d(img=np.stack(model_inputs, axis=0), mask=None, probabillity=self.AUGMENT_PROB)
-
             self.__plot_state_if_debug__(img=model_inputs[0], start_time=t1, step='augmented')
             t1 = time()
 
         # clip, pad/crop and normalise & extend last axis
         model_inputs = list(map(lambda x: clip_quantile(x, .9999), model_inputs))
         model_inputs = np.stack(model_inputs)
+        model_inputs = np.tile(model_inputs, (reps, 1, 1, 1))[:self.T_SHAPE, ...]
+
         model_inputs = pad_and_crop(model_inputs, target_shape=(self.T_SHAPE,*self.DIM))
         model_inputs = normalise_image(model_inputs, normaliser=self.SCALER) # normalise per 4D
 
         # we crop and pad the 4D volume and the target vectors into the same size
         onehot = pad_and_crop(onehot, target_shape=self.TARGET_CROP_SHAPE)
         # create a 6th class for the empty padded corner volumes
-        nonempty_timesteps = (np.sum(onehot, axis=1) == 0).astype(float)
-        onehot = np.concatenate([onehot, nonempty_timesteps[:, None]], axis=1)
+        #nonempty_timesteps = (np.sum(onehot, axis=1) == 0).astype(float)
+        #onehot = np.concatenate([onehot, nonempty_timesteps[:, None]], axis=1)
         logging.debug('background: \n{}'.format(onehot))
         # normalise the target vectors per timestep (sum(timestep_i) == 1)
         for idx in range(onehot.shape[0]):
             smoothed = onehot[idx]
             smoothed = smoothed / (sum(smoothed) + sys.float_info.epsilon)
             onehot[idx] = smoothed
+
         logging.debug('normalised (sum phases per timestep == 1): \n{}'.format(onehot))
-
         self.__plot_state_if_debug__(img=model_inputs[len(model_inputs)//2], start_time=t1, step='clipped cropped and pad')
-
 
         return model_inputs[...,None], onehot, i, ID, time() - t0
 
