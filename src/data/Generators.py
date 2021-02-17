@@ -719,10 +719,12 @@ class PhaseRegressionGenerator(DataGenerator):
         onehot[np.arange(indices.size), indices] = 1
 
         if self.AUGMENT_PHASES:
-            rand = random.randint(0, onehot.shape[1])
+            rand = random.randint(0, len(model_inputs))
             logging.debug(rand)
             onehot = np.concatenate([onehot[:, rand:], onehot[:, :rand]], axis=1)
-            model_inputs[rand:].extend(model_inputs[:rand])
+            first = model_inputs[rand:] # if we do this in one step the list will be not modified
+            first.extend(model_inputs[:rand])
+            model_inputs = first
 
         # fake the ring functionality by first, concat, second smooth, than split+maximise on both matrices
         onehot = np.tile(onehot, (1, reps * 2))
