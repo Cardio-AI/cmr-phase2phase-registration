@@ -8,7 +8,7 @@ import tensorflow.keras
 import numpy as np
 import pandas as pd
 import SimpleITK as sitk
-#from skimage.transform import resize
+# from skimage.transform import resize
 import matplotlib.pyplot as plt
 from time import time
 
@@ -68,8 +68,8 @@ class BaseGenerator(tensorflow.keras.utils.Sequence):
         self.LIST_IDS = ids
 
         # if streamhandler loglevel is set to debug, print each pre-processing step
-        self.DEBUG_MODE = logging.getLogger().handlers[1].level==logging.DEBUG
-        #self.DEBUG_MODE = False
+        self.DEBUG_MODE = logging.getLogger().handlers[1].level == logging.DEBUG
+        # self.DEBUG_MODE = False
 
         # read the config, set default values if param not given
         self.SCALER = config.get('SCALER', 'MinMax')
@@ -88,7 +88,7 @@ class BaseGenerator(tensorflow.keras.utils.Sequence):
         self.MAX_WORKERS = min(32, self.MAX_WORKERS)
 
         if self.DEBUG_MODE:
-            self.MAX_WORKERS = 1 # avoid parallelism when debugging, otherwise the plots are shuffled
+            self.MAX_WORKERS = 1  # avoid parallelism when debugging, otherwise the plots are shuffled
 
         if not hasattr(self, 'X_SHAPE'):
             self.X_SHAPE = np.empty((self.BATCHSIZE, *self.DIM), dtype=np.float32)
@@ -214,9 +214,9 @@ class BaseGenerator(tensorflow.keras.utils.Sequence):
             try:
                 x_, y_, i, ID, needed_time = future.result()
                 if self.SINGLE_OUTPUT:
-                    x[i, ], _ = x_, y_
+                    x[i,], _ = x_, y_
                 else:
-                    x[i, ], y[i,] = x_, y_
+                    x[i,], y[i,] = x_, y_
                 logging.debug('img finished after {:0.3f} sec.'.format(needed_time))
             except Exception as e:
                 logging.error(
@@ -269,7 +269,8 @@ class DataGenerator(BaseGenerator):
                                    masking_values=self.MASKING_VALUES, replace=self.REPLACE_WILDCARD)
         # load mask
         sitk_msk = load_masked_img(sitk_img_f=self.labels[ID], mask=self.MASKING_IMAGE,
-                                   masking_values=self.MASKING_VALUES, replace=self.REPLACE_WILDCARD, mask_labels=self.MASK_VALUES)
+                                   masking_values=self.MASKING_VALUES, replace=self.REPLACE_WILDCARD,
+                                   mask_labels=self.MASK_VALUES)
 
         self.__plot_state_if_debug__(sitk_img, sitk_msk, t0, 'raw')
         t1 = time()
@@ -280,37 +281,39 @@ class DataGenerator(BaseGenerator):
             # sitk.spacing has the opposite order than np.shape and tf.shape
             # we use the numpy order z, y, x
             old_spacing_img = list(reversed(sitk_img.GetSpacing()))
-            old_size_img = list(reversed(sitk_img.GetSize())) # after reverse: z, y, x
+            old_size_img = list(reversed(sitk_img.GetSize()))  # after reverse: z, y, x
 
             old_spacing_msk = list(reversed(sitk_msk.GetSpacing()))
-            old_size_msk = list(reversed(sitk_msk.GetSize())) # after reverse: z, y, x
+            old_size_msk = list(reversed(sitk_msk.GetSize()))  # after reverse: z, y, x
 
             if sitk_img.GetDimension() == 2:
                 y_s_img = (old_size_img[0] * old_spacing_img[0]) / self.SPACING[0]
                 x_s_img = (old_size_img[1] * old_spacing_img[1]) / self.SPACING[1]
-                new_size_img = (int(np.round(x_s_img)), int(np.round(y_s_img))) # this will be used for resampling, invert again
+                new_size_img = (
+                    int(np.round(x_s_img)), int(np.round(y_s_img)))  # this will be used for resampling, invert again
 
                 y_s_msk = (old_size_msk[0] * old_spacing_msk[0]) / self.SPACING[0]
                 x_s_msk = (old_size_msk[1] * old_spacing_msk[1]) / self.SPACING[1]
-                new_size_msk = (int(np.round(x_s_msk)), int(np.round(y_s_msk))) # this will be used for resampling, invert again
+                new_size_msk = (
+                    int(np.round(x_s_msk)), int(np.round(y_s_msk)))  # this will be used for resampling, invert again
 
             elif sitk_img.GetDimension() == 3:
                 # round up
                 z_s_img = np.round((old_size_img[0] * old_spacing_img[0])) / self.SPACING[0]
-                #z_s_img = max(self.DIM[0],z_s_img)  # z must fit in the network input, resample with spacing or min network input
+                # z_s_img = max(self.DIM[0],z_s_img)  # z must fit in the network input, resample with spacing or min network input
                 y_s_img = np.round((old_size_img[1] * old_spacing_img[1])) / self.SPACING[1]
                 x_s_img = np.round((old_size_img[2] * old_spacing_img[2])) / self.SPACING[2]
                 new_size_img = (int(np.round(x_s_img)), int(np.round(y_s_img)), int(np.round(z_s_img)))
 
                 z_s_msk = np.round((old_size_msk[0] * old_spacing_msk[0])) / self.SPACING[0]
-                #z_s_msk = max(self.DIM[0],z_s_msk)  # z must fit in the network input, resample with spacing or min network input
+                # z_s_msk = max(self.DIM[0],z_s_msk)  # z must fit in the network input, resample with spacing or min network input
                 y_s_msk = np.round((old_size_msk[1] * old_spacing_msk[1])) / self.SPACING[1]
                 x_s_msk = np.round((old_size_msk[2] * old_spacing_msk[2])) / self.SPACING[2]
                 new_size_msk = (int(np.round(x_s_msk)), int(np.round(y_s_msk)), int(np.round(z_s_msk)))
 
                 # we can also resize with the resamplefilter from sitk
                 # this cuts the image on the bottom and right
-                #new_size = self.DIM
+                # new_size = self.DIM
             else:
                 raise ('dimension not supported: {}'.format(sitk_img.GetDimension()))
 
@@ -339,10 +342,12 @@ class DataGenerator(BaseGenerator):
             logging.debug('spacing before resample: {}'.format(sitk_img.GetSpacing()))
 
             # keep x and y size/spacing, just extend the size in z, keep spacing of z --> pad with zero along
-            new_size_img = (*size_img[:-1], self.DIM[0]) # take x and y from the current sitk, extend by z creates x,y,z
+            new_size_img = (
+                *size_img[:-1], self.DIM[0])  # take x and y from the current sitk, extend by z creates x,y,z
             new_spacing_img = (*spacing_img[:-1], self.SPACING[0])  # spacing is in opposite order
 
-            new_size_msk = (*size_msk[:-1], self.DIM[0])  # take x and y from the current sitk, extend by z creates x,y,z
+            new_size_msk = (
+                *size_msk[:-1], self.DIM[0])  # take x and y from the current sitk, extend by z creates x,y,z
             new_spacing_msk = (*spacing_msk[:-1], self.SPACING[0])  # spacing is in opposite order
 
             sitk_img = resample_3D(sitk_img=sitk_img, size=(new_size_img), spacing=new_spacing_img,
@@ -353,8 +358,6 @@ class DataGenerator(BaseGenerator):
             else:
                 sitk_msk = resample_3D(sitk_img=sitk_msk, size=(new_size_msk), spacing=new_spacing_msk,
                                        interpolate=sitk.sitkLinear)
-
-
 
         logging.debug('Spacing after resample: {}'.format(sitk_img.GetSpacing()))
         logging.debug('Size after resample: {}'.format(sitk_img.GetSize()))
@@ -369,12 +372,12 @@ class DataGenerator(BaseGenerator):
         # We need to normalise the image/before augmentation, albumentation expects them to be normalised
         img_nda = clip_quantile(img_nda, .999)
         img_nda = normalise_image(img_nda, normaliser=self.SCALER)
-        #img_nda = normalise_image(img_nda, normaliser=self.SCALER)
+        # img_nda = normalise_image(img_nda, normaliser=self.SCALER)
 
         if not self.MASKS:  # yields the image two times for an autoencoder
             mask_nda = clip_quantile(mask_nda, .999)
             mask_nda = normalise_image(mask_nda, normaliser=self.SCALER)
-            #mask_nda = normalise_image(mask_nda, normaliser=self.SCALER)
+            # mask_nda = normalise_image(mask_nda, normaliser=self.SCALER)
 
         self.__plot_state_if_debug__(img_nda, mask_nda, t1, '{} normalized image:'.format(self.SCALER))
 
@@ -402,13 +405,14 @@ class DataGenerator(BaseGenerator):
         # if masks are given, otherwise keep image as it is (for vae models, masks == False)
         if self.MASKS:
             mask_nda = transform_to_binary_mask(mask_nda, self.MASK_VALUES)
-        else:# yields two images
+        else:  # yields two images
             mask_nda = normalise_image(mask_nda, normaliser=self.SCALER)
             mask_nda = mask_nda[..., np.newaxis]
 
         self.__plot_state_if_debug__(img_nda, mask_nda, t1, 'after crop')
 
         return img_nda[..., np.newaxis], mask_nda, i, ID, time() - t0
+
 
 class MotionDataGenerator(DataGenerator):
     """
@@ -421,7 +425,6 @@ class MotionDataGenerator(DataGenerator):
             config = {}
         super(MotionDataGenerator, self).__init__(x=x, y=y, config=config)
 
-
         if type(x[0]) in [tuple, list]:
             # if this is the case we have a sequence of 3D volumes or a sequence of 2D images
             self.INPUT_VOLUMES = len(x[0])
@@ -429,7 +432,7 @@ class MotionDataGenerator(DataGenerator):
             self.X_SHAPE = np.empty((self.BATCHSIZE, self.INPUT_VOLUMES, *self.DIM), dtype=np.float32)
             self.Y_SHAPE = np.empty((self.BATCHSIZE, self.OUTPUT_VOLUMES, *self.DIM), dtype=np.float32)
 
-        self.MASKS = None # need to check if this is still necessary!
+        self.MASKS = None  # need to check if this is still necessary!
 
         # define a random seed for albumentations
         random.seed(config.get('SEED', 42))
@@ -484,7 +487,7 @@ class MotionDataGenerator(DataGenerator):
                     'image:\n'
                     '{}\n'
                     'mask:\n'
-                    '{}'.format(str(e), self.images[ID],self.labels[ID]))
+                    '{}'.format(str(e), self.images[ID], self.labels[ID]))
 
         logging.debug('Batchsize: {} preprocessing took: {:0.3f} sec'.format(self.BATCHSIZE, time() - t0))
 
@@ -505,10 +508,12 @@ class MotionDataGenerator(DataGenerator):
         # use the load_masked_img wrapper to enable masking of the images, not necessary for the TMI paper
         # load image
         model_inputs = list(map(lambda x: load_masked_img(sitk_img_f=x, mask=self.MASKING_IMAGE,
-                                  masking_values=self.MASKING_VALUES, replace=self.REPLACE_WILDCARD), x))
+                                                          masking_values=self.MASKING_VALUES,
+                                                          replace=self.REPLACE_WILDCARD), x))
 
         model_outputs = list(map(lambda x: load_masked_img(sitk_img_f=x, mask=self.MASKING_IMAGE,
-                                  masking_values=self.MASKING_VALUES, replace=self.REPLACE_WILDCARD), y))
+                                                           masking_values=self.MASKING_VALUES,
+                                                           replace=self.REPLACE_WILDCARD), y))
 
         # test to train on ax,sax image pairs without ax2sax transformation
 
@@ -516,7 +521,7 @@ class MotionDataGenerator(DataGenerator):
         t1 = time()
 
         if self.RESAMPLE:
-            if model_inputs[0].GetDimension() in [2,3]:
+            if model_inputs[0].GetDimension() in [2, 3]:
 
                 # calc new size after resample image with given new spacing
                 # sitk.spacing has the opposite order than np.shape and tf.shape
@@ -526,7 +531,8 @@ class MotionDataGenerator(DataGenerator):
                         target_spacing = np.array(target_spacing)
                     old_size = np.array(sitk_img.GetSize())
                     old_spacing = np.array(sitk_img.GetSpacing())
-                    logging.debug('old size: {}, old spacing: {}, target spacing: {}'.format(old_size, old_spacing, target_spacing))
+                    logging.debug('old size: {}, old spacing: {}, target spacing: {}'.format(old_size, old_spacing,
+                                                                                             target_spacing))
                     new_size = (old_size * old_spacing) / target_spacing
                     return list(np.around(new_size).astype(np.int))
 
@@ -549,17 +555,17 @@ class MotionDataGenerator(DataGenerator):
                                     zip(model_inputs, new_size_inputs)))
 
             model_outputs = list(map(lambda x:
-                                    resample_3D(sitk_img=x[0],
-                                                size=x[1],
-                                                spacing=target_spacing,
-                                                interpolate=sitk.sitkLinear),
-                                    zip(model_outputs, new_size_outputs)))
+                                     resample_3D(sitk_img=x[0],
+                                                 size=x[1],
+                                                 spacing=target_spacing,
+                                                 interpolate=sitk.sitkLinear),
+                                     zip(model_outputs, new_size_outputs)))
 
         logging.debug('Spacing after resample: {}'.format(model_inputs[0].GetSpacing()))
         logging.debug('Size after resample: {}'.format(model_inputs[0].GetSize()))
 
         # transform to nda for further processing
-        model_inputs = list(map(lambda x: sitk.GetArrayFromImage(x),model_inputs))
+        model_inputs = list(map(lambda x: sitk.GetArrayFromImage(x), model_inputs))
         model_outputs = list(map(lambda x: sitk.GetArrayFromImage(x), model_outputs))
 
         self.__plot_state_if_debug__(model_inputs[0], model_outputs[0], t1, 'resampled')
@@ -568,7 +574,7 @@ class MotionDataGenerator(DataGenerator):
             # use albumentation to apply random rotation scaling and shifts
 
             # we need to make sure to apply the same augmentation on the input and target data
-            combined  = np.stack(model_inputs + model_outputs, axis=0)
+            combined = np.stack(model_inputs + model_outputs, axis=0)
             combined = augmentation_compose_2d_3d_4d(img=combined, mask=None, probabillity=self.AUGMENT_PROB)
             model_inputs, model_outputs = np.split(combined, indices_or_sections=2, axis=0)
 
@@ -579,17 +585,17 @@ class MotionDataGenerator(DataGenerator):
         # clip, pad/crop and normalise & extend last axis
         model_inputs = map(lambda x: clip_quantile(x, .9999), model_inputs)
         model_inputs = list(map(lambda x: pad_and_crop(x, target_shape=self.DIM), model_inputs))
-        #model_inputs = list(map(lambda x: normalise_image(x, normaliser=self.SCALER), model_inputs)) # normalise per volume
-        model_inputs = normalise_image(np.stack(model_inputs), normaliser=self.SCALER) # normalise per 4D
+        # model_inputs = list(map(lambda x: normalise_image(x, normaliser=self.SCALER), model_inputs)) # normalise per volume
+        model_inputs = normalise_image(np.stack(model_inputs), normaliser=self.SCALER)  # normalise per 4D
 
         model_outputs = map(lambda x: clip_quantile(x, .9999), model_outputs)
         model_outputs = list(map(lambda x: pad_and_crop(x, target_shape=self.DIM), model_outputs))
-        #model_outputs = list(map(lambda x: normalise_image(x, normaliser=self.SCALER), model_outputs)) # normalise per volume
-        model_outputs = normalise_image(np.stack(model_outputs), normaliser=self.SCALER) # normalise per 4D
+        # model_outputs = list(map(lambda x: normalise_image(x, normaliser=self.SCALER), model_outputs)) # normalise per volume
+        model_outputs = normalise_image(np.stack(model_outputs), normaliser=self.SCALER)  # normalise per 4D
         self.__plot_state_if_debug__(model_inputs[0], model_outputs[0], t1, 'clipped cropped and pad')
 
-
         return np.stack(model_inputs), np.stack(model_outputs), i, ID, time() - t0
+
 
 class PhaseRegressionGenerator(DataGenerator):
     """
@@ -617,18 +623,21 @@ class PhaseRegressionGenerator(DataGenerator):
         self.DF_METADATA = df[['patient', 'ED#', 'MS#', 'ES#', 'PF#', 'MD#']]
 
         self.TARGET_SMOOTHING = config.get('TARGET_SMOOTHING', False)
-        self.SMOOTHING_KERNEL_SIZE = config.get('SMOOTHING_KERNEL_SIZE',5)
-        self.SMOOTHING_LOWER_BORDER = config.get('SMOOTHING_LOWER_BORDER',0.2)
-        self.SMOOTHING_UPPER_BORDER = config.get('SMOOTHING_UPPER_BORDER',0.4)
+        self.SMOOTHING_KERNEL_SIZE = config.get('SMOOTHING_KERNEL_SIZE', 10)
+        self.SMOOTHING_LOWER_BORDER = config.get('SMOOTHING_LOWER_BORDER', 0.1)
+        self.SMOOTHING_UPPER_BORDER = config.get('SMOOTHING_UPPER_BORDER', 5)
+        self.SMOOTHING_WEIGHT_CORRECT = config.get('SMOOTHING_WEIGHT_CORRECT', 20)
         # create a 1D kernel with linearly increasing/decreasing values in the range(lower,upper),
-        # insert a '1' in the middle, as this reflect the correct idx
-        self.KERNEL = np.concatenate([np.linspace(self.SMOOTHING_LOWER_BORDER,self.SMOOTHING_UPPER_BORDER,self.SMOOTHING_KERNEL_SIZE//2),
-                                      [1],
-                                      np.linspace(self.SMOOTHING_UPPER_BORDER,self.SMOOTHING_LOWER_BORDER,self.SMOOTHING_KERNEL_SIZE//2)])
+        # insert a fixed number in the middle, as this reflect the correct idx,
+        # which might should have an greater weighting than an linear function could reflect
+        self.KERNEL = np.concatenate([
+            np.linspace(self.SMOOTHING_LOWER_BORDER, self.SMOOTHING_UPPER_BORDER, self.SMOOTHING_KERNEL_SIZE // 2),
+            [self.SMOOTHING_WEIGHT_CORRECT],
+            np.linspace(self.SMOOTHING_UPPER_BORDER, self.SMOOTHING_LOWER_BORDER, self.SMOOTHING_KERNEL_SIZE // 2)])
         logging.info('Smoothing kernel: \n{}'.format(self.KERNEL))
         logging.info('Temporal phase augmentation: {}'.format(self.AUGMENT_PHASES))
 
-        self.MASKS = None # need to check if this is still necessary!
+        self.MASKS = None  # need to check if this is still necessary!
 
         # define a random seed for albumentations
         random.seed(config.get('SEED', 42))
@@ -640,7 +649,7 @@ class PhaseRegressionGenerator(DataGenerator):
 
 
         :param list_IDs_temp:
-        :return: X : (batchsize, *dim, n_channels), Y : (batchsize, *dim, number_of_classes)
+        :return: X : (batchsize, *dim, n_channels), Y : (batchsize, self.T_SHAPE, number_of_classes)
         """
 
         # Initialization
@@ -685,7 +694,7 @@ class PhaseRegressionGenerator(DataGenerator):
                     'image:\n'
                     '{}\n'
                     'mask:\n'
-                    '{}'.format(str(e), self.images[ID],self.labels[ID]))
+                    '{}'.format(str(e), self.images[ID], self.labels[ID]))
 
         logging.debug('Batchsize: {} preprocessing took: {:0.3f} sec'.format(self.BATCHSIZE, time() - t0))
 
@@ -696,33 +705,40 @@ class PhaseRegressionGenerator(DataGenerator):
         t0 = time()
 
         x = self.images[ID]
-        y = self.labels[ID]
 
-
-        # use the load_masked_img wrapper to enable masking of the images, not necessary for the TMI paper
-        # load image
+        # use the load_masked_img wrapper to enable masking of the images, currently not necessary, but nice to have
         model_inputs = load_masked_img(sitk_img_f=x, mask=self.MASKING_IMAGE,
-                                  masking_values=self.MASKING_VALUES, replace=self.REPLACE_WILDCARD)
+                                       masking_values=self.MASKING_VALUES, replace=self.REPLACE_WILDCARD)
 
+        # Create a list of 3D volumes for resampling
+        model_inputs = split_one_4d_sitk_in_list_of_3d_sitk(model_inputs)
 
-        model_inputs =  split_one_4d_sitk_in_list_of_3d_sitk(model_inputs)
+        # How many times do we need to repeat that cycle along t to cover the desired output size
         reps = int(np.ceil(self.T_SHAPE / len(model_inputs)))
 
-        # search for the 8 digits-patient ID which should start with '_' and end with '-'
+        # Load the phase info for this patient
+        # Extract the the 8 digits-patient ID from the filename (starts with '_', ends with '-')
+        # Next search this patient ID in the loaded Phase dataframe
         patient_str = re.search('-(.{8})_', x).group(1).upper()
-        assert(len(patient_str) == 8), 'matched patient ID from the phase sheet has a length of: {}'.format(len(patient_str))
-        # returns the indices in the following order: 'ED#', 'MS#', 'ES#', 'PF#', 'MD#'
-        # reduce by one, as the indexes start at 0, the excel-sheet at 1
-        indices = self.DF_METADATA[self.DF_METADATA.patient.str.contains(patient_str)][['ED#', 'MS#', 'ES#', 'PF#', 'MD#']]
-        indices = indices.values[0].astype(int) -1
+        assert (len(patient_str) == 8), 'matched patient ID from the phase sheet has a length of: {}'.format(
+            len(patient_str))
+
+        # Returns the indices in the following order: 'ED#', 'MS#', 'ES#', 'PF#', 'MD#'
+        # Reduce the indices of the excel sheet by one, as the indexes start at 0, the excel-sheet at 1
+        # Transform them into an one-hot representation
+        indices = self.DF_METADATA[self.DF_METADATA.patient.str.contains(patient_str)][
+            ['ED#', 'MS#', 'ES#', 'PF#', 'MD#']]
+        indices = indices.values[0].astype(int) - 1
         onehot = np.zeros((indices.size, len(model_inputs)))
         onehot[np.arange(indices.size), indices] = 1
 
+        # Interpret the 4D CMR stack and the corresponding phase-one-hot-vect
+        # as temporal ring, which could be shifted along the T-axis
         if self.AUGMENT_PHASES:
             rand = random.randint(0, len(model_inputs))
             logging.debug(rand)
             onehot = np.concatenate([onehot[:, rand:], onehot[:, :rand]], axis=1)
-            first = model_inputs[rand:] # if we do this in one step the list will be not modified
+            first = model_inputs[rand:]  # if we do this in one step the list will be not modified
             first.extend(model_inputs[:rand])
             model_inputs = first
 
@@ -740,17 +756,17 @@ class PhaseRegressionGenerator(DataGenerator):
             logging.debug('convolved:\n{}'.format(onehot))
             # transform into a index based target vector index2phase
         # we split and maximize two times the expected output vector size, by this we make sure to get a smoothing
-        first, second = np.split(onehot,indices_or_sections=2, axis=1)
+        first, second = np.split(onehot, indices_or_sections=2, axis=1)
         onehot = np.maximum(first, second)
-        onehot = onehot[:,:self.T_SHAPE]
+        onehot = onehot[:, :self.T_SHAPE]
         onehot = onehot.T
 
         logging.debug('transposed: \n{}'.format(onehot))
-        self.__plot_state_if_debug__(img=model_inputs[len(model_inputs)//2], start_time=t0, step='raw')
+        self.__plot_state_if_debug__(img=model_inputs[len(model_inputs) // 2], start_time=t0, step='raw')
         t1 = time()
 
         if self.RESAMPLE:
-            if model_inputs[0].GetDimension() in [2,3]:
+            if model_inputs[0].GetDimension() in [2, 3]:
 
                 # calc new size after resample image with given new spacing
                 # sitk.spacing has the opposite order than np.shape and tf.shape
@@ -760,7 +776,8 @@ class PhaseRegressionGenerator(DataGenerator):
                         target_spacing = np.array(target_spacing)
                     old_size = np.array(sitk_img.GetSize())
                     old_spacing = np.array(sitk_img.GetSpacing())
-                    logging.debug('old size: {}, old spacing: {}, target spacing: {}'.format(old_size, old_spacing, target_spacing))
+                    logging.debug('old size: {}, old spacing: {}, target spacing: {}'.format(old_size, old_spacing,
+                                                                                             target_spacing))
                     new_size = (old_size * old_spacing) / target_spacing
                     return list(np.around(new_size).astype(np.int))
 
@@ -781,19 +798,19 @@ class PhaseRegressionGenerator(DataGenerator):
                                                 interpolate=sitk.sitkLinear),
                                     zip(model_inputs, new_size_inputs)))
 
-
         logging.debug('Spacing after resample: {}'.format(model_inputs[0].GetSpacing()))
         logging.debug('Size after resample: {}'.format(model_inputs[0].GetSize()))
 
         # transform to nda for further processing
         # repeat the 3D volumes along t (we did the same with the onehot vector)
-        model_inputs = list(map(lambda x: sitk.GetArrayFromImage(x),model_inputs)) * reps
+        model_inputs = list(map(lambda x: sitk.GetArrayFromImage(x), model_inputs)) * reps
 
-        self.__plot_state_if_debug__(img=model_inputs[len(model_inputs)//2], start_time=t1, step='resampled')
+        self.__plot_state_if_debug__(img=model_inputs[len(model_inputs) // 2], start_time=t1, step='resampled')
 
         if self.AUGMENT:
             # use albumentation to apply random rotation scaling and shifts
-            model_inputs = augmentation_compose_2d_3d_4d(img=np.stack(model_inputs, axis=0), mask=None, probabillity=self.AUGMENT_PROB)
+            model_inputs = augmentation_compose_2d_3d_4d(img=np.stack(model_inputs, axis=0), mask=None,
+                                                         probabillity=self.AUGMENT_PROB)
             self.__plot_state_if_debug__(img=model_inputs[0], start_time=t1, step='augmented')
             t1 = time()
 
@@ -802,29 +819,33 @@ class PhaseRegressionGenerator(DataGenerator):
         model_inputs = np.stack(model_inputs)
         model_inputs = np.tile(model_inputs, (reps, 1, 1, 1))[:self.T_SHAPE, ...]
 
-        model_inputs = pad_and_crop(model_inputs, target_shape=(self.T_SHAPE,*self.DIM))
-        model_inputs = normalise_image(model_inputs, normaliser=self.SCALER) # normalise per 4D
+        model_inputs = pad_and_crop(model_inputs, target_shape=(self.T_SHAPE, *self.DIM))
+        model_inputs = normalise_image(model_inputs, normaliser=self.SCALER)  # normalise per 4D
 
         # we crop and pad the 4D volume and the target vectors into the same size
         onehot = pad_and_crop(onehot, target_shape=self.TARGET_CROP_SHAPE)
         # create a 6th class for the empty padded corner volumes
-        #nonempty_timesteps = (np.sum(onehot, axis=1) == 0).astype(float)
-        #onehot = np.concatenate([onehot, nonempty_timesteps[:, None]], axis=1)
+        # nonempty_timesteps = (np.sum(onehot, axis=1) == 0).astype(float)
+        # onehot = np.concatenate([onehot, nonempty_timesteps[:, None]], axis=1)
         logging.debug('background: \n{}'.format(onehot))
         # normalise the target vectors per timestep (sum(timestep_i) == 1)
         for idx in range(onehot.shape[0]):
             smoothed = onehot[idx]
-            smoothed = smoothed / (sum(smoothed) + sys.float_info.epsilon)
+            smoothed = np.exp(smoothed) / sum(np.exp(smoothed))  # softmax equivalent
+            # smoothed = smoothed / (sum(smoothed) + sys.float_info.epsilon)
             onehot[idx] = smoothed
 
         logging.debug('normalised (sum phases per timestep == 1): \n{}'.format(onehot))
-        self.__plot_state_if_debug__(img=model_inputs[len(model_inputs)//2], start_time=t1, step='clipped cropped and pad')
+        self.__plot_state_if_debug__(img=model_inputs[len(model_inputs) // 2], start_time=t1,
+                                     step='clipped cropped and pad')
 
-        return model_inputs[...,None], onehot, i, ID, time() - t0
+        return model_inputs[..., None], onehot, i, ID, time() - t0
 
 
 import linecache
 import sys
+
+
 def PrintException():
     exc_type, exc_obj, tb = sys.exc_info()
     f = tb.tb_frame
