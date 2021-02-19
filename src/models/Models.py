@@ -4,6 +4,7 @@ import tensorflow
 import tensorflow as tf
 from tensorflow.keras.layers import Input
 from tensorflow.keras.models import Model
+from src.utils.Metrics import meandiff
 
 from src.models.ModelUtils import get_optimizer
 
@@ -20,7 +21,7 @@ def create_PhaseRegressionModel(config, networkname='PhaseRegressionModel'):
 
         input_shape = config.get('DIM', [10, 224, 224])
         T_SHAPE = config.get('T_SHAPE', 35)
-        PHASES = config.get('PHASES', 6)
+        PHASES = config.get('PHASES', 5)
         input_tensor = Input((T_SHAPE, *input_shape, 1))
         # define standard values according to the convention over configuration paradigm
         activation = config.get('ACTIVATION', 'elu')
@@ -35,13 +36,7 @@ def create_PhaseRegressionModel(config, networkname='PhaseRegressionModel'):
         bn_first = config.get('BN_FIRST', False)
         ndims = len(config.get('DIM', [10, 224, 224]))
         depth = config.get('DEPTH', 4)
-        dense1_weights = config.get('DENSE1_WEIGHTS', 256)
-        dense2_weights = config.get('DENSE2_WEIGHTS', 9)
-        dense3_weights = T_SHAPE*PHASES
-        dense4_weights = T_SHAPE*PHASES
 
-        T_SHAPE = config.get('T_SHAPE', 10)
-        PHASES = config.get('PHASES', 5)
 
         # increase the dropout through the layer depth
         dropouts = list(np.linspace(drop_1, drop_3, depth))
@@ -109,12 +104,12 @@ def create_PhaseRegressionModel(config, networkname='PhaseRegressionModel'):
         inputs = tf.keras.layers.Conv1D(filters=50, kernel_size=5, strides=1, padding='same', activation=activation)(inputs)
         print('conv1d 32 3,1')
         print(inputs.shape)
-        inputs = tf.keras.layers.Conv1D(filters=5, kernel_size=1, strides=1, padding='same', activation='softmax')(inputs)
+        inputs = tf.keras.layers.Conv1D(filters=PHASES, kernel_size=3, strides=1, padding='same', activation='softmax')(inputs)
         print(inputs.shape)
         outputs = [inputs]
 
         model = Model(inputs=[input_tensor], outputs=outputs, name=networkname)
-        model.compile(optimizer=get_optimizer(config, networkname), loss=tf.keras.losses.categorical_crossentropy,
-                      metrics=[tf.keras.metrics.CategoricalAccuracy(), tf.keras.metrics.mse, tf.keras.metrics.mae])
+        model.compile(optimizer=get_optimizer(config, networkname), loss=tf.keras.losses.CategoricalCrossentropy(label_smoothing=0.2),
+                      metrics=[tf.keras.metrics.CategoricalAccuracy(), tf.keras.metrics.mse, tf.keras.metrics.mae, meandiff])
 
         return model

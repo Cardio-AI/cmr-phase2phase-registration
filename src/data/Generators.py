@@ -142,7 +142,7 @@ class BaseGenerator(tensorflow.keras.utils.Sequence):
         Denotes the number of batches per epoch
         :return: number of batches
         """
-        return int(np.floor(len(self.LIST_IDS) / self.BATCHSIZE))
+        return int(np.ceil(len(self.LIST_IDS) / self.BATCHSIZE))
 
     def __getitem__(self, index):
 
@@ -733,29 +733,33 @@ class PhaseRegressionGenerator(DataGenerator):
         onehot[np.arange(indices.size), indices] = 1
 
         # Interpret the 4D CMR stack and the corresponding phase-one-hot-vect
-        # as temporal ring, which could be shifted along the T-axis
+        # as temporal ring, which could be shifted by a random starting idx along the T-axis
         if self.AUGMENT_PHASES:
             rand = random.randint(0, len(model_inputs))
             logging.debug(rand)
             onehot = np.concatenate([onehot[:, rand:], onehot[:, :rand]], axis=1)
-            first = model_inputs[rand:]  # if we do this in one step the list will be not modified
+            # if we extend the list in one line the list will be not modified
+            first = model_inputs[rand:]
             first.extend(model_inputs[:rand])
             model_inputs = first
 
-        # fake the ring functionality by first, concat, second smooth, than split+maximise on both matrices
+        # Fake a ring behaviour by first, tile along t
+        # second smooth with a linear increasing/decreasing Kernel,
+        # third split+maximise element-wise on both matrices
         onehot = np.tile(onehot, (1, reps * 2))
         logging.debug('one-hot: \n{}'.format(onehot))
 
         if self.TARGET_SMOOTHING:
-            # smooth each phase vector along the indices.
+            # Smooth each temporal vector along the indices.
             # By this we avoid hard borders
-            # divide the smoothed vectors by the sum to make sure they are usable as one hot-vectors
+            # Later divide the smoothed vectors by the sum or via softmax
+            # to make sure they sum up to 1 for each class
             for idx in range(onehot.shape[0]):
                 smoothed = np.convolve(onehot[idx], self.KERNEL, mode='same')
                 onehot[idx] = smoothed
             logging.debug('convolved:\n{}'.format(onehot))
-            # transform into a index based target vector index2phase
-        # we split and maximize two times the expected output vector size, by this we make sure to get a smoothing
+            # transform into an temporal index based target vector index2phase
+        # we split and maximize the tiled one-hot vector to make sure that the beginning and end are also smooth
         first, second = np.split(onehot, indices_or_sections=2, axis=1)
         onehot = np.maximum(first, second)
         onehot = onehot[:, :self.T_SHAPE]
@@ -768,7 +772,7 @@ class PhaseRegressionGenerator(DataGenerator):
         if self.RESAMPLE:
             if model_inputs[0].GetDimension() in [2, 3]:
 
-                # calc new size after resample image with given new spacing
+                # calculate the new size (after resample with the given spacing) of each 3D volume
                 # sitk.spacing has the opposite order than np.shape and tf.shape
                 # In the config we use the numpy order z, y, x which needs to be reversed for sitk
                 def calc_resampled_size(sitk_img, target_spacing):
@@ -803,7 +807,7 @@ class PhaseRegressionGenerator(DataGenerator):
 
         # transform to nda for further processing
         # repeat the 3D volumes along t (we did the same with the onehot vector)
-        model_inputs = list(map(lambda x: sitk.GetArrayFromImage(x), model_inputs)) * reps
+        model_inputs = list(map(lambda x: sitk.GetArrayFromImage(x), model_inputs))
 
         self.__plot_state_if_debug__(img=model_inputs[len(model_inputs) // 2], start_time=t1, step='resampled')
 
@@ -815,23 +819,29 @@ class PhaseRegressionGenerator(DataGenerator):
             t1 = time()
 
         # clip, pad/crop and normalise & extend last axis
+        # We repeat/tile the 3D volume at this time, to avoid resampling/augmenting the same slices multiple times
+        # Ideally this saves computation time and memory
         model_inputs = list(map(lambda x: clip_quantile(x, .9999), model_inputs))
         model_inputs = np.stack(model_inputs)
         model_inputs = np.tile(model_inputs, (reps, 1, 1, 1))[:self.T_SHAPE, ...]
 
-        model_inputs = pad_and_crop(model_inputs, target_shape=(self.T_SHAPE, *self.DIM))
-        model_inputs = normalise_image(model_inputs, normaliser=self.SCALER)  # normalise per 4D
-
         # we crop and pad the 4D volume and the target vectors into the same size
+        model_inputs = pad_and_crop(model_inputs, target_shape=(self.T_SHAPE, *self.DIM))
         onehot = pad_and_crop(onehot, target_shape=self.TARGET_CROP_SHAPE)
-        # create a 6th class for the empty padded corner volumes
-        # nonempty_timesteps = (np.sum(onehot, axis=1) == 0).astype(float)
-        # onehot = np.concatenate([onehot, nonempty_timesteps[:, None]], axis=1)
+
+        # Finally normalise the 4D volume in one value space
+        # Normalise the one-hot along the second axis
+        # This can be done either by:
+        # - divide each element by the sum of the elements + epsilon
+        # 𝜎(𝐳)𝑖=𝑧𝑖∑𝐾𝑗=1𝑧𝑗+𝜖 for 𝑖=1,…,𝐾 and 𝐳=(𝑧1,…,𝑧𝐾)∈ℝ𝐾
+        # - The standard (unit) softmax function 𝜎:ℝ𝐾→ℝ𝐾 is defined by the formula
+        # 𝜎(𝐳)𝑖=𝑒𝑧𝑖∑𝐾𝑗=1𝑒𝑧𝑗 for 𝑖=1,…,𝐾 and 𝐳=(𝑧1,…,𝑧𝐾)∈ℝ𝐾
+        import scipy
+        model_inputs = normalise_image(model_inputs, normaliser=self.SCALER)  # normalise per 4D
         logging.debug('background: \n{}'.format(onehot))
-        # normalise the target vectors per timestep (sum(timestep_i) == 1)
         for idx in range(onehot.shape[0]):
             smoothed = onehot[idx]
-            smoothed = np.exp(smoothed) / sum(np.exp(smoothed))  # softmax equivalent
+            smoothed = np.exp(smoothed) / np.sum(np.exp(smoothed), axis=0)  # softmax equivalent
             # smoothed = smoothed / (sum(smoothed) + sys.float_info.epsilon)
             onehot[idx] = smoothed
 
