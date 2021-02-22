@@ -73,18 +73,31 @@ def create_PhaseRegressionModel(config, networkname='PhaseRegressionModel'):
 
 
         # unstack along the temporal axis
+        # added shuffeling, which avoids the model to be biased by the order
         # unstack along t, yielding a list of 3D volumes
-        inputs_spatial = tf.unstack(input_tensor,axis=1)
+        """inputs_spatial = tf.unstack(input_tensor,axis=1)
+        import random
+        indicies = list(tf.range(len(inputs_spatial)))
+        zipped = list(zip(inputs_spatial, indicies))
+        random.shuffle(zipped)
+        inputs_spatial, indicies = zip(*zipped)
         inputs_spatial = [spatial_encoder(vol)[0] for vol in inputs_spatial]
         print(inputs_spatial[0].shape)
         inputs_spatial = [gap(vol) for vol in inputs_spatial]  # m.shape --> batchsize, timesteps, 6
         print(inputs_spatial[0].shape)
+        inputs_spatial, _ = zip(*sorted(zip(inputs_spatial, indicies), key=lambda tup: tup[1]))
         inputs_spatial = tf.stack(inputs_spatial, axis=1)
-        print(inputs_spatial.shape)
+        print(inputs_spatial.shape)"""
 
+        import random
         # unstack along Z yielding a list of 2D+t slices
         inputs_temporal = tf.unstack(input_tensor, axis=2)
+        indicies = list(tf.range(len(inputs_temporal)))
+        zipped = list(zip(inputs_temporal, indicies))
+        random.shuffle(zipped)
+        inputs_temporal, indicies = zip(*zipped)
         inputs_temporal = [temporal_encoder(vol)[0] for vol in inputs_temporal]
+        inputs_temporal, _ = zip(*sorted(zip(inputs_temporal, indicies), key=lambda tup: tup[1]))
         inputs_temporal = tf.stack(inputs_temporal, axis=2)
         inputs_temporal = tf.unstack(inputs_temporal, axis=1)
         print(inputs_temporal[0].shape)
@@ -93,23 +106,43 @@ def create_PhaseRegressionModel(config, networkname='PhaseRegressionModel'):
         inputs_temporal = tf.stack(inputs_temporal, axis=1)
         print(inputs_temporal.shape)
 
-        inputs = tf.keras.layers.concatenate([inputs_spatial, inputs_temporal], axis=-1)
-        print('gap elem 0')
-        print(inputs[0].shape)
-        inputs = tf.keras.layers.Conv1D(filters=256, kernel_size=5, strides=1, padding='same', activation=activation)(inputs)
+        # inputs = tf.keras.layers.concatenate([inputs_spatial, inputs_temporal], axis=-1)
+        inputs = inputs_temporal
+        print('encoder')
+        print(inputs.shape)
+
         inputs = tf.keras.layers.BatchNormalization()(inputs)
-        inputs = tf.keras.layers.Dropout(rate=0.3)(inputs)
-        print('conv1d 32, 1, 1')
+        inputs = tf.keras.layers.Dropout(rate=0.5)(inputs)
+        """inputs = tf.keras.layers.Conv1D(filters=PHASES, kernel_size=5, strides=1, padding='same',
+                                        activation=activation)(inputs)
+        inputs = tf.keras.layers.BatchNormalization()(inputs)
+        print('conv')
+        print(inputs.shape)"""
+
+        from tensorflow.keras.layers import LSTM, Bidirectional
+        forward_layer = LSTM(32, return_sequences=True)
+        backward_layer = LSTM(32, activation='relu', return_sequences=True,
+                              go_backwards=True)
+        inputs = Bidirectional(forward_layer, backward_layer=backward_layer,
+                                input_shape=(T_SHAPE, PHASES))(inputs)
+
+
+        print('bi LSTM')
         print(inputs.shape)
-        inputs = tf.keras.layers.Conv1D(filters=50, kernel_size=5, strides=1, padding='same', activation=activation)(inputs)
+
+        #inputs = tf.keras.layers.Dropout(rate=0.5)(inputs)
+        """print('conv1d 32, 1, 1')
+        print(inputs.shape)
+        inputs = tf.keras.layers.Conv1D(filters=5, kernel_size=3, strides=1, padding='same', activation=activation)(inputs)
+        inputs = tf.keras.layers.BatchNormalization()(inputs)
         print('conv1d 32 3,1')
-        print(inputs.shape)
-        inputs = tf.keras.layers.Conv1D(filters=PHASES, kernel_size=3, strides=1, padding='same', activation='softmax')(inputs)
+        print(inputs.shape)"""
+        inputs = tf.keras.layers.Conv1D(filters=PHASES, kernel_size=1, strides=1, padding='same', activation='softmax')(inputs)
         print(inputs.shape)
         outputs = [inputs]
 
         model = Model(inputs=[input_tensor], outputs=outputs, name=networkname)
         model.compile(optimizer=get_optimizer(config, networkname), loss=tf.keras.losses.CategoricalCrossentropy(label_smoothing=0.2),
-                      metrics=[tf.keras.metrics.CategoricalAccuracy(), tf.keras.metrics.mse, tf.keras.metrics.mae, meandiff])
+                      metrics=[tf.keras.metrics.CategoricalAccuracy(), tf.keras.metrics.mse, tf.keras.metrics.mae])
 
         return model

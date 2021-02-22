@@ -39,11 +39,11 @@ def get_callbacks(config={}, batch_generator=None, validation_generator=None, me
                              flow=config.get('FLOW', False)))
         if config.get('SAVE_LEARNING_PROGRESS_AS_TF', False):
             callbacks.append(
-            CustomImageWritertf2(log_dir=config['TENSORBOARD_LOG_DIR'],
+            PhaseRegressionCallback(log_dir=config['TENSORBOARD_LOG_DIR'],
                              image_freq= config.get('SAVE_LEARNING_PROGRESS_FREQUENCY', 2),
                              feed_inputs_4_display=feed_inputs_4_tensorboard(config, batch_generator,
                                                                              validation_generator),
-                             flow=config.get('FLOW', False)))
+                             ))
 
     # dont save the testing models
     """callbacks.append(
@@ -540,7 +540,7 @@ class PhaseRegressionCallback(Callback):
     # original code from:
     # https://stackoverflow.com/questions/43784921/how-to-display-custom-images-in-tensorboard-using-keras?rq=1
 
-    def __init__(self, log_dir='./logs/tmp/', image_freq=10, feed_inputs_4_display=None, flow=False, dpi=200,f_size=(5,5), interpol='bilinear', force_plot_first_n_epochs=1):
+    def __init__(self, log_dir='./logs/tmp/', image_freq=10, feed_inputs_4_display=None, dpi=200,f_size=(5,5), interpol='bilinear', force_plot_first_n_epochs=5):
 
         """
         This callback gets a dict with key: x,y entries
@@ -558,7 +558,6 @@ class PhaseRegressionCallback(Callback):
         self.f_size = f_size
         self.dpi = dpi
         self.interpol = interpol
-        self.flow = flow
         self.e = 0
         self.every_n_in_z = 5
         self.n_start_epochs = force_plot_first_n_epochs
@@ -585,6 +584,27 @@ class PhaseRegressionCallback(Callback):
 
         self.feed_inputs_display = feed_inputs_display
 
+    def make_image(self, figure):
+
+        """
+        Create a tf.Summary.Image from an ndarray
+        :param numpy_img: Greyscale image with shape (x, y, 1)
+        :return:
+        """
+        """Converts the matplotlib plot specified by 'figure' to a PNG image and
+          returns it. The supplied figure is closed and inaccessible after this call."""
+        # Save the plot to a PNG in memory.
+        buf = io.BytesIO()
+        plt.savefig(buf, format='png')
+        # Closing the figure prevents it from being displayed directly inside
+        # the notebook.
+        plt.close(figure)
+        buf.seek(0)
+        # Convert PNG buffer to TF image
+        image = tensorflow.image.decode_png(buf.getvalue(), channels=4)
+        # Add the batch dimension
+        image = tensorflow.expand_dims(image, 0)
+        return image
 
     def on_epoch_end(self, epoch, logs=None):
 
@@ -603,28 +623,28 @@ class PhaseRegressionCallback(Callback):
 
             # xs and ys have the shape n, x, y, 1, they are grouped by the key
             # xs will have the shape: (len(keys), samples, z, x, y, 1)
-            predictions = self.model(self.x_, training=False)
+
+
+            from src.visualization.Visualize import show_phases
+
 
             # create one tensorboard entry per key in feed_inputs_display
             pred_i = 0
             with self.writer.as_default():
 
                 for key, x, y in zip(self.keys, self.xs, self.ys):
+                    predictions = self.model.predict(x)
+                    logging.info(predictions.shape)
                     # xs and ys have the shape n, x, y, 1, they are grouped by the key
                     # count the samples provided by each key to sort them
-                    for i in range(x.shape[0]):
-                        # pred has the same order as x and y but no grouping tag (e.g. 'train_generator')
-                        # keep track of the matching
-                        if len(x.shape) == 3:  # work with 2d data
-                            pred = predictions[pred_i]
-                            tensorflow.summary.image(name='plot/{}/{}/_pred'.format(key, i),
-                                                         data=pred,
-                                                         step=epoch)
-                            if self.e ==1:
-                                tensorflow.summary.image(name='plot/{}/{}/_gt'.format(key, i),
-                                                         data=y[i],
-                                                         step=0)
-                            pred_i += 1
+                    #for i in range(x.shape[0]):
+
+                    # pred has the same order as x and y but no grouping tag (e.g. 'train_generator')
+                    # keep track of the matching
+
+                    tensorflow.summary.image(name='plot/{}/_pred'.format(key, pred_i),
+                                                 data=self.make_image(show_phases(y,predictions)),
+                                                 step=epoch)
             # del xs, ys, pred
 
             # self.writer.add_summary(tf.Summary(value=summary_str), global_step=self.e)

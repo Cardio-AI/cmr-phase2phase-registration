@@ -789,3 +789,46 @@ def plot_radar_chart(df, index=0, ax=None):
     # plt.title(df_merged['PID'].loc[index])
     plt.tight_layout()
     return ax
+
+
+def show_phases(gt, pred):
+    if not isinstance(gt, np.ndarray):
+        gt = gt.numpy()
+    if not isinstance(pred, np.ndarray):
+        pred = pred.numpy()
+
+    phases = ['ED', 'MS', 'ES', 'PF', 'MD']
+    BATCHSIZE = gt.shape[0]
+    # get the true idx
+    gt_idx = np.argmax(gt, axis=1)
+    # print(gt_idx)
+    gt_max = gt_idx.max(axis=1).astype(int)
+
+    f, axs = plt.subplots(1, BATCHSIZE * 2, figsize=(5 * BATCHSIZE, 5))
+    i = 0
+    for cutoff, idx in zip(gt_max, range(BATCHSIZE)):
+        cutoff = cutoff + 1
+        axs[i].title.set_text('f(x)')
+        temp_pred = pred[idx][:cutoff, :]
+        # temp_pred = pred[idx].numpy()
+        ind = np.argmax(temp_pred, axis=0)
+        # print(ind)
+        axs[i].set_yticks(ind, minor=False)
+        axs[i].set_xticks([0, 1, 2, 3, 4], minor=False)
+        axs[i].set_xticklabels(phases, rotation=45)
+        axs[i].imshow(temp_pred, aspect='auto')
+        i = i + 1
+        axs[i].title.set_text('y')
+        temp_y = gt[idx][:cutoff, :]
+        # temp_y = outputs[idx]
+        ind_gt = np.argmax(temp_y, axis=0)
+        axs[i].set_yticks(ind_gt, minor=False)
+        axs[i].set_xticks([0, 1, 2, 3, 4], minor=False)
+        axs[i].set_xticklabels(phases, rotation=45)
+        # print(ind_gt)
+        axs[i].imshow(temp_y, aspect='auto')
+        i = i + 1
+    f.tight_layout()
+    return f
+
+

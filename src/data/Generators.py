@@ -142,7 +142,7 @@ class BaseGenerator(tensorflow.keras.utils.Sequence):
         Denotes the number of batches per epoch
         :return: number of batches
         """
-        return int(np.ceil(len(self.LIST_IDS) / self.BATCHSIZE))
+        return int(np.floor(len(self.LIST_IDS) / self.BATCHSIZE))
 
     def __getitem__(self, index):
 
@@ -609,6 +609,7 @@ class PhaseRegressionGenerator(DataGenerator):
         super(PhaseRegressionGenerator, self).__init__(x=x, y=y, config=config)
 
         self.AUGMENT_PHASES = config.get('AUGMENT_PHASES', False)
+        self.AUGMENT_PHASES_RANGE = config.get('AUGMENT_PHASES_RANGE', (-3,3))
         self.T_SHAPE = config.get('T_SHAPE', 10)
         self.PHASES = config.get('PHASES', 5)
         self.TARGET_SHAPE = (self.T_SHAPE, self.PHASES)
@@ -735,7 +736,8 @@ class PhaseRegressionGenerator(DataGenerator):
         # Interpret the 4D CMR stack and the corresponding phase-one-hot-vect
         # as temporal ring, which could be shifted by a random starting idx along the T-axis
         if self.AUGMENT_PHASES:
-            rand = random.randint(0, len(model_inputs))
+            lower, upper = self.AUGMENT_PHASES_RANGE
+            rand = random.randint(-10, 10)
             logging.debug(rand)
             onehot = np.concatenate([onehot[:, rand:], onehot[:, :rand]], axis=1)
             # if we extend the list in one line the list will be not modified
@@ -822,7 +824,7 @@ class PhaseRegressionGenerator(DataGenerator):
         # We repeat/tile the 3D volume at this time, to avoid resampling/augmenting the same slices multiple times
         # Ideally this saves computation time and memory
         model_inputs = list(map(lambda x: clip_quantile(x, .9999), model_inputs))
-        model_inputs = np.stack(model_inputs)
+        model_inputs = np.stack(model_inputs, axis=0)
         model_inputs = np.tile(model_inputs, (reps, 1, 1, 1))[:self.T_SHAPE, ...]
 
         # we crop and pad the 4D volume and the target vectors into the same size
@@ -848,6 +850,10 @@ class PhaseRegressionGenerator(DataGenerator):
         logging.debug('normalised (sum phases per timestep == 1): \n{}'.format(onehot))
         self.__plot_state_if_debug__(img=model_inputs[len(model_inputs) // 2], start_time=t1,
                                      step='clipped cropped and pad')
+
+        # make sure we do not introduce Nans to the model
+        assert not np.any(np.isnan(onehot))
+        assert not np.any(np.isnan(model_inputs))
 
         return model_inputs[..., None], onehot, i, ID, time() - t0
 
