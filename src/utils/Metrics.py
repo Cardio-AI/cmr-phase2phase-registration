@@ -5,7 +5,7 @@ import numpy as np
 import tensorflow as tf
 
 
-def meandiff( y_true, y_pred, batchsize=4):
+def meandiff( y_true, y_pred, batchsize=2):
 
     """
     Average over the batches
@@ -42,7 +42,6 @@ def meandiff( y_true, y_pred, batchsize=4):
         gt_idxs = tf.math.argmax(y_true, axis=1)
         # b,
         gt_max = tf.cast(tf.reduce_max(gt_idxs, axis=1), tf.int32)
-        print(gt_max.shape)
         # b, ones + zeros (36), 5
         msk = tf.stack([
             tf.pad(
@@ -61,11 +60,11 @@ def meandiff( y_true, y_pred, batchsize=4):
         #diffs = tf.stack([tf.stack(get_min_dist_for_list(gt_idx[i],pred_idx[i], batchsize)) for i in tf.range(batchsize)])
         diffs = tf.map_fn(lambda x: get_min_dist_for_list(x, batchsize), stacked, dtype=tf.int32)
         diffs = tf.cast(tf.reduce_sum(diffs, axis=0),tf.float32)
-        diffs = tf.reduce_mean(diffs)
+        #diffs = tf.reduce_mean(diffs)
         return diffs
 
-    is_training = tf.Variable(y_true.shape.as_list()[0] != None, dtype=tf.bool)
-    result_value = tf.cond(is_training, lambda: true_fn(y_true,y_pred, batchsize), lambda:false_fn(y_true,y_pred,batchsize))
+    is_training = tf.constant(y_true.shape.as_list()[0] != None, dtype=tf.bool)
+    result_value = tf.cond(is_training, lambda: true_fn(y_true,y_pred, batchsize), lambda:true_fn(y_true,y_pred,batchsize))
     return result_value
 
 
