@@ -364,7 +364,7 @@ def augmentation_compose_2d_3d_4d(img, mask, probabillity=1, get_params=False):
 
 def _create_aug_compose(p=1, border_mode=cv2.BORDER_CONSTANT, val=0, targets={}):
     return ReplayCompose([
-        RandomRotate90(p=0.2),
+        #RandomRotate90(p=0.2),
         #Flip(0.1),
         #Transpose(p=0.1),
         ShiftScaleRotate(p=p, rotate_limit=0,shift_limit=0.025, scale_limit=0,value=val, border_mode=border_mode),
@@ -372,7 +372,7 @@ def _create_aug_compose(p=1, border_mode=cv2.BORDER_CONSTANT, val=0, targets={})
         #CenterCrop(height=target_dim[0], width=target_dim[1], p=1),
         # HueSaturationValue(p=1)
         #RandomBrightnessContrast(brightness_limit=0.02,contrast_limit=0.02,brightness_by_max=False, p=0.4),
-        Downscale(scale_min=0.9, scale_max=0.9, p=0.4),
+        #Downscale(scale_min=0.9, scale_max=0.9, p=0.4),
         #RandomGamma(p=p)
         # OneOf([
         # OpticalDistortion(p=1),

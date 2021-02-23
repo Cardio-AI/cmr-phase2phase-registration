@@ -5,6 +5,7 @@ import tensorflow as tf
 from tensorflow.keras.layers import Input
 from tensorflow.keras.models import Model
 from src.utils.Metrics import meandiff
+from src.utils.Metrics import *
 
 from src.models.ModelUtils import get_optimizer
 
@@ -120,29 +121,28 @@ def create_PhaseRegressionModel(config, networkname='PhaseRegressionModel'):
         print(inputs.shape)"""
 
         from tensorflow.keras.layers import LSTM, Bidirectional
-        forward_layer = LSTM(32, return_sequences=True)
-        backward_layer = LSTM(32, activation='relu', return_sequences=True,
-                              go_backwards=True)
-        inputs = Bidirectional(forward_layer, backward_layer=backward_layer,
-                                input_shape=(T_SHAPE, PHASES))(inputs)
-
+        forward_layer = LSTM(32,return_sequences=True)
+        backward_layer = LSTM(32, activation='relu', return_sequences=True,go_backwards=True)
+        inputs = Bidirectional(forward_layer, backward_layer=backward_layer,input_shape=(T_SHAPE, 256))(inputs)
 
         print('bi LSTM')
         print(inputs.shape)
-
-        #inputs = tf.keras.layers.Dropout(rate=0.5)(inputs)
-        """print('conv1d 32, 1, 1')
+        inputs = tf.keras.layers.BatchNormalization()(inputs)
+        inputs = tf.keras.layers.Dropout(rate=0.5)(inputs)
+        print('conv1d 32, 1, 1')
         print(inputs.shape)
-        inputs = tf.keras.layers.Conv1D(filters=5, kernel_size=3, strides=1, padding='same', activation=activation)(inputs)
+        inputs = tf.keras.layers.Conv1D(filters=5, kernel_size=5, strides=1, padding='same', activation=activation)(inputs)
         inputs = tf.keras.layers.BatchNormalization()(inputs)
         print('conv1d 32 3,1')
-        print(inputs.shape)"""
+        print(inputs.shape)
         inputs = tf.keras.layers.Conv1D(filters=PHASES, kernel_size=1, strides=1, padding='same', activation='softmax')(inputs)
         print(inputs.shape)
         outputs = [inputs]
 
+
+
         model = Model(inputs=[input_tensor], outputs=outputs, name=networkname)
         model.compile(optimizer=get_optimizer(config, networkname), loss=tf.keras.losses.CategoricalCrossentropy(label_smoothing=0.2),
-                      metrics=[tf.keras.metrics.CategoricalAccuracy(), tf.keras.metrics.mse, tf.keras.metrics.mae])
+                      metrics=[tf.keras.metrics.CategoricalAccuracy(), tf.keras.metrics.mse, tf.keras.metrics.mae, meandiff])
 
         return model
