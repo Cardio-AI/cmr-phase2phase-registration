@@ -55,11 +55,12 @@ def meandiff( y_true, y_pred, batchsize=4):
 
         gt_idx = tf.math.argmax(temp_gt, axis=1)
         pred_idx = tf.math.argmax(temp_pred, axis=1)
+        stacked = tf.stack([gt_idx, pred_idx], axis=-1)
         # returns b, 5,
         # sum the error per entity, and calc the mean over the batches
         #diffs = tf.stack([tf.stack(get_min_dist_for_list(gt_idx[i],pred_idx[i], batchsize)) for i in tf.range(batchsize)])
-        diffs = tf.map_fn(lambda x: get_min_dist_for_list(x[0], x[1], batchsize), zip(gt_idx, pred_idx))
-        diffs = tf.cast(tf.reduce_sum(diffs, axis=1),tf.float32)
+        diffs = tf.map_fn(lambda x: get_min_dist_for_list(x, batchsize), stacked, dtype=tf.int32)
+        diffs = tf.cast(tf.reduce_sum(diffs, axis=0),tf.float32)
         diffs = tf.reduce_mean(diffs)
         return diffs
 
@@ -68,20 +69,20 @@ def meandiff( y_true, y_pred, batchsize=4):
     return result_value
 
 
-def get_min_dist_for_list(lst_a,lst_b, batchsize):
-    length = tf.reduce_max(tf.stack([lst_a, lst_b]))
-    stacked = tf.stack([lst_a, lst_b], axis=1)
+def get_min_dist_for_list(vals, batchsize):
+    length = tf.reduce_max(vals)
+    #stacked = tf.stack([lst_a, lst_b], axis=1)
     #return [get_min_distance(lst_a[i],lst_b[i],length) for i in tf.range(batchsize)]
-    return tf.map_fn(lambda x :get_min_distance(x[0], x[1], length),zip(lst_a,lst_b))
+    return tf.map_fn(lambda x :get_min_distance(x, length),vals, dtype=tf.int32)
 
-def get_min_distance(a, b, mod):
+def get_min_distance(vals, mod):
     #assert(mod>(tf.reduce_max(a,b))), 'a: {}, b: {}, mod:{}, '.format(a,b,mod)
-    
+
     decr_counter = 0
     incr_counter = 0
 
-    smaller = tf.reduce_min(tf.stack([a, b]))
-    bigger = tf.reduce_max(tf.stack([a, b]))
+    smaller = tf.reduce_min(vals)
+    bigger = tf.reduce_max(vals)
 
     i1 = bigger
     while (i1 != smaller):
