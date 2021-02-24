@@ -21,11 +21,9 @@ def create_PhaseRegressionModel(config, networkname='PhaseRegressionModel'):
     with strategy.scope():
 
         input_shape = config.get('DIM', [10, 224, 224])
-        y_len_shape = ()
         T_SHAPE = config.get('T_SHAPE', 35)
         PHASES = config.get('PHASES', 5)
         input_tensor = Input(shape=(T_SHAPE, *input_shape, 1))
-        input_empty_tensor = Input(shape=(1,), dtype=tf.int32)
         # define standard values according to the convention over configuration paradigm
         activation = config.get('ACTIVATION', 'elu')
         batch_norm = config.get('BATCH_NORMALISATION', False)
@@ -138,18 +136,19 @@ def create_PhaseRegressionModel(config, networkname='PhaseRegressionModel'):
         inputs = tf.keras.layers.BatchNormalization()(inputs)"""
         print('conv1d 32 3,1')
         print(inputs.shape)
-        inputs = tf.keras.layers.Conv1D(filters=PHASES, kernel_size=1, strides=1, padding='same', activation='softmax', name='final_conv')(inputs)
-        #input_empty = tf.keras.layers.Activation(activation='linear', name='empty')(input_empty_tensor)
-        print(inputs.shape)
-        print(input_empty_tensor.shape)
-        outputs = tf.tuple([inputs, input_empty_tensor])
+        onehot = tf.keras.layers.Conv1D(filters=PHASES, kernel_size=1, strides=1, padding='same', activation='softmax', name='final_conv')(inputs)
 
-        losses = {'final_conv': tf.keras.losses.CategoricalCrossentropy()}
+        # add empty tensor with one-hot shape to align with gt
+        zeros = tf.zeros_like(onehot)
+        onehot = tf.stack([onehot,zeros],axis=1)
+        outputs = [onehot]
+
+        #losses = {'final_conv': tf.keras.losses.CategoricalCrossentropy()}
         losses = [own_metr.cce_wrapper]
 
 
 
-        model = Model(inputs=[input_tensor, input_empty_tensor], outputs=outputs, name=networkname)
+        model = Model(inputs=[input_tensor], outputs=outputs, name=networkname)
         model.compile(optimizer=get_optimizer(config, networkname), loss=losses,
                       metrics=[own_metr.meandiff]
                       )

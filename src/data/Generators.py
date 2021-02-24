@@ -616,7 +616,7 @@ class PhaseRegressionGenerator(DataGenerator):
         self.TARGET_CROP_SHAPE = (self.T_SHAPE, self.PHASES)
         # if this is the case we have a sequence of 3D volumes or a sequence of 2D images
         self.X_SHAPE = np.empty((self.BATCHSIZE, self.T_SHAPE, *self.DIM, 1), dtype=np.float32)
-        self.Y_SHAPE = np.empty((self.BATCHSIZE, *self.TARGET_SHAPE), dtype=np.float32)
+        self.Y_SHAPE = np.empty((self.BATCHSIZE,2, *self.TARGET_SHAPE), dtype=np.float32) # onehot and mask with gt length
 
         # opens a dataframe with cleaned phases per patient
         self.METADATA_FILE = config.get('DF_META', '/mnt/ssd/data/gcn/02_imported_4D_unfiltered/SAx_3D_dicomTags_phase')
@@ -655,9 +655,8 @@ class PhaseRegressionGenerator(DataGenerator):
 
         # Initialization
         x = np.empty_like(self.X_SHAPE)  # model input
-
         y = np.empty_like(self.Y_SHAPE)  # model output
-        y2 = np.zeros((self.BATCHSIZE, 1)) # length of the original cardiac cycle
+
 
         futures = set()
 
@@ -685,8 +684,8 @@ class PhaseRegressionGenerator(DataGenerator):
             # use the indexes to order the batch
             # otherwise slower images will always be at the end of the batch
             try:
-                x_, y_,gt_len, i, ID, needed_time = future.result()
-                x[i,], y[i,],y2[i,] = x_, y_, gt_len
+                x_, y_, i, ID, needed_time = future.result()
+                x[i,], y[i,] = x_, y_
                 logging.debug('img finished after {:0.3f} sec.'.format(needed_time))
             except Exception as e:
                 # write these files into a dedicated error log
@@ -701,7 +700,7 @@ class PhaseRegressionGenerator(DataGenerator):
 
         logging.debug('Batchsize: {} preprocessing took: {:0.3f} sec'.format(self.BATCHSIZE, time() - t0))
 
-        return tuple([[x, y2], [y,y2]])
+        return x, y
 
     def __preprocess_one_image__(self, i, ID):
 
@@ -853,11 +852,16 @@ class PhaseRegressionGenerator(DataGenerator):
         self.__plot_state_if_debug__(img=model_inputs[len(model_inputs) // 2], start_time=t1,
                                      step='clipped cropped and pad')
 
+        # add length as mask to onhot
+        msk = np.pad(
+                np.ones((gt_length, self.PHASES)),
+                ((0, self.T_SHAPE - gt_length), (0, 0)))
+        onehot = np.stack([onehot,msk], axis=0)
         # make sure we do not introduce Nans to the model
         assert not np.any(np.isnan(onehot))
         assert not np.any(np.isnan(model_inputs))
 
-        return model_inputs[..., None], onehot,gt_length, i, ID, time() - t0
+        return model_inputs[..., None], onehot, i, ID, time() - t0
 
 
 import linecache
