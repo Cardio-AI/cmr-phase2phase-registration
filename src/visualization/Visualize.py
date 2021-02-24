@@ -792,10 +792,20 @@ def plot_radar_chart(df, index=0, ax=None):
 
 
 def show_phases(gt, pred):
+
+    mask_given = False
+
     if not isinstance(gt, np.ndarray):
         gt = gt.numpy()
     if not isinstance(pred, np.ndarray):
         pred = pred.numpy()
+
+    if gt.shape[1] == 2: # this is a stacked onehot vector
+        gt, gt_msk = gt[:,0,...], gt[:,1,...]
+        mask_given = True
+
+    if pred.shape[1] == 2: # this is a stacked onehot vector
+        pred = pred[:,0,...]
 
     phases = ['ED', 'MS', 'ES', 'PF', 'MD']
     BATCHSIZE = gt.shape[0]
@@ -804,6 +814,9 @@ def show_phases(gt, pred):
     # print(gt_idx)
     gt_max = gt_idx.max(axis=1).astype(int)
 
+    if mask_given:
+        gt_max = np.sum(gt_msk[:,:,0],axis=1).astype(int) # get the length of one phase, as all phases have the same length
+        #print(gt_max)
     f, axs = plt.subplots(1, BATCHSIZE * 2, figsize=(5 * BATCHSIZE, 5))
     i = 0
     for cutoff, idx in zip(gt_max, range(BATCHSIZE)):

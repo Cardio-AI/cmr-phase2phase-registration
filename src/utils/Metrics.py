@@ -29,32 +29,18 @@ def meandiff( y_true, y_pred, batchsize=4):
     -------
 
     """
-    print(y_true.shape)
+    #print(y_true.shape)
     y_true, y_len_msk = tf.unstack(y_true,2,axis=1)
     y_pred, _ = tf.unstack(y_pred,2,axis=1)
 
     y_true = tf.cast(tf.convert_to_tensor(y_true), tf.float32)
     y_pred = tf.cast(tf.convert_to_tensor(y_pred), tf.float32)
     y_len_msk = tf.cast(tf.convert_to_tensor(y_len_msk), tf.float32)
-    print(y_true.shape)
-    print(y_pred.shape)
-    print(y_len_msk.shape)
+    #print(y_true.shape)
+    #print(y_pred.shape)
+    #print(y_len_msk.shape)
 
     # b, 36, 5
-
-
-    # b, 5
-    #gt_idxs = tf.math.argmax(y_true, axis=1)
-    # b,
-    # this is the length of the original cardiac cycle, we need to use this as cutoff point
-    #gt_max = tf.cast(tf.reduce_max(gt_idxs, axis=1), tf.int32)
-    #print(y_len)
-    #print((y_len*-1)+36)
-    # b, ones + zeros (36), 5
-    # define ones with (y_length, 5)
-    # pad first dim with (before,after) (0, 36-y_length) and the 2nd dim with (0,0)
-
-
     temp_pred = y_pred * y_len_msk
     temp_gt = y_true * y_len_msk
 
@@ -92,7 +78,7 @@ def get_min_distance(vals):
 
     decr_counter = tf.constant(0)
     incr_counter = tf.constant(0)
-    print(vals.shape)
+    #print(vals.shape)
     smaller = tf.reduce_min(vals[0:2], keepdims=True)
     bigger = tf.reduce_max(vals[0:2], keepdims=True)
     mod = vals[2]
