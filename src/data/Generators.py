@@ -655,7 +655,9 @@ class PhaseRegressionGenerator(DataGenerator):
 
         # Initialization
         x = np.empty_like(self.X_SHAPE)  # model input
+
         y = np.empty_like(self.Y_SHAPE)  # model output
+        y2 = np.empty((self.BATCHSIZE, 1)) # length of the original cardiac cycle
 
         futures = set()
 
@@ -683,8 +685,8 @@ class PhaseRegressionGenerator(DataGenerator):
             # use the indexes to order the batch
             # otherwise slower images will always be at the end of the batch
             try:
-                x_, y_, i, ID, needed_time = future.result()
-                x[i,], y[i,] = x_, y_
+                x_, y_,gt_len, i, ID, needed_time = future.result()
+                x[i,], y[i,],y2[i,] = x_, y_, gt_len
                 logging.debug('img finished after {:0.3f} sec.'.format(needed_time))
             except Exception as e:
                 # write these files into a dedicated error log
@@ -699,7 +701,7 @@ class PhaseRegressionGenerator(DataGenerator):
 
         logging.debug('Batchsize: {} preprocessing took: {:0.3f} sec'.format(self.BATCHSIZE, time() - t0))
 
-        return x, y
+        return x, (y,y2)
 
     def __preprocess_one_image__(self, i, ID):
 
@@ -713,9 +715,9 @@ class PhaseRegressionGenerator(DataGenerator):
 
         # Create a list of 3D volumes for resampling
         model_inputs = split_one_4d_sitk_in_list_of_3d_sitk(model_inputs)
-
+        gt_length = len(model_inputs)
         # How many times do we need to repeat that cycle along t to cover the desired output size
-        reps = int(np.ceil(self.T_SHAPE / len(model_inputs)))
+        reps = int(np.ceil(self.T_SHAPE / gt_length))
 
         # Load the phase info for this patient
         # Extract the the 8 digits-patient ID from the filename (starts with '_', ends with '-')
@@ -855,7 +857,7 @@ class PhaseRegressionGenerator(DataGenerator):
         assert not np.any(np.isnan(onehot))
         assert not np.any(np.isnan(model_inputs))
 
-        return model_inputs[..., None], onehot, i, ID, time() - t0
+        return model_inputs[..., None], onehot,gt_length, i, ID, time() - t0
 
 
 import linecache

@@ -5,7 +5,7 @@ import numpy as np
 import tensorflow as tf
 
 
-def meandiff( y_true, y_pred, batchsize=2):
+def meandiff( y_true, y_pred, batchsize=4):
 
     """
     Average over the batches
@@ -32,16 +32,18 @@ def meandiff( y_true, y_pred, batchsize=2):
     y_true = tf.cast(tf.convert_to_tensor(y_true), tf.float32)
     y_pred = tf.cast(tf.convert_to_tensor(y_pred), tf.float32)
 
-    def false_fn(y_true,y_pred,batchsize):
+    def false_fn(y_true,y_pred):
         print('false')
         return tf.constant(0, dtype=tf.float32)
 
     # b, 36, 5
-    def true_fn(y_true, y_pred, batchsize):
+    def true_fn(y_true, y_pred, batchsize=4):
+
         # b, 5
         gt_idxs = tf.math.argmax(y_true, axis=1)
         # b,
         gt_max = tf.cast(tf.reduce_max(gt_idxs, axis=1), tf.int32)
+        print(gt_max)
         # b, ones + zeros (36), 5
         msk = tf.stack([
             tf.pad(
@@ -57,21 +59,22 @@ def meandiff( y_true, y_pred, batchsize=2):
         stacked = tf.stack([gt_idx, pred_idx], axis=-1)
         # returns b, 5,
         # sum the error per entity, and calc the mean over the batches
-        #diffs = tf.stack([tf.stack(get_min_dist_for_list(gt_idx[i],pred_idx[i], batchsize)) for i in tf.range(batchsize)])
-        diffs = tf.map_fn(lambda x: get_min_dist_for_list(x, batchsize), stacked, dtype=tf.int32)
+        diffs = tf.map_fn(lambda x: get_min_dist_for_list(x), stacked, dtype=tf.int32)
         diffs = tf.cast(tf.reduce_sum(diffs, axis=0),tf.float32)
         #diffs = tf.reduce_mean(diffs)
         return diffs
 
     is_training = tf.constant(y_true.shape.as_list()[0] != None, dtype=tf.bool)
-    result_value = tf.cond(is_training, lambda: true_fn(y_true,y_pred, batchsize), lambda:true_fn(y_true,y_pred,batchsize))
+    result_value = tf.cond(is_training, lambda: true_fn(y_true,y_pred, batchsize), lambda:true_fn(y_true,y_pred))
     return result_value
 
 
-def get_min_dist_for_list(vals, batchsize):
-    length = tf.reduce_max(vals)
-    #stacked = tf.stack([lst_a, lst_b], axis=1)
-    #return [get_min_distance(lst_a[i],lst_b[i],length) for i in tf.range(batchsize)]
+def get_min_dist_for_list(vals):
+    print(vals.shape)
+    print(vals[:,0])
+    print(vals[:, 1])
+    length = tf.reduce_max(vals[:,0])
+    print(length)
     return tf.map_fn(lambda x :get_min_distance(x, length),vals, dtype=tf.int32)
 
 def get_min_distance(vals, mod):

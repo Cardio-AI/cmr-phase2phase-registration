@@ -807,7 +807,7 @@ def show_phases(gt, pred):
     f, axs = plt.subplots(1, BATCHSIZE * 2, figsize=(5 * BATCHSIZE, 5))
     i = 0
     for cutoff, idx in zip(gt_max, range(BATCHSIZE)):
-        cutoff = cutoff + 1
+        cutoff = cutoff
         axs[i].title.set_text('f(x)')
         temp_pred = pred[idx][:cutoff, :]
         # temp_pred = pred[idx].numpy()
