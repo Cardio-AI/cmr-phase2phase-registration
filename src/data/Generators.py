@@ -657,7 +657,7 @@ class PhaseRegressionGenerator(DataGenerator):
         x = np.empty_like(self.X_SHAPE)  # model input
 
         y = np.empty_like(self.Y_SHAPE)  # model output
-        y2 = np.empty((self.BATCHSIZE, 1)) # length of the original cardiac cycle
+        y2 = np.zeros((self.BATCHSIZE, 1)) # length of the original cardiac cycle
 
         futures = set()
 
@@ -701,7 +701,7 @@ class PhaseRegressionGenerator(DataGenerator):
 
         logging.debug('Batchsize: {} preprocessing took: {:0.3f} sec'.format(self.BATCHSIZE, time() - t0))
 
-        return x, (y,y2)
+        return tuple([[x, y2], [y,y2]])
 
     def __preprocess_one_image__(self, i, ID):
 

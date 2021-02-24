@@ -4,8 +4,8 @@ import tensorflow
 import tensorflow as tf
 from tensorflow.keras.layers import Input
 from tensorflow.keras.models import Model
-from src.utils.Metrics import meandiff
-from src.utils.Metrics import *
+from tensorflow.keras import metrics as metr
+from src.utils import Metrics as own_metr
 
 from src.models.ModelUtils import get_optimizer
 
@@ -21,9 +21,11 @@ def create_PhaseRegressionModel(config, networkname='PhaseRegressionModel'):
     with strategy.scope():
 
         input_shape = config.get('DIM', [10, 224, 224])
+        y_len_shape = ()
         T_SHAPE = config.get('T_SHAPE', 35)
         PHASES = config.get('PHASES', 5)
-        input_tensor = Input((T_SHAPE, *input_shape, 1))
+        input_tensor = Input(shape=(T_SHAPE, *input_shape, 1))
+        input_empty_tensor = Input(shape=(1,), dtype=tf.int32)
         # define standard values according to the convention over configuration paradigm
         activation = config.get('ACTIVATION', 'elu')
         batch_norm = config.get('BATCH_NORMALISATION', False)
@@ -37,6 +39,7 @@ def create_PhaseRegressionModel(config, networkname='PhaseRegressionModel'):
         bn_first = config.get('BN_FIRST', False)
         ndims = len(config.get('DIM', [10, 224, 224]))
         depth = config.get('DEPTH', 4)
+        batchsize = config.get('BATCHSIZE', 8)
 
 
         # increase the dropout through the layer depth
@@ -135,14 +138,22 @@ def create_PhaseRegressionModel(config, networkname='PhaseRegressionModel'):
         inputs = tf.keras.layers.BatchNormalization()(inputs)"""
         print('conv1d 32 3,1')
         print(inputs.shape)
-        inputs = tf.keras.layers.Conv1D(filters=PHASES, kernel_size=1, strides=1, padding='same', activation='softmax')(inputs)
+        inputs = tf.keras.layers.Conv1D(filters=PHASES, kernel_size=1, strides=1, padding='same', activation='softmax', name='final_conv')(inputs)
+        #input_empty = tf.keras.layers.Activation(activation='linear', name='empty')(input_empty_tensor)
         print(inputs.shape)
-        outputs = [inputs]
+        print(input_empty_tensor.shape)
+        outputs = tf.tuple([inputs, input_empty_tensor])
+
+        losses = {'final_conv': tf.keras.losses.CategoricalCrossentropy()}
+        losses = [own_metr.cce_wrapper]
 
 
 
-        model = Model(inputs=[input_tensor], outputs=outputs, name=networkname)
-        model.compile(optimizer=get_optimizer(config, networkname), loss=tf.keras.losses.CategoricalCrossentropy(label_smoothing=0.2),
-                      metrics=[tf.keras.metrics.CategoricalAccuracy(), tf.keras.metrics.mse, tf.keras.metrics.mae, meandiff])
+        model = Model(inputs=[input_tensor, input_empty_tensor], outputs=outputs, name=networkname)
+        model.compile(optimizer=get_optimizer(config, networkname), loss=losses,
+                      metrics=[own_metr.meandiff]
+                      )
 
         return model
+
+    #metrics=[own_metr.ca_wrapper, own_metr.mse_wrapper, own_metr.meandiff])
