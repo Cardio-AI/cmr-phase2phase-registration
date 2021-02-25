@@ -11,6 +11,8 @@
 *.csv
 reports/tensorboard_logs/*
 models/*
+*.h5
+*tfevents*
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
