@@ -106,53 +106,61 @@ def create_PhaseRegressionModel(config, networkname='PhaseRegressionModel'):
         inputs_temporal = [gap(vol) for vol in inputs_temporal]
         print(inputs_temporal[0].shape)
         inputs_temporal = tf.stack(inputs_temporal, axis=1)
+        inputs_temporal = tf.stack(inputs_temporal, axis=2)
+        print('Shape after the temporal encoder')
         print(inputs_temporal.shape)
+        inputs_temporal = tf.unstack(inputs_temporal, axis=1)
+        inputs_temporal = [gap(vol) for vol in inputs_temporal]
+        inputs_temporal = tf.stack(inputs_temporal, axis=1)
 
         # inputs = tf.keras.layers.concatenate([inputs_spatial, inputs_temporal], axis=-1)
         inputs = inputs_temporal
-        print('encoder')
+        print('Shape after GAP')
         print(inputs.shape)
 
+        """
         inputs = tf.keras.layers.BatchNormalization()(inputs)
         inputs = tf.keras.layers.Dropout(rate=0.5)(inputs)
-        """inputs = tf.keras.layers.Conv1D(filters=PHASES, kernel_size=5, strides=1, padding='same',
+        """
+
+        """
+        inputs = tf.keras.layers.Conv1D(filters=PHASES, kernel_size=5, strides=1, padding='same',
                                         activation=activation)(inputs)
         inputs = tf.keras.layers.BatchNormalization()(inputs)
         print('conv')
-        print(inputs.shape)"""
+        print(inputs.shape)
+        """
 
-        from tensorflow.keras.layers import LSTM, Bidirectional
+        """
         forward_layer = LSTM(32,return_sequences=True)
         backward_layer = LSTM(32, activation=activation, return_sequences=True,go_backwards=True)
         inputs = Bidirectional(forward_layer, backward_layer=backward_layer,input_shape=(T_SHAPE, 5))(inputs)
-
-        print('bi LSTM')
+        """
+        print('Shape after Bi-LSTM layer')
         print(inputs.shape)
-        #inputs = tf.keras.layers.BatchNormalization()(inputs)
+        # inputs = tf.keras.layers.BatchNormalization()(inputs)
         """inputs = tf.keras.layers.Dropout(rate=0.5)(inputs)
         print('conv1d 32, 1, 1')
         print(inputs.shape)
         inputs = tf.keras.layers.Conv1D(filters=5, kernel_size=5, strides=1, padding='same', activation=activation)(inputs)
         inputs = tf.keras.layers.BatchNormalization()(inputs)"""
-        print('conv1d 32 3,1')
-        print(inputs.shape)
-        onehot = tf.keras.layers.Conv1D(filters=PHASES, kernel_size=1, strides=1, padding='same', activation='softmax', name='final_conv')(inputs)
+        onehot = tf.keras.layers.Conv1D(filters=PHASES, kernel_size=1, strides=1, padding='same', activation='softmax',
+                                        name='final_conv')(inputs)
+        print('Shape after final conv layer')
+        print(onehot.shape)
 
         # add empty tensor with one-hot shape to align with gt
         zeros = tf.zeros_like(onehot)
-        onehot = tf.stack([onehot,zeros],axis=1)
+        onehot = tf.stack([onehot, zeros], axis=1)
         outputs = [onehot]
 
-        #losses = {'final_conv': tf.keras.losses.CategoricalCrossentropy()}
         losses = [own_metr.cce_wrapper]
 
-
-
         model = Model(inputs=[input_tensor], outputs=outputs, name=networkname)
-        model.compile(optimizer=get_optimizer(config, networkname), loss=losses,
-                      metrics=[own_metr.meandiff]
-                      )
+        model.compile(
+            optimizer=get_optimizer(config, networkname),
+            loss=losses,
+            metrics=[own_metr.mse_wrapper, own_metr.ca_wrapper, own_metr.meandiff]
+        )
 
         return model
-
-    #metrics=[own_metr.ca_wrapper, own_metr.mse_wrapper, own_metr.meandiff])

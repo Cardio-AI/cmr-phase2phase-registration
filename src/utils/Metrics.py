@@ -99,14 +99,22 @@ def get_min_distance(vals):
 def cce_wrapper(y_true,y_pred):
     y_true, y_len = tf.unstack(y_true,num=2,axis=1)
     y_pred, _ = tf.unstack(y_pred,num=2,axis=1)
-    return tf.keras.losses.categorical_crossentropy(y_true,y_pred,label_smoothing=0.2)
+    return tf.keras.losses.categorical_crossentropy(y_true,y_pred)
+
+def cce_wrapper_transpose(y_true,y_pred):
+    y_true, y_len_msk = tf.unstack(y_true,num=2,axis=1)
+    y_pred, _ = tf.unstack(y_pred,num=2,axis=1)
+    """y_len_msk = tf.transpose(y_len_msk,perm=[0,2,1])
+    y_true = tf.transpose(y_true,perm=[0,2,1]) * y_len_msk
+    y_pred = tf.transpose(y_pred,perm=[0,2,1]) * y_len_msk"""
+    return tf.keras.losses.categorical_crossentropy(y_true,y_pred)
 
 def mse_wrapper(y_true,y_pred):
-    y_true, y_len = tf.unstack(y_true, axis=1)
-    y_pred, _ = tf.unstack(y_pred, axis=1)
+    y_true, y_len = tf.unstack(y_true,num=2, axis=1)
+    y_pred, _ = tf.unstack(y_pred,num=2, axis=1)
     return tf.keras.losses.mse(y_true, y_pred)
 
 def ca_wrapper(y_true, y_pred):
-    y_true, y_len = tf.unstack(y_true, axis=1)
-    y_pred, _ = tf.unstack(y_pred, axis=1)
-    return tf.keras.metrics.CategoricalAccuracy()(y_true, y_pred)
+    y_true, y_len = tf.unstack(y_true,num=2, axis=1)
+    y_pred, _ = tf.unstack(y_pred,num=2, axis=1)
+    return tf.keras.metrics.categorical_accuracy(y_true, y_pred)
