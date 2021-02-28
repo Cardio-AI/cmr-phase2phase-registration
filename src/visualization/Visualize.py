@@ -791,48 +791,54 @@ def plot_radar_chart(df, index=0, ax=None):
     return ax
 
 
-def show_phases(gt, pred):
+def show_phases(gt, pred=None):
 
     mask_given = False
+    pred_given = True
+    factor = 2
+
+    if pred is None:
+        pred_given = False
+        factor =1
+    elif not isinstance(pred, np.ndarray):
+        pred = pred.numpy()
+    else:
+        if pred.shape[1] == 2:  # this is a stacked onehot vector
+            pred = pred[:, 0, ...]
 
     if not isinstance(gt, np.ndarray):
         gt = gt.numpy()
-    if not isinstance(pred, np.ndarray):
-        pred = pred.numpy()
 
-    if gt.shape[1] == 2: # this is a stacked onehot vector
-        gt, gt_msk = gt[:,0,...], gt[:,1,...]
+    if gt.shape[1] == 2:  # this is a stacked onehot vector
+        gt, gt_msk = gt[:, 0, ...], gt[:, 1, ...]
         mask_given = True
-
-    if pred.shape[1] == 2: # this is a stacked onehot vector
-        pred = pred[:,0,...]
 
     phases = ['ED', 'MS', 'ES', 'PF', 'MD']
     BATCHSIZE = gt.shape[0]
     # get the true idx
     gt_idx = np.argmax(gt, axis=1)
-    # print(gt_idx)
     gt_max = gt_idx.max(axis=1).astype(int)
 
     if mask_given:
         gt_max = np.sum(gt_msk[:,:,0],axis=1).astype(int) # get the length of one phase, as all phases have the same length
-        #print(gt_max)
-    f, axs = plt.subplots(1, BATCHSIZE * 2, figsize=(5 * BATCHSIZE, 5))
+    f, axs = plt.subplots(1, BATCHSIZE * factor, figsize=(int(2.5 * factor * BATCHSIZE), 5))
     i = 0
     for cutoff, idx in zip(gt_max, range(BATCHSIZE)):
-        cutoff = cutoff
-        axs[i].title.set_text('f(x)')
-        temp_pred = pred[idx][:cutoff, :]
-        # temp_pred = pred[idx].numpy()
-        ind = np.argmax(temp_pred, axis=0)
-        # print(ind)
-        axs[i].set_yticks(ind, minor=False)
-        axs[i].set_xticks([0, 1, 2, 3, 4], minor=False)
-        axs[i].set_xticklabels(phases, rotation=45)
-        axs[i].imshow(temp_pred, aspect='auto')
-        i = i + 1
+        if pred_given:
+            cutoff = cutoff
+            axs[i].title.set_text('f(x)')
+            temp_pred = pred[idx] * gt_msk[idx]
+            # temp_pred = pred[idx].numpy()
+            ind = np.argmax(temp_pred, axis=0)
+            # print(ind)
+            axs[i].set_yticks(ind, minor=False)
+            axs[i].set_xticks([0, 1, 2, 3, 4], minor=False)
+            axs[i].set_xticklabels(phases, rotation=45)
+            axs[i].imshow(temp_pred, aspect='auto')
+            i = i + 1
+
         axs[i].title.set_text('y')
-        temp_y = gt[idx][:cutoff, :]
+        temp_y = gt[idx]* gt_msk[idx]
         # temp_y = outputs[idx]
         ind_gt = np.argmax(temp_y, axis=0)
         axs[i].set_yticks(ind_gt, minor=False)
@@ -845,3 +851,63 @@ def show_phases(gt, pred):
     return f
 
 
+def show_phases_transpose(gt, pred=None):
+    mask_given = False
+    pred_given = True
+    factor = 2
+
+    if pred is None:
+        pred_given = False
+        factor =1
+    else:
+
+        if not isinstance(pred, np.ndarray):
+            pred = pred.numpy()
+
+        if pred.shape[1] == 2:  # this is a stacked onehot vector
+            pred = pred[:, 0, ...]
+
+    if not isinstance(gt, np.ndarray):
+        gt = gt.numpy()
+    if gt.shape[1] == 2:  # this is a stacked onehot vector
+        gt, gt_msk = gt[:, 0, ...], gt[:, 1, ...]
+        mask_given = True
+
+
+
+
+    phases = ['ED', 'MS', 'ES', 'PF', 'MD']
+    BATCHSIZE = gt.shape[0]
+    # get the true idx
+    gt_idx = np.argmax(gt, axis=2)
+    # print(gt_idx)
+    gt_max = gt_idx.max(axis=1).astype(int)
+
+    if mask_given:
+        gt_max = np.sum(gt_msk[:, 0, :], axis=1).astype(
+            int)  # get the length of one phase, as all phases have the same length
+        # print(gt_max)
+    f, axs = plt.subplots(1, BATCHSIZE * factor, figsize=(8 * BATCHSIZE, 4))
+    i = 0
+    for cutoff, idx in zip(gt_max, range(BATCHSIZE)):
+        if pred_given:
+            axs[i].title.set_text('f(x)')
+            temp_pred = pred[idx] * gt_msk[idx]
+            ind = np.argmax(temp_pred, axis=1)
+            axs[i].set_xticks(ind, minor=False)
+            axs[i].set_yticks([0, 1, 2, 3, 4], minor=False)
+            axs[i].set_yticklabels(phases, rotation=45)
+            axs[i].imshow(temp_pred, aspect='auto')
+            i = i + 1
+
+        axs[i].title.set_text('y')
+        temp_y = gt[idx]
+        ind_gt = np.argmax(temp_y, axis=1)
+        axs[i].set_xticks(ind_gt, minor=False)
+        axs[i].set_yticks([0, 1, 2, 3, 4], minor=False)
+        axs[i].set_yticklabels(phases, rotation=45)
+        # print(ind_gt)
+        axs[i].imshow(temp_y, aspect='auto')
+        i = i + 1
+    f.tight_layout()
+    return f

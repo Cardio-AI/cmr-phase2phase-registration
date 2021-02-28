@@ -612,8 +612,12 @@ class PhaseRegressionGenerator(DataGenerator):
         self.AUGMENT_PHASES_RANGE = config.get('AUGMENT_PHASES_RANGE', (-3,3))
         self.T_SHAPE = config.get('T_SHAPE', 10)
         self.PHASES = config.get('PHASES', 5)
-        self.TARGET_SHAPE = (self.T_SHAPE, self.PHASES)
-        self.TARGET_CROP_SHAPE = (self.T_SHAPE, self.PHASES)
+        self.REPEAT = config.get('REPEAT_ONEHOT', True)
+        if self.REPEAT:
+            self.TARGET_SHAPE = (self.T_SHAPE, self.PHASES)
+        else:
+            self.TARGET_SHAPE = (self.PHASES, self.T_SHAPE)
+
         # if this is the case we have a sequence of 3D volumes or a sequence of 2D images
         self.X_SHAPE = np.empty((self.BATCHSIZE, self.T_SHAPE, *self.DIM, 1), dtype=np.float32)
         self.Y_SHAPE = np.empty((self.BATCHSIZE,2, *self.TARGET_SHAPE), dtype=np.float32) # onehot and mask with gt length
@@ -628,6 +632,7 @@ class PhaseRegressionGenerator(DataGenerator):
         self.SMOOTHING_LOWER_BORDER = config.get('SMOOTHING_LOWER_BORDER', 0.1)
         self.SMOOTHING_UPPER_BORDER = config.get('SMOOTHING_UPPER_BORDER', 5)
         self.SMOOTHING_WEIGHT_CORRECT = config.get('SMOOTHING_WEIGHT_CORRECT', 20)
+
         # create a 1D kernel with linearly increasing/decreasing values in the range(lower,upper),
         # insert a fixed number in the middle, as this reflect the correct idx,
         # which might should have an greater weighting than an linear function could reflect
@@ -636,7 +641,8 @@ class PhaseRegressionGenerator(DataGenerator):
             [self.SMOOTHING_WEIGHT_CORRECT],
             np.linspace(self.SMOOTHING_UPPER_BORDER, self.SMOOTHING_LOWER_BORDER, self.SMOOTHING_KERNEL_SIZE // 2)])
         logging.info('Smoothing kernel: \n{}'.format(self.KERNEL))
-        logging.info('Temporal phase augmentation: {}'.format(self.AUGMENT_PHASES))
+        logging.info('Temporal phase augmentation: \n{}'
+                     'Repeat volume: {}'.format(self.AUGMENT_PHASES, self.REPEAT))
 
         self.MASKS = None  # need to check if this is still necessary!
 
@@ -716,7 +722,8 @@ class PhaseRegressionGenerator(DataGenerator):
         model_inputs = split_one_4d_sitk_in_list_of_3d_sitk(model_inputs)
         gt_length = len(model_inputs)
         # How many times do we need to repeat that cycle along t to cover the desired output size
-        reps = int(np.ceil(self.T_SHAPE / gt_length))
+        reps = 1
+        if self.REPEAT: reps = int(np.ceil(self.T_SHAPE / gt_length))
 
         # Load the phase info for this patient
         # Extract the the 8 digits-patient ID from the filename (starts with '_', ends with '-')
@@ -732,13 +739,13 @@ class PhaseRegressionGenerator(DataGenerator):
             ['ED#', 'MS#', 'ES#', 'PF#', 'MD#']]
         indices = indices.values[0].astype(int) - 1
         onehot = np.zeros((indices.size, len(model_inputs)))
-        onehot[np.arange(indices.size), indices] = 1
+        onehot[np.arange(indices.size), indices] = 10
 
         # Interpret the 4D CMR stack and the corresponding phase-one-hot-vect
         # as temporal ring, which could be shifted by a random starting idx along the T-axis
         if self.AUGMENT_PHASES:
             lower, upper = self.AUGMENT_PHASES_RANGE
-            rand = random.randint(-10, 10)
+            rand = random.randint(lower, upper)
             logging.debug(rand)
             onehot = np.concatenate([onehot[:, rand:], onehot[:, :rand]], axis=1)
             # if we extend the list in one line the list will be not modified
@@ -757,16 +764,18 @@ class PhaseRegressionGenerator(DataGenerator):
             # By this we avoid hard borders
             # Later divide the smoothed vectors by the sum or via softmax
             # to make sure they sum up to 1 for each class
-            for idx in range(onehot.shape[0]):
-                smoothed = np.convolve(onehot[idx], self.KERNEL, mode='same')
-                onehot[idx] = smoothed
+            from scipy.ndimage import gaussian_filter1d
+            onehot = np.apply_along_axis(
+                lambda x : gaussian_filter1d(x, sigma=2.5),
+                axis=1, arr=onehot)
             logging.debug('convolved:\n{}'.format(onehot))
             # transform into an temporal index based target vector index2phase
-        # we split and maximize the tiled one-hot vector to make sure that the beginning and end are also smooth
+        # Split and maximize the tiled one-hot vector to make sure that the beginning and end are also smooth
         first, second = np.split(onehot, indices_or_sections=2, axis=1)
         onehot = np.maximum(first, second)
         onehot = onehot[:, :self.T_SHAPE]
-        onehot = onehot.T
+
+        if self.REPEAT: onehot = onehot.T
 
         logging.debug('transposed: \n{}'.format(onehot))
         self.__plot_state_if_debug__(img=model_inputs[len(model_inputs) // 2], start_time=t0, step='raw')
@@ -828,9 +837,12 @@ class PhaseRegressionGenerator(DataGenerator):
         model_inputs = np.stack(model_inputs, axis=0)
         model_inputs = np.tile(model_inputs, (reps, 1, 1, 1))[:self.T_SHAPE, ...]
 
+        msk = np.ones_like(onehot)
+
         # we crop and pad the 4D volume and the target vectors into the same size
         model_inputs = pad_and_crop(model_inputs, target_shape=(self.T_SHAPE, *self.DIM))
-        onehot = pad_and_crop(onehot, target_shape=self.TARGET_CROP_SHAPE)
+        onehot = pad_and_crop(onehot, target_shape=self.TARGET_SHAPE)
+        msk = pad_and_crop(msk, target_shape=self.TARGET_SHAPE)
 
         # Finally normalise the 4D volume in one value space
         # Normalise the one-hot along the second axis
@@ -842,20 +854,23 @@ class PhaseRegressionGenerator(DataGenerator):
         import scipy
         model_inputs = normalise_image(model_inputs, normaliser=self.SCALER)  # normalise per 4D
         logging.debug('background: \n{}'.format(onehot))
-        for idx in range(onehot.shape[0]):
-            smoothed = onehot[idx]
-            smoothed = np.exp(smoothed) / np.sum(np.exp(smoothed), axis=0)  # softmax equivalent
-            # smoothed = smoothed / (sum(smoothed) + sys.float_info.epsilon)
-            onehot[idx] = smoothed
 
+        ax_to_normalise = 1
+        # Normalise the one-hot vector, with softmax
+        onehot = np.apply_along_axis(
+            lambda x: np.exp(x)/ np.sum(np.exp(x)),
+            ax_to_normalise, onehot)
         logging.debug('normalised (sum phases per timestep == 1): \n{}'.format(onehot))
         self.__plot_state_if_debug__(img=model_inputs[len(model_inputs) // 2], start_time=t1,
                                      step='clipped cropped and pad')
 
-        # add length as mask to onhot
-        msk = np.pad(
-                np.ones((gt_length, self.PHASES)),
-                ((0, self.T_SHAPE - gt_length), (0, 0)))
+        # add length as mask to onhot if we repeated,
+        # otherwise we created a mask before the padding step
+        if self.REPEAT:
+            msk = np.pad(
+                    np.ones((gt_length, self.PHASES)),
+                    ((0, self.T_SHAPE - gt_length), (0, 0)))
+
         onehot = np.stack([onehot,msk], axis=0)
         # make sure we do not introduce Nans to the model
         assert not np.any(np.isnan(onehot))

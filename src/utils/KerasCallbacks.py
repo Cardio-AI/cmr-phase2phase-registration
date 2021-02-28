@@ -39,16 +39,16 @@ def get_callbacks(config={}, batch_generator=None, validation_generator=None, me
                              flow=config.get('FLOW', False)))
         if config.get('SAVE_LEARNING_PROGRESS_AS_TF', False):
             callbacks.append(
-            PhaseRegressionCallback(log_dir=config['TENSORBOARD_LOG_DIR'],
+            PhaseRegressionCallback(log_dir=config['TENSORBOARD_PATH'],
                              image_freq= config.get('SAVE_LEARNING_PROGRESS_FREQUENCY', 2),
                              feed_inputs_4_display=feed_inputs_4_tensorboard(config, batch_generator,
                                                                              validation_generator),
                              ))
 
-    # dont save the testing models
+    # dont save the test models
     """callbacks.append(
         WeightsSaver(config.get('MODEL_PATH', 'temp/models'),
-                     model_freq=2))
+                     model_freq=2))"""
     callbacks.append(
         ModelCheckpoint(os.path.join(config['MODEL_PATH'], 'model.h5'), # could also be 'model.h5 to save only the weights
                         verbose=1,
@@ -56,27 +56,19 @@ def get_callbacks(config={}, batch_generator=None, validation_generator=None, me
                         save_weights_only=True,
                         monitor=config.get('SAVE_MODEL_FUNCTION', 'loss'),
                         mode=config.get('SAVE_MODEL_MODE', 'min'),
-                        save_freq='epoch'))"""
+                        save_freq='epoch'))
 
     callbacks.append(
         tensorflow.keras.callbacks.ReduceLROnPlateau(monitor=config.get('MONITOR_FUNCTION', 'loss'),
-                                                     factor=config.get('DECAY_FACTOR', 0.1),
+                                                     factor=config.get('DECAY_FACTOR', 0.5),
                                                      patience=config.get('REDUCE_LR_ON_PLAEAU_PATIENCE', 5),
                                                      verbose=1,
                                                      cooldown=2,
                                                      mode=config.get('MONITOR_MODE', 'auto'),
-                                                     min_lr=config.get('MIN_LR', 1e-10)))
-
-    # cyclic learning rate
-    # does not work better than simple lr decay
-    """callbacks.append(SGDRScheduler(min_lr=1e-5,
-                             max_lr=1e-2,
-                             lr_decay=0.9,
-                             cycle_length=5,
-                             mult_factor=1.5))"""
+                                                     min_lr=config.get('MIN_LR', 1e-12)))
 
     callbacks.append(
-        LRTensorBoard(log_dir=config.get('TENSORBOARD_LOG_DIR', 'temp/tf_log'),
+        LRTensorBoard(log_dir=config.get('TENSORBOARD_PATH', 'temp/tf_log'),
                                                histogram_freq=0,
                                                write_graph=False,
                                                write_images=False,
@@ -107,11 +99,6 @@ def get_callbacks(config={}, batch_generator=None, validation_generator=None, me
                           mode=config.get('MONITOR_MODE', 'min'))
         )
 
-
-    # add own learning lr sheduler, stepdecay and linear/polinomial decay is implemented
-    learning_rate_shedule = PolynomialDecay(max_epochs=config.get('EPOCHS', 100),
-                                            init_alpha=config.get('LEARNING_RATE', 1e-1), power=1)
-    #callbacks.append(LearningRateScheduler(learning_rate_shedule))
 
     return callbacks
 
@@ -625,7 +612,7 @@ class PhaseRegressionCallback(Callback):
             # xs will have the shape: (len(keys), samples, z, x, y, 1)
 
 
-            from src.visualization.Visualize import show_phases
+            from src.visualization.Visualize import show_phases, show_phases_transpose
 
 
             # create one tensorboard entry per key in feed_inputs_display
