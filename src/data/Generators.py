@@ -766,7 +766,7 @@ class PhaseRegressionGenerator(DataGenerator):
             # to make sure they sum up to 1 for each class
             from scipy.ndimage import gaussian_filter1d
             onehot = np.apply_along_axis(
-                lambda x : gaussian_filter1d(x, sigma=2.5),
+                lambda x : gaussian_filter1d(x, sigma=1),
                 axis=1, arr=onehot)
             logging.debug('convolved:\n{}'.format(onehot))
             # transform into an temporal index based target vector index2phase
@@ -857,14 +857,14 @@ class PhaseRegressionGenerator(DataGenerator):
 
         ax_to_normalise = 1
         # Normalise the one-hot vector, with softmax
-        onehot = np.apply_along_axis(
+        """onehot = np.apply_along_axis(
             lambda x: np.exp(x)/ np.sum(np.exp(x)),
-            ax_to_normalise, onehot)
+            ax_to_normalise, onehot)""" # For the MSE-loss we dont need tht normalisation step
         logging.debug('normalised (sum phases per timestep == 1): \n{}'.format(onehot))
         self.__plot_state_if_debug__(img=model_inputs[len(model_inputs) // 2], start_time=t1,
                                      step='clipped cropped and pad')
 
-        # add length as mask to onhot if we repeated,
+        # add length as mask to onhot if we repeat,
         # otherwise we created a mask before the padding step
         if self.REPEAT:
             msk = np.pad(

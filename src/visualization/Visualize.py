@@ -815,36 +815,34 @@ def show_phases(gt, pred=None):
 
     phases = ['ED', 'MS', 'ES', 'PF', 'MD']
     BATCHSIZE = gt.shape[0]
-    # get the true idx
-    gt_idx = np.argmax(gt, axis=1)
-    gt_max = gt_idx.max(axis=1).astype(int)
+    # not necessary as we have the masks
+    #gt_idx = np.argmax(gt, axis=1)
+    #gt_max = gt_idx.max(axis=1).astype(int)
 
-    if mask_given:
-        gt_max = np.sum(gt_msk[:,:,0],axis=1).astype(int) # get the length of one phase, as all phases have the same length
+    #if mask_given: # currently not used as we have the masks
+        # get the length of one phase,
+        # as all phases of one patient have the same length
+        #gt_max = np.sum(gt_msk[:,:,0],axis=1).astype(int)
+
     f, axs = plt.subplots(1, BATCHSIZE * factor, figsize=(int(2.5 * factor * BATCHSIZE), 5))
     i = 0
-    for cutoff, idx in zip(gt_max, range(BATCHSIZE)):
+    for idx in range(BATCHSIZE):
         if pred_given:
-            cutoff = cutoff
             axs[i].title.set_text('f(x)')
             temp_pred = pred[idx] * gt_msk[idx]
-            # temp_pred = pred[idx].numpy()
             ind = np.argmax(temp_pred, axis=0)
-            # print(ind)
             axs[i].set_yticks(ind, minor=False)
             axs[i].set_xticks([0, 1, 2, 3, 4], minor=False)
             axs[i].set_xticklabels(phases, rotation=45)
-            axs[i].imshow(temp_pred, aspect='auto')
+            axs[i].imshow(pred[idx], aspect='auto')
             i = i + 1
 
         axs[i].title.set_text('y')
         temp_y = gt[idx]* gt_msk[idx]
-        # temp_y = outputs[idx]
         ind_gt = np.argmax(temp_y, axis=0)
         axs[i].set_yticks(ind_gt, minor=False)
         axs[i].set_xticks([0, 1, 2, 3, 4], minor=False)
         axs[i].set_xticklabels(phases, rotation=45)
-        # print(ind_gt)
         axs[i].imshow(temp_y, aspect='auto')
         i = i + 1
     f.tight_layout()

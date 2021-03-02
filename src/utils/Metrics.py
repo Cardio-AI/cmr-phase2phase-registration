@@ -156,18 +156,90 @@ def get_min_distance(vals):
     return tf.reduce_min(tf.stack([decr_counter, incr_counter]))
 
 
-def cce_wrapper(y_true,y_pred):
-    y_true, y_len = tf.unstack(y_true,num=2,axis=1)
-    y_pred, _ = tf.unstack(y_pred,num=2,axis=1)
-    return tf.keras.losses.categorical_crossentropy(y_true,y_pred, label_smoothing=0.5)
 
-def cce_wrapper_transpose(y_true,y_pred):
-    y_true, y_len_msk = tf.unstack(y_true,num=2,axis=1)
-    y_pred, _ = tf.unstack(y_pred,num=2,axis=1)
-    """y_len_msk = tf.transpose(y_len_msk,perm=[0,2,1])
-    y_true = tf.transpose(y_true,perm=[0,2,1]) * y_len_msk
-    y_pred = tf.transpose(y_pred,perm=[0,2,1]) * y_len_msk"""
-    return tf.keras.losses.categorical_crossentropy(y_true,y_pred)
+class CCE_combined(tf.keras.losses.Loss):
+
+    def __init__(self, masked=False, smooth=0, transposed=False):
+
+        super().__init__(name='cce_combined')
+        self.masked = masked
+        self.smooth = smooth
+        self.transposed = transposed
+        self.cce = CCE(masked=False,smooth=smooth,transposed=False)
+        self.cce_t = CCE(masked=False, smooth=smooth, transposed=True)
+        self.cce_weight = 0.5
+        self.cce_t_weight = 0.5
+
+    def __call__(self, y_true, y_pred, **kwargs):
+
+        return self.cce_weight*self.cce(y_true, y_pred) + self.cce_t_weight * self.cce_t(y_true,y_pred)
+
+
+class CCE(tf.keras.losses.Loss):
+
+    def __init__(self, masked=False, smooth=0, transposed=False):
+
+        super().__init__(name='cce_{}_{}_{}'.format(masked,smooth,transposed))
+        self.masked = masked
+        self.smooth = smooth
+        self.transposed = transposed
+
+    def __call__(self, y_pred, y_true, **kwargs):
+
+        if y_true.shape[1] == 2: # this is a stacked onehot vector
+            y_true, y_msk = tf.unstack(y_true, num=2, axis=1)
+            y_pred, _ = tf.unstack(y_pred, num=2, axis=1)
+
+            if self.masked:
+                y_true = y_true * y_msk
+                y_pred = y_pred * y_msk
+
+        if self.transposed:
+            y_true = tf.nn.softmax(tf.transpose(y_true, perm=[0, 2, 1]), axis=-1)
+            y_pred = tf.nn.softmax(tf.transpose(y_pred, perm=[0, 2, 1]), axis=-1)
+
+        loss = tf.keras.losses.categorical_crossentropy(y_true, y_pred, label_smoothing=self.smooth)
+
+        return loss
+
+
+
+
+def cce_wrapper_transpose(y_true,y_pred, masked=False):
+    y_true, y_msk = tf.unstack(y_true, num=2, axis=1)
+    y_pred, _ = tf.unstack(y_pred, num=2, axis=1)
+
+    if masked: y_true = y_true * y_msk
+    if masked: y_pred = y_pred * y_msk
+
+    y_true = tf.nn.softmax(tf.transpose(y_true, perm=[0, 2, 1]), axis=-1)
+    y_true = tf.nn.softmax(tf.transpose(y_true, perm=[0, 2, 1]), axis=-1)
+
+    loss = tf.keras.losses.categorical_crossentropy(y_true,y_pred, label_smoothing=0.5)
+    loss = tf.transpose(loss, perm=[0,2,1])
+
+    return loss
+
+
+class MSE(tf.keras.losses.Loss):
+
+    def __init__(self, masked=False):
+
+        super().__init__(name='MSE_{}'.format(masked))
+        self.masked = masked
+
+
+    def __call__(self, y_pred, y_true, **kwargs):
+
+        if y_true.shape[1] == 2: # this is a stacked onehot vector
+            y_true, y_msk = tf.unstack(y_true, num=2, axis=1)
+            y_pred, _ = tf.unstack(y_pred, num=2, axis=1)
+
+            if self.masked:
+                y_true = y_true * y_msk
+                y_pred = y_pred * y_msk
+
+        return tf.keras.losses.mse(y_true, y_pred)
 
 def mse_wrapper(y_true,y_pred):
     y_true, y_len = tf.unstack(y_true,num=2, axis=1)

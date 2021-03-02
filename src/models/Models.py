@@ -79,7 +79,7 @@ def create_PhaseRegressionModel(config, networkname='PhaseRegressionModel'):
         # unstack along the temporal axis
         # added shuffeling, which avoids the model to be biased by the order
         # unstack along t, yielding a list of 3D volumes
-        inputs_spatial = tf.unstack(input_tensor,axis=1)
+        """inputs_spatial = tf.unstack(input_tensor,axis=1)
         import random
         indicies = list(tf.range(len(inputs_spatial)))
         zipped = list(zip(inputs_spatial, indicies))
@@ -91,7 +91,7 @@ def create_PhaseRegressionModel(config, networkname='PhaseRegressionModel'):
         print(inputs_spatial[0].shape)
         inputs_spatial, _ = zip(*sorted(zip(inputs_spatial, indicies), key=lambda tup: tup[1]))
         inputs_spatial = tf.stack(inputs_spatial, axis=1)
-        print(inputs_spatial.shape)
+        print(inputs_spatial.shape)"""
 
         import random
         # unstack along Z yielding a list of 2D+t slices
@@ -113,24 +113,29 @@ def create_PhaseRegressionModel(config, networkname='PhaseRegressionModel'):
         inputs_temporal = tf.keras.layers.Dense(units=36*10,activation=activation)(inputs_temporal)
         inputs_temporal = tf.keras.layers.Reshape(target_shape=(36,10))(inputs_temporal)"""
 
-        inputs = tf.keras.layers.concatenate([inputs_spatial, inputs_temporal], axis=-1)
-        #inputs = inputs_temporal
+        #inputs = tf.keras.layers.concatenate([inputs_spatial, inputs_temporal], axis=-1)
+        inputs = inputs_temporal
         print('Shape after GAP')
         print(inputs.shape)
         # 36, 256
-        inputs = tf.keras.layers.BatchNormalization()(inputs)
+        """inputs = tf.keras.layers.BatchNormalization()(inputs)
         inputs = tf.keras.layers.Dropout(rate=0.5)(inputs)
 
+        onehot_pre = tf.keras.layers.Conv1D(filters=64, kernel_size=5, strides=1, padding='same', activation=activation,
+                                        name='conv_pre_final')(inputs)"""
 
-        forward_layer = LSTM(32,return_sequences=True)
-        backward_layer = LSTM(32, activation=activation, return_sequences=True,go_backwards=True)
+
+        """forward_layer = LSTM(32,return_sequences=True)
+        backward_layer = LSTM(32, activation='tanh', return_sequences=True,go_backwards=True) # maybe change to tanh
         inputs = Bidirectional(forward_layer, backward_layer=backward_layer,input_shape=inputs.shape)(inputs)
+        """
         # 36,64
         print('Shape after Bi-LSTM layer')
         print(inputs.shape)
         #onehot = tf.keras.layers.Dense(units=5,activation='softmax', name='final_conv')(inputs)
-        onehot = tf.keras.layers.Conv1D(filters=PHASES, kernel_size=1, strides=1, padding='same', activation='softmax',
+        onehot = tf.keras.layers.Conv1D(filters=PHASES, kernel_size=1, strides=1, padding='same', activation=activation,
                                         name='final_conv')(inputs)
+
         # 36, 5
         print('Shape after final conv layer')
         print(onehot.shape)
@@ -140,7 +145,9 @@ def create_PhaseRegressionModel(config, networkname='PhaseRegressionModel'):
         onehot = tf.stack([onehot, zeros], axis=1)
         outputs = [onehot]
 
-        losses = [own_metr.cce_wrapper]
+
+        #losses = [own_metr.CCE(masked=True, smooth=0.2,transposed=True)]
+        losses = [own_metr.MSE()]
 
         model = Model(inputs=[input_tensor], outputs=outputs, name=networkname)
         model.compile(
