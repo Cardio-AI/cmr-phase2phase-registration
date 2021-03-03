@@ -32,7 +32,7 @@ def copy_meta(new_image, reference_sitk_img):
         # copy metadata
         for key in reference_sitk_img.GetMetaDataKeys():
             new_image.SetMetaData(key, get_metadata_maybe(reference_sitk_img, key))
-        logging.debug('Metadata_copied: {:0.3f}s'.format(time() - t1))
+        #logging.debug('Metadata_copied: {:0.3f}s'.format(time() - t1))
 
         # copy all structural information to image with same dimension and size
         if (reference_sitk_img.GetDimension() == new_image.GetDimension()) and (reference_sitk_img.GetSize() == new_image.GetSize()):
@@ -67,7 +67,7 @@ def copy_meta(new_image, reference_sitk_img):
             new_image.SetSpacing((*reference_sitk_img.GetSpacing(), *ones))
 
         new_image.SetDirection(reference_sitk_img.GetDirection())
-        logging.debug('spatial data_copied: {:0.3f}s'.format(time() - t1))
+        #logging.debug('spatial data_copied: {:0.3f}s'.format(time() - t1))
 
         return new_image
 
@@ -104,7 +104,7 @@ def copy_meta_and_save(new_image, reference_sitk_img, full_filename=None, overri
             # copy metadata
             for key in reference_sitk_img.GetMetaDataKeys():
                 new_image.SetMetaData(key, get_metadata_maybe(reference_sitk_img, key))
-            logging.debug('Metadata_copied: {:0.3f}s'.format(time() - t1))
+            #logging.debug('Metadata_copied: {:0.3f}s'.format(time() - t1))
 
             # copy structural informations to image with same dimension and size
             if (reference_sitk_img.GetDimension() == new_image.GetDimension()) and (reference_sitk_img.GetSize() == new_image.GetSize()):
@@ -142,7 +142,7 @@ def copy_meta_and_save(new_image, reference_sitk_img, full_filename=None, overri
                 new_image.SetSpacing((*reference_sitk_img.GetSpacing(), *ones))
                 # we cant copy the direction from smaller images to bigger ones
 
-            logging.debug('spatial data_copied: {:0.3f}s'.format(time() - t1))
+            #logging.debug('spatial data_copied: {:0.3f}s'.format(time() - t1))
 
             if override_spacing:
                 new_image.SetSpacing(override_spacing)

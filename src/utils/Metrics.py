@@ -98,9 +98,6 @@ def meandiff_transpose( y_true, y_pred):
     y_true = tf.cast(tf.convert_to_tensor(y_true), tf.float32)
     y_pred = tf.cast(tf.convert_to_tensor(y_pred), tf.float32)
     y_len_msk = tf.cast(tf.convert_to_tensor(y_len_msk), tf.float32)
-    #print(y_true.shape)
-    #print(y_pred.shape)
-    #print(y_len_msk.shape)
 
     # b, 5, 36
     temp_pred = y_pred * y_len_msk
@@ -109,14 +106,10 @@ def meandiff_transpose( y_true, y_pred):
     # calculate the original lengths of each mask in the current batch
     # b, 1
     y_len = tf.cast(tf.reduce_sum(y_len_msk[:,0,:], axis=1),dtype=tf.int32)
-    #print('y_len shape: {}'.format(y_len.shape))
     # results in 3 x  b, 5,
     gt_idx = tf.cast(tf.math.argmax(temp_gt, axis=2), dtype=tf.int32)
     pred_idx = tf.cast(tf.math.argmax(temp_pred, axis=2), dtype=tf.int32)
     filled_length = tf.repeat(tf.expand_dims(y_len,axis=1),5,axis=1)
-    #print('gt_idx shape: {}'.format(gt_idx.shape))
-    #print('pred_idx shape: {}'.format(pred_idx.shape))
-    #print('filled shape: {}'.format(filled_length.shape))
 
     # b, 5, 3
     stacked = tf.cast(tf.stack([gt_idx, pred_idx, filled_length], axis=-1),tf.int32)
