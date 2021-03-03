@@ -642,7 +642,8 @@ class PhaseRegressionGenerator(DataGenerator):
             np.linspace(self.SMOOTHING_UPPER_BORDER, self.SMOOTHING_LOWER_BORDER, self.SMOOTHING_KERNEL_SIZE // 2)])
         logging.info('Smoothing kernel: \n{}'.format(self.KERNEL))
         logging.info('Temporal phase augmentation: \n{}'
-                     'Repeat volume: {}'.format(self.AUGMENT_PHASES, self.REPEAT))
+                     '\n'
+                     'Repeat volume: \n{}'.format(self.AUGMENT_PHASES, self.REPEAT))
 
         self.MASKS = None  # need to check if this is still necessary!
 
@@ -754,7 +755,7 @@ class PhaseRegressionGenerator(DataGenerator):
             model_inputs = first
 
         # Fake a ring behaviour by first, tile along t
-        # second smooth with a linear increasing/decreasing Kernel,
+        # second smooth with a gausian Kernel,
         # third split+maximise element-wise on both matrices
         onehot = np.tile(onehot, (1, reps * 2))
         logging.debug('one-hot: \n{}'.format(onehot))
@@ -768,7 +769,7 @@ class PhaseRegressionGenerator(DataGenerator):
             onehot = np.apply_along_axis(
                 lambda x : gaussian_filter1d(x, sigma=1),
                 axis=1, arr=onehot)
-            logging.debug('convolved:\n{}'.format(onehot))
+            logging.debug('smoothed:\n{}'.format(onehot))
             # transform into an temporal index based target vector index2phase
         # Split and maximize the tiled one-hot vector to make sure that the beginning and end are also smooth
         first, second = np.split(onehot, indices_or_sections=2, axis=1)

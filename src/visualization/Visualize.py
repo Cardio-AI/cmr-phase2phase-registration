@@ -839,11 +839,13 @@ def show_phases(gt, pred=None):
 
         axs[i].title.set_text('y')
         temp_y = gt[idx]* gt_msk[idx]
+        gt_length = np.sum(gt_msk[idx, :, 0], axis=0).astype(int)
+        gt[idx][gt_length,:] = 1
         ind_gt = np.argmax(temp_y, axis=0)
         axs[i].set_yticks(ind_gt, minor=False)
         axs[i].set_xticks([0, 1, 2, 3, 4], minor=False)
         axs[i].set_xticklabels(phases, rotation=45)
-        axs[i].imshow(temp_y, aspect='auto')
+        axs[i].imshow(gt[idx], aspect='auto')
         i = i + 1
     f.tight_layout()
     return f

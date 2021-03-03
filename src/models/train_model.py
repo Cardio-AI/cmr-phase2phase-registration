@@ -15,37 +15,50 @@ def train_fold(config):
     from tensorflow.python.client import device_lib
     import tensorflow as tf
     tf.get_logger().setLevel('ERROR')
-
-
     import gc
     import logging
     from logging import info
     import os
     import glob
     # local imports
-    from src.utils.Utils_io import Console_and_file_logger, init_config
+    from src.utils.Utils_io import Console_and_file_logger, init_config, ensure_dir
     from src.utils.KerasCallbacks import get_callbacks
     from src.data.Dataset import get_trainings_files
 
     # import external libs
     import pandas as pd
     from time import time
+    import datetime
 
+    # make all config params known to the local namespace
+    locals().update(config)
 
-
-    config = init_config(config=config, save=True)
-    globals().update(config)
+    # overwrite the experiment names and paths, so that each cv gets an own sub-folder
     EXPERIMENT = config.get('EXPERIMENT')
+    FOLD = config.get('FOLD')
 
-    EXP_PATH = config.get('EXP_PATH')
+    EXPERIMENT = '{}_f{}'.format(EXPERIMENT, FOLD)
+    timestemp = str(datetime.datetime.now().strftime(
+        "%Y-%m-%d_%H_%M"))  # add a timestep to each project to make repeated experiments unique
+
+    EXPERIMENTS_ROOT = 'exp/'
+    EXP_PATH = os.path.join(EXPERIMENTS_ROOT, EXPERIMENT, timestemp)
+    MODEL_PATH = os.path.join(EXP_PATH, 'model', )
+    TENSORBOARD_PATH = os.path.join(EXP_PATH, 'tensorboard_logs')
+    CONFIG_PATH = os.path.join(EXP_PATH, 'config')
+    HISTORY_PATH = os.path.join(EXP_PATH, 'history')
+    ensure_dir(MODEL_PATH)
+    ensure_dir(TENSORBOARD_PATH)
+    ensure_dir(CONFIG_PATH)
+    ensure_dir(HISTORY_PATH)
+
     DATA_PATH_SAX = config.get('DATA_PATH_SAX')
     DF_FOLDS = config.get('DF_FOLDS')
-    FOLD = config.get('FOLD')
     DF_META = config.get('DF_META', '/mnt/ssd/data/gcn/02_imported_4D_unfiltered/SAx_3D_dicomTags_phase')
     EPOCHS = config.get('EPOCHS')
 
     Console_and_file_logger(EXPERIMENT, logging.INFO)
-    config = init_config(config=config, save=True)
+    config = init_config(config=locals(), save=True)
     print(config)
     logging.info('Is built with tensorflow: {}'.format(tf.test.is_built_with_cuda()))
     logging.info('Visible devices:\n{}'.format(tf.config.list_physical_devices()))
@@ -111,11 +124,12 @@ def train_fold(config):
         model.summary(print_fn=lambda x: fh.write(x + '\n'))
 
     tf.keras.utils.plot_model(
-        model, show_shapes=False,
+        model, show_shapes=True,
         to_file=os.path.join(EXP_PATH, 'model.png'),
         show_layer_names=True,
         rankdir='TB',
-        expand_nested=True, dpi=96
+        expand_nested=True,
+        dpi=96
     )
 
     # training

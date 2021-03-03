@@ -374,7 +374,7 @@ def _create_aug_compose(p=1, border_mode=cv2.BORDER_REPLICATE, val=0, targets=No
         #CenterCrop(height=target_dim[0], width=target_dim[1], p=1),
         # HueSaturationValue(p=1)
         #RandomBrightnessContrast(brightness_limit=0.02,contrast_limit=0.02,brightness_by_max=False, p=0.4),
-        Downscale(scale_min=0.9, scale_max=0.9, p=0.4),
+        #Downscale(scale_min=0.9, scale_max=0.9, p=0.4),
         #RandomGamma(p=p)
         # OneOf([
         # OpticalDistortion(p=1),

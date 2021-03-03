@@ -5,7 +5,7 @@ import numpy as np
 import tensorflow as tf
 
 
-def meandiff( y_true, y_pred, batchsize=4):
+def meandiff( y_true, y_pred, apply_sum=True, apply_average=True):
 
     """
     Average over the batches
@@ -62,8 +62,8 @@ def meandiff( y_true, y_pred, batchsize=4):
     # sum the error per entity, and calc the mean over the batches
     # for each batch ==> 5, 3 in stacked
     diffs = tf.map_fn(lambda x: get_min_dist_for_list(x), stacked, dtype=tf.int32)
-    diffs = tf.cast(tf.reduce_sum(diffs, axis=1),tf.float32)
-    diffs = tf.reduce_mean(diffs)
+    if apply_sum: diffs = tf.cast(tf.reduce_sum(diffs, axis=1),tf.float32)
+    if apply_average: diffs = tf.reduce_mean(diffs)
     return diffs
 
 def meandiff_transpose( y_true, y_pred):
