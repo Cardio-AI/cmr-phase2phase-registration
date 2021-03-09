@@ -843,7 +843,7 @@ def show_phases(gt, pred=None):
         ax.title.set_text('y')
         temp_y = gt[idx]* gt_msk[idx]
         gt_length = np.sum(gt_msk[idx, :, 0], axis=0).astype(int)
-        gt[idx][gt_length,:] = 1
+        gt[idx][(gt_length-1),:] = 1
         ind_gt = np.argmax(temp_y, axis=0)
         ax.set_yticks(ind_gt, minor=False)
         ax.set_xticks([0, 1, 2, 3, 4], minor=False)
