@@ -148,6 +148,7 @@ def create_PhaseRegressionModel(config, networkname='PhaseRegressionModel'):
 
         #losses = [own_metr.CCE(masked=True, smooth=0.2,transposed=True)]
         losses = [own_metr.MSE()]
+        #losses = [own_metr.Meandiff_loss()]
 
         model = Model(inputs=[input_tensor], outputs=outputs, name=networkname)
         model.compile(
@@ -157,3 +158,7 @@ def create_PhaseRegressionModel(config, networkname='PhaseRegressionModel'):
         )
 
         return model
+
+
+
+

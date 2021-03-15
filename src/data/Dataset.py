@@ -6,6 +6,8 @@ import matplotlib.pyplot as plt
 import glob
 import os
 import SimpleITK as sitk
+import skimage
+import skimage.exposure
 
 from src.utils.Utils_io import ensure_dir
 from src.visualization.Visualize import plot_value_histogram
@@ -196,7 +198,38 @@ def create_4d_volumes_from_4d_files(img_f, mask_f, full_path='data/raw/GCN/3D/',
     return [masked_t, list(img_4d_nda.shape)]
 
 
-def split_one_4d_sitk_in_list_of_3d_sitk(img_4d_sitk):
+def match_hist_(nda, avg):
+    # this method takes 3 times as long as the looping version below, check if time is given
+    t0 = time()
+    shape_ = nda.shape
+    c = shape_[0] * shape_[1]
+    s_len = avg.ndim
+    logging.info('first: {:0.3f} s'.format(time() - t0))
+    t0 = time()
+    if s_len == 3:
+        c_avg = avg.shape[0]
+        avg = np.reshape(avg, (avg.shape[-2], avg.shape[-1] * c_avg))
+
+    elif s_len == 4:
+        c_avg = avg.shape[0] * avg.shape[1]
+        avg = np.reshape(avg, (avg.shape[-2], avg.shape[-1] * c_avg))
+    logging.info('second: {:0.3f} s'.format(time() - t0))
+    t0 = time()
+    temp = np.reshape(nda, (shape_[-2], shape_[-1] * c))
+    logging.info('third: {:0.3f} s'.format(time() - t0))
+    t0 = time()
+    temp = skimage.exposure.match_histograms(temp, avg, multichannel=False)
+    logging.info('fourth: {:0.3f} s'.format(time() - t0))
+    return np.reshape(temp, shape_)
+
+def match_hist(nda,avg):
+    t0 = time()
+    for t in range(nda.shape[0]):
+        for z in range(nda.shape[1]):
+            nda[t,z] = skimage.exposure.match_histograms(nda[t,z], avg, multichannel=False)
+    return nda
+
+def split_one_4d_sitk_in_list_of_3d_sitk(img_4d_sitk, HIST_MATCHING=False, ref=None):
     """
     Splits a 4D dicom image into a list of 3D sitk images, copy alldicom metadata
     Parameters
@@ -210,6 +243,10 @@ def split_one_4d_sitk_in_list_of_3d_sitk(img_4d_sitk):
     """
 
     img_4d_nda = sitk.GetArrayFromImage(img_4d_sitk)
+
+    # histogram matching - testing purpose
+    if HIST_MATCHING:
+        img_4d_nda = match_hist(img_4d_nda, ref)
 
     # create t 3d volumes
     list_of_3dsitk = [copy_meta_and_save(new_image=img_3d, reference_sitk_img=img_4d_sitk, full_filename = None, override_spacing = None, copy_direction = True) for img_3d in img_4d_nda]

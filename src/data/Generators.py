@@ -11,6 +11,7 @@ import SimpleITK as sitk
 # from skimage.transform import resize
 import matplotlib.pyplot as plt
 from time import time
+from random import choice
 
 from src.visualization.Visualize import plot_3d_vol, show_slice, show_slice_transparent, plot_4d_vol, show_2D_or_3D
 from src.data.Preprocess import resample_3D, crop_to_square_2d, center_crop_or_resize_2d, \
@@ -59,13 +60,12 @@ class BaseGenerator(tensorflow.keras.utils.Sequence):
             x = normalise_paths(x)
             y = normalise_paths(y)
 
-        ids = list(range(len(x)))
+        self.INDICES = list(range(len(x)))
         # override if necessary
         self.SINGLE_OUTPUT = config.get('SINGLE_OUTPUT', False)
 
-        self.labels = x
-        self.images = y
-        self.LIST_IDS = ids
+        self.IMAGES = x
+        self.LABELS = y
 
         # if streamhandler loglevel is set to debug, print each pre-processing step
         self.DEBUG_MODE = logging.getLogger().handlers[1].level == logging.DEBUG
@@ -101,7 +101,7 @@ class BaseGenerator(tensorflow.keras.utils.Sequence):
                 self.BATCHSIZE,
                 self.SCALER,
                 len(
-                    self.images),
+                    self.IMAGES),
                 self.AUGMENT,
                 self.MAX_WORKERS))
 
@@ -142,7 +142,7 @@ class BaseGenerator(tensorflow.keras.utils.Sequence):
         Denotes the number of batches per epoch
         :return: number of batches
         """
-        return int(np.floor(len(self.LIST_IDS) / self.BATCHSIZE))
+        return int(np.floor(len(self.INDICES) / self.BATCHSIZE))
 
     def __getitem__(self, index):
 
@@ -156,13 +156,13 @@ class BaseGenerator(tensorflow.keras.utils.Sequence):
         # collect n x indexes with n = Batchsize
         # starting from the given index parameter
         # which is in the range of  {0: len(dataset)/Batchsize}
-        indexes = self.indexes[index * self.BATCHSIZE: (index + 1) * self.BATCHSIZE]
+        idxs = self.INDICES[index * self.BATCHSIZE: (index + 1) * self.BATCHSIZE]
 
         # Collects the value (a list of file names) for each index
-        list_IDs_temp = [self.LIST_IDS[k] for k in indexes]
+        #list_IDs_temp = [self.LIST_IDS[k] for k in idxs]
         logging.debug('index generation: {}'.format(time() - t0))
         # Generate data
-        return self.__data_generation__(list_IDs_temp)
+        return self.__data_generation__(idxs)
 
     def on_epoch_end(self):
 
@@ -171,11 +171,11 @@ class BaseGenerator(tensorflow.keras.utils.Sequence):
         :return: None
         """
 
-        self.indexes = np.arange(len(self.LIST_IDS))
+        self.INDICES = np.arange(len(self.INDICES))
         if self.SHUFFLE:
-            np.random.shuffle(self.indexes)
+            np.random.shuffle(self.INDICES)
 
-    def __data_generation__(self, list_IDs_temp):
+    def __data_generation__(self, idxs):
 
         """
         Generates data containing batch_size samples
@@ -196,7 +196,7 @@ class BaseGenerator(tensorflow.keras.utils.Sequence):
 
             t0 = time()
             # Generate data
-            for i, ID in enumerate(list_IDs_temp):
+            for i, ID in enumerate(idxs):
 
                 try:
                     # keep ordering of the shuffled indexes
@@ -204,8 +204,8 @@ class BaseGenerator(tensorflow.keras.utils.Sequence):
 
                 except Exception as e:
                     logging.error(
-                        'Exception {} in datagenerator with: image: {} or mask: {}'.format(str(e), self.images[ID],
-                                                                                           self.labels[ID]))
+                        'Exception {} in datagenerator with: image: {} or mask: {}'.format(str(e), self.IMAGES[ID],
+                                                                                           self.LABELS[ID]))
 
         for i, future in enumerate(as_completed(futures)):
             # use the indexes i to place each processed example in the batch
@@ -220,8 +220,8 @@ class BaseGenerator(tensorflow.keras.utils.Sequence):
                 logging.debug('img finished after {:0.3f} sec.'.format(needed_time))
             except Exception as e:
                 logging.error(
-                    'Exception {} in datagenerator with: image: {} or mask: {}'.format(str(e), self.images[ID],
-                                                                                       self.labels[ID]))
+                    'Exception {} in datagenerator with: image: {} or mask: {}'.format(str(e), self.IMAGES[ID],
+                                                                                       self.LABELS[ID]))
 
         logging.debug('Batchsize: {} preprocessing took: {:0.3f} sec'.format(self.BATCHSIZE, time() - t0))
         if self.SINGLE_OUTPUT:
@@ -239,7 +239,9 @@ class DataGenerator(BaseGenerator):
     could be used to yield (X, None)
     """
 
-    def __init__(self, x=None, y=None, config={}):
+    def __init__(self, x=None, y=None, config=None):
+        if config is None:
+            config = {}
         self.MASKING_IMAGE = config.get('MASKING_IMAGE', False)
         self.SINGLE_OUTPUT = False
         self.MASKING_VALUES = config.get('MASKING_VALUES', [1, 2, 3])
@@ -257,18 +259,18 @@ class DataGenerator(BaseGenerator):
         # if masks are given
         if y is not None:
             self.MASKS = True
-        super(DataGenerator, self).__init__(x=x, y=y, config=config)
+        super().__init__(x=x, y=y, config=config)
 
     def __preprocess_one_image__(self, i, ID):
 
         t0 = time()
         if self.DEBUG_MODE:
-            logging.debug(self.images[ID])
+            logging.debug(self.IMAGES[ID])
         # load image
-        sitk_img = load_masked_img(sitk_img_f=self.images[ID], mask=self.MASKING_IMAGE,
+        sitk_img = load_masked_img(sitk_img_f=self.IMAGES[ID], mask=self.MASKING_IMAGE,
                                    masking_values=self.MASKING_VALUES, replace=self.REPLACE_WILDCARD)
         # load mask
-        sitk_msk = load_masked_img(sitk_img_f=self.labels[ID], mask=self.MASKING_IMAGE,
+        sitk_msk = load_masked_img(sitk_img_f=self.LABELS[ID], mask=self.MASKING_IMAGE,
                                    masking_values=self.MASKING_VALUES, replace=self.REPLACE_WILDCARD,
                                    mask_labels=self.MASK_VALUES)
 
@@ -423,7 +425,7 @@ class MotionDataGenerator(DataGenerator):
 
         if config is None:
             config = {}
-        super(MotionDataGenerator, self).__init__(x=x, y=y, config=config)
+        super().__init__(x=x, y=y, config=config)
 
         if type(x[0]) in [tuple, list]:
             # if this is the case we have a sequence of 3D volumes or a sequence of 2D images
@@ -437,13 +439,13 @@ class MotionDataGenerator(DataGenerator):
         # define a random seed for albumentations
         random.seed(config.get('SEED', 42))
 
-    def __data_generation__(self, list_IDs_temp):
+    def __data_generation__(self, idxs):
 
         """
         Loads and pre-process one entity of x and y
 
 
-        :param list_IDs_temp:
+        :param idxs:
         :return: X : (batchsize, *dim, n_channels), Y : (batchsize, *dim, number_of_classes)
         """
 
@@ -459,7 +461,7 @@ class MotionDataGenerator(DataGenerator):
             t0 = time()
             ID = ''
             # Generate data
-            for i, ID in enumerate(list_IDs_temp):
+            for i, ID in enumerate(idxs):
 
                 try:
                     # remember the ordering of the shuffled indexes,
@@ -468,8 +470,8 @@ class MotionDataGenerator(DataGenerator):
 
                 except Exception as e:
                     logging.error(
-                        'Exception {} in datagenerator with: image: {} or mask: {}'.format(str(e), self.images[ID],
-                                                                                           self.labels[ID]))
+                        'Exception {} in datagenerator with: image: {} or mask: {}'.format(str(e), self.IMAGES[ID],
+                                                                                           self.LABELS[ID]))
 
         for i, future in enumerate(as_completed(futures)):
             # use the indexes to order the batch
@@ -487,7 +489,7 @@ class MotionDataGenerator(DataGenerator):
                     'image:\n'
                     '{}\n'
                     'mask:\n'
-                    '{}'.format(str(e), self.images[ID], self.labels[ID]))
+                    '{}'.format(str(e), self.IMAGES[ID], self.LABELS[ID]))
 
         logging.debug('Batchsize: {} preprocessing took: {:0.3f} sec'.format(self.BATCHSIZE, time() - t0))
 
@@ -497,8 +499,8 @@ class MotionDataGenerator(DataGenerator):
 
         t0 = time()
 
-        x = self.images[ID]
-        y = self.labels[ID]
+        x = self.IMAGES[ID]
+        y = self.IMAGES[ID]
 
         if not isinstance(x, list):
             x = [x]
@@ -606,7 +608,7 @@ class PhaseRegressionGenerator(DataGenerator):
 
         if config is None:
             config = {}
-        super(PhaseRegressionGenerator, self).__init__(x=x, y=y, config=config)
+        super().__init__(x=x, y=y, config=config)
 
         self.AUGMENT_PHASES = config.get('AUGMENT_PHASES', False)
         self.AUGMENT_PHASES_RANGE = config.get('AUGMENT_PHASES_RANGE', (-3,3))
@@ -632,7 +634,8 @@ class PhaseRegressionGenerator(DataGenerator):
         self.SMOOTHING_LOWER_BORDER = config.get('SMOOTHING_LOWER_BORDER', 0.1)
         self.SMOOTHING_UPPER_BORDER = config.get('SMOOTHING_UPPER_BORDER', 5)
         self.SMOOTHING_WEIGHT_CORRECT = config.get('SMOOTHING_WEIGHT_CORRECT', 20)
-        self.SIGMA = 1
+        self.SIGMA = config.get('GAUS_SIGMA', 1)
+        self.HIST_MATCHING = config.get('HIST_MATCHING', False)
 
         # create a 1D kernel with linearly increasing/decreasing values in the range(lower,upper),
         # insert a fixed number in the middle, as this reflect the correct idx,
@@ -648,8 +651,19 @@ class PhaseRegressionGenerator(DataGenerator):
 
         self.MASKS = None  # need to check if this is still necessary!
 
+        # load an averaged acdc image as histogram reference
+        #self.ref = np.load('/mnt/ssd/data/acdc/avg.npy')
+        #ref_idx = random.choice(self.LIST_IDS)
+        ref = sitk.GetArrayFromImage(sitk.ReadImage((choice(self.IMAGES))))
+        self.ref = ref[ref.shape[0]//2,ref.shape[1]//2]
+
         # define a random seed for albumentations
         random.seed(config.get('SEED', 42))
+
+    def on_batch_end(self, *args, **kwargs):
+        ref = sitk.GetArrayFromImage(sitk.ReadImage((choice(self.IMAGES))))
+        self.ref = ref[ref.shape[0] // 2, ref.shape[1] // 2]
+        super().on_batch_end()
 
     def __data_generation__(self, list_IDs_temp):
 
@@ -664,7 +678,6 @@ class PhaseRegressionGenerator(DataGenerator):
         # Initialization
         x = np.empty_like(self.X_SHAPE)  # model input
         y = np.empty_like(self.Y_SHAPE)  # model output
-
 
         futures = set()
 
@@ -685,8 +698,8 @@ class PhaseRegressionGenerator(DataGenerator):
                     PrintException()
                     print(e)
                     logging.error(
-                        'Exception {} in datagenerator with: image: {} or mask: {}'.format(str(e), self.images[ID],
-                                                                                           self.labels[ID]))
+                        'Exception {} in datagenerator with: image: {} or mask: {}'.format(str(e), self.IMAGES[ID],
+                                                                                           self.LABELS[ID]))
 
         for i, future in enumerate(as_completed(futures)):
             # use the indexes to order the batch
@@ -704,24 +717,26 @@ class PhaseRegressionGenerator(DataGenerator):
                     'image:\n'
                     '{}\n'
                     'mask:\n'
-                    '{}'.format(str(e), self.images[ID], self.labels[ID]))
+                    '{}'.format(str(e), self.IMAGES[ID], self.LABELS[ID]))
 
         logging.debug('Batchsize: {} preprocessing took: {:0.3f} sec'.format(self.BATCHSIZE, time() - t0))
 
         return x, y
 
     def __preprocess_one_image__(self, i, ID):
-
+        ref = self.ref.copy()
         t0 = time()
 
-        x = self.images[ID]
+        x = self.IMAGES[ID]
 
         # use the load_masked_img wrapper to enable masking of the images, currently not necessary, but nice to have
         model_inputs = load_masked_img(sitk_img_f=x, mask=self.MASKING_IMAGE,
                                        masking_values=self.MASKING_VALUES, replace=self.REPLACE_WILDCARD)
 
         # Create a list of 3D volumes for resampling
-        model_inputs = split_one_4d_sitk_in_list_of_3d_sitk(model_inputs)
+        # apply histogram matching if given by config
+        model_inputs = split_one_4d_sitk_in_list_of_3d_sitk(model_inputs, HIST_MATCHING=self.HIST_MATCHING, ref=ref)
+        logging.debug('load + hist matching took: {:0.3f} s'.format(time() - t0))
         gt_length = len(model_inputs)
         # How many times do we need to repeat that cycle along t to cover the desired output size
         reps = 1
@@ -741,7 +756,7 @@ class PhaseRegressionGenerator(DataGenerator):
             ['ED#', 'MS#', 'ES#', 'PF#', 'MD#']]
         indices = indices.values[0].astype(int) - 1
         onehot = np.zeros((indices.size, len(model_inputs)))
-        onehot[np.arange(indices.size), indices] = 10
+        onehot[np.arange(indices.size), indices] = self.SMOOTHING_WEIGHT_CORRECT
 
         logging.debug('onehot initialised:')
         if self.DEBUG_MODE: plt.imshow(onehot); plt.show()
@@ -773,11 +788,10 @@ class PhaseRegressionGenerator(DataGenerator):
             # Later divide the smoothed vectors by the sum or via softmax
             # to make sure they sum up to 1 for each class
             from scipy.ndimage import gaussian_filter1d
-
             onehot = np.apply_along_axis(
                 lambda x : gaussian_filter1d(x, sigma=self.SIGMA),
                 axis=1, arr=onehot)
-            logging.debug('onehot smoothed sigma={}:'.format(self.SIGMA))
+            logging.debug('onehot smoothed with sigma={}:'.format(self.SIGMA))
             if self.DEBUG_MODE: plt.imshow(onehot); plt.show()
             #logging.debug('smoothed:\n{}'.format(onehot))
             # transform into an temporal index based target vector index2phase
@@ -834,13 +848,13 @@ class PhaseRegressionGenerator(DataGenerator):
 
         # transform to nda for further processing
         # repeat the 3D volumes along t (we did the same with the onehot vector)
-        model_inputs = list(map(lambda x: sitk.GetArrayFromImage(x), model_inputs))
+        model_inputs = np.stack(list(map(lambda x: sitk.GetArrayFromImage(x), model_inputs)),axis=0)
 
         self.__plot_state_if_debug__(img=model_inputs[len(model_inputs) // 2], start_time=t1, step='resampled')
 
         if self.AUGMENT:
             # use albumentation to apply random rotation scaling and shifts
-            model_inputs = augmentation_compose_2d_3d_4d(img=np.stack(model_inputs, axis=0), mask=None,
+            model_inputs = augmentation_compose_2d_3d_4d(img=model_inputs, mask=None,
                                                          probabillity=self.AUGMENT_PROB)
             self.__plot_state_if_debug__(img=model_inputs[0], start_time=t1, step='augmented')
             t1 = time()
@@ -848,8 +862,7 @@ class PhaseRegressionGenerator(DataGenerator):
         # clip, pad/crop and normalise & extend last axis
         # We repeat/tile the 3D volume at this time, to avoid resampling/augmenting the same slices multiple times
         # Ideally this saves computation time and memory
-        model_inputs = list(map(lambda x: clip_quantile(x, .9999), model_inputs))
-        model_inputs = np.stack(model_inputs, axis=0)
+        model_inputs = clip_quantile(model_inputs, .9999)
         model_inputs = np.tile(model_inputs, (reps, 1, 1, 1))[:self.T_SHAPE, ...]
 
         msk = np.ones_like(onehot)
@@ -869,6 +882,8 @@ class PhaseRegressionGenerator(DataGenerator):
         # - The standard (unit) softmax function 𝜎:ℝ𝐾→ℝ𝐾 is defined by the formula
         # 𝜎(𝐳)𝑖=𝑒𝑧𝑖∑𝐾𝑗=1𝑒𝑧𝑗 for 𝑖=1,…,𝐾 and 𝐳=(𝑧1,…,𝑧𝐾)∈ℝ𝐾
         import scipy
+
+
         model_inputs = normalise_image(model_inputs, normaliser=self.SCALER)  # normalise per 4D
         #logging.debug('background: \n{}'.format(onehot))
 

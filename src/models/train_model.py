@@ -110,6 +110,7 @@ def train_fold(config):
     val_config = config.copy()
     val_config['AUGMENT'] = False
     val_config['AUGMENT_PHASES'] = False
+    val_config['HIST_MATCHING'] = False
     validation_generator = PhaseRegressionGenerator(x_val_sax, x_val_sax, config=val_config)
 
     # get model
@@ -141,7 +142,7 @@ def train_fold(config):
         epochs=EPOCHS,
         callbacks=get_callbacks(config, batch_generator, validation_generator),
         initial_epoch=initial_epoch,
-        max_queue_size=12,
+        max_queue_size=24,
         use_multiprocessing=False,
         verbose=1)
 

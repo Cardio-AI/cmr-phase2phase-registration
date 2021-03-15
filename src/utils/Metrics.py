@@ -105,6 +105,10 @@ def meandiff_transpose( y_true, y_pred):
 
     # calculate the original lengths of each mask in the current batch
     # b, 1
+    # if we use modulo, we need to adjust the length by minus one
+    # our argmax starts at 0,
+    # our gt-length, which is the sum of ones in the mask starts at 1
+    # we correct that by minus one
     y_len = tf.cast(tf.reduce_sum(y_len_msk[:,0,:], axis=1),dtype=tf.int32)
     # results in 3 x  b, 5,
     gt_idx = tf.cast(tf.math.argmax(temp_gt, axis=2), dtype=tf.int32)
@@ -128,14 +132,13 @@ def get_min_dist_for_list(vals):
     return tf.map_fn(lambda x :get_min_distance(x),vals, dtype=tf.int32)
 
 def get_min_distance(vals):
-    #assert(mod>(tf.reduce_max(a,b))), 'a: {}, b: {}, mod:{}, '.format(a,b,mod)
 
-    decr_counter = tf.constant(0)
-    incr_counter = tf.constant(0)
-    #print(vals.shape)
     smaller = tf.reduce_min(vals[0:2], keepdims=True)
     bigger = tf.reduce_max(vals[0:2], keepdims=True)
     mod = vals[2]
+
+    """decr_counter = tf.constant(0)
+    incr_counter = tf.constant(0)
     i1 = bigger
     while (i1 != smaller):
         decr_counter = decr_counter + 1
@@ -144,11 +147,52 @@ def get_min_distance(vals):
     i1 = bigger
     while (i1 != smaller):
         incr_counter = incr_counter + 1
-        i1 = tf.math.mod((i1 + 1), mod)
+        i1 = tf.math.mod((i1 + 1), mod)"""
+    diff = bigger - smaller
+    diff_ring = mod - bigger + smaller
+    return tf.reduce_min(tf.stack([diff, diff_ring]))
 
-    return tf.reduce_min(tf.stack([decr_counter, incr_counter]))
+class Meandiff_loss(tf.keras.losses.Loss):
+
+    def __init__(self):
+        super().__init__(name='meandiff_loss')
+
+    def __call__(self, y_true, y_pred, **kwargs):
+
+        return -meandiff(y_true, y_pred)
 
 
+import tensorflow as tf
+import tensorflow.keras.backend as K
+from tensorflow.keras.layers import Layer, Lambda
+
+
+
+def DifferentiableArgmax(inputs):
+    # if it doesnt sum to one: normalize
+    
+    def prob2oneHot(x):
+        # len should be slightly larger than the length of x
+        len = x.shape[-1] + 2
+        a = K.pow(len * x, 10)
+        sum_a = K.sum(a, axis=-1)
+        sum_a = tf.expand_dims(sum_a, axis=1)
+        onehot = tf.divide(a, sum_a)
+
+        return onehot
+
+    onehot = Lambda(prob2oneHot)(inputs)
+    onehot = Lambda(prob2oneHot)(onehot)
+    onehot = Lambda(prob2oneHot)(onehot)
+
+    def onehot2token(x):
+        cumsum = tf.cumsum(onehot, axis=-1, exclusive=True, reverse=True)
+        rounding = 2 * (K.clip(cumsum, min_value=.5, max_value=1) - .5)
+        token = tf.reduce_sum(rounding, axis=-1)
+        return token
+
+    token = Lambda(onehot2token)(onehot)
+    return token
 
 class CCE_combined(tf.keras.losses.Loss):
 

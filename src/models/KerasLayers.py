@@ -123,9 +123,9 @@ class Euler2Matrix(Layer):
 
 
 class ScaleLayer(Layer):
-    def __init__(self, **kwargs):
+    def __init__(self, units=1., **kwargs):
         super(self.__class__, self).__init__(**kwargs)
-        self.scale = tf.Variable(1.)
+        self.scale = tf.Variable(units)
 
     def call(self, inputs, **kwargs):
         return inputs * self.scale

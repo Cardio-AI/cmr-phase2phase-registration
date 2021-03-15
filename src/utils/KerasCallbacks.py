@@ -17,7 +17,7 @@ from src.utils.Utils_io import ensure_dir
 from src.data.Preprocess import normalise_image
 
 
-def get_callbacks(config={}, batch_generator=None, validation_generator=None, metrics=None):
+def get_callbacks(config=None, batch_generator=None, validation_generator=None, metrics=None):
     """
     :param config:
     :param validation_generator:
@@ -25,6 +25,8 @@ def get_callbacks(config={}, batch_generator=None, validation_generator=None, me
     :return: list of callbacks for keras fit_generator
     """
 
+    if config is None:
+        config = {}
     callbacks = []
     ensure_dir(config['MODEL_PATH'])
 
@@ -75,6 +77,15 @@ def get_callbacks(config={}, batch_generator=None, validation_generator=None, me
                                                update_freq='epoch',
                                                profile_batch=0,
                                                embeddings_freq=0))
+    if config.get('POLY_LR_DECAY', False):
+        callbacks.append(
+            LearningRateScheduler(schedule=
+                                  PolynomialDecay(maxEpochs=config.get('EPOCHS', 100),
+                                                  initAlpha=config.get('LEARNING_RATE', 1e-4, ),
+                                                  power=2),
+                                  verbose=1)
+        )
+
     if metrics: # optimizer will be changed to SGD, if adam does not improve any more
         # changer will call this method without metrics to avoid recursive learning
         logging.info('optimizer will be changed to SGD after adam does not improve any more')
@@ -153,19 +164,6 @@ class StepDecay:
         return float(alpha)
 
 
-class PolynomialDecay:
-    def __init__(self, max_epochs=100, init_alpha=0.01, power=1.0):
-        self.max_epochs = max_epochs
-        self.init_alpha = init_alpha
-        self.power = power
-
-    def __call__(self, epoch):
-        decay = (1 - (epoch / float(self.max_epochs))) ** self.power
-        alpha = self.init_alpha * decay
-        tensorflow.summary.scalar('learning rate', data=alpha, step=epoch)
-
-        return float(alpha)
-
 class LRTensorBoard(TensorBoard):
     def __init__(self, log_dir, **kwargs):  # add other arguments to __init__ if you need
         super().__init__(log_dir=log_dir, **kwargs)
@@ -222,6 +220,27 @@ class TrainValTensorBoard(TensorBoard):
     def on_train_end(self, logs=None):
         super(TrainValTensorBoard, self).on_train_end(logs)
         self.val_writer.close()
+
+
+
+
+from tensorflow.keras.callbacks import LearningRateScheduler
+
+
+class PolynomialDecay:
+    def __init__(self, maxEpochs=100, initAlpha=0.01, power=0.25):
+        # store the maximum number of epochs, base learning rate,
+        # and power of the polynomial
+        self.maxEpochs = maxEpochs
+        self.initAlpha = initAlpha
+        self.power = power
+    def __call__(self, epoch):
+        # compute the new learning rate based on polynomial decay
+        decay = (1 - (epoch / float(self.maxEpochs))) ** self.power
+        alpha = self.initAlpha * decay
+        tensorflow.summary.scalar('learning rate', data=alpha, step=epoch)
+        # return the new learning rate
+        return float(alpha)
 
 class OptimizerChanger(EarlyStopping):
 
