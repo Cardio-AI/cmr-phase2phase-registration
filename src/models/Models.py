@@ -34,8 +34,8 @@ def create_PhaseRegressionModel(config, networkname='PhaseRegressionModel'):
         m_pool = config.get('M_POOL', (1, 2, 2))
         f_size = config.get('F_SIZE', (3, 3, 3))
         filters = config.get('FILTERS', 16)
-        drop_1 = config.get('DROPOUT_min', 0.3)
-        drop_3 = config.get('DROPOUT_max', 0.5)
+        drop_1 = config.get('DROPOUT_MIN', 0.3)
+        drop_3 = config.get('DROPOUT_MAX', 0.5)
         bn_first = config.get('BN_FIRST', False)
         ndims = len(config.get('DIM', [10, 224, 224]))
         depth = config.get('DEPTH', 4)
@@ -147,7 +147,7 @@ def create_PhaseRegressionModel(config, networkname='PhaseRegressionModel'):
 
 
         #losses = [own_metr.CCE(masked=True, smooth=0.2,transposed=True)]
-        losses = [own_metr.MSE()]
+        losses = [own_metr.MSE(masked=False)]
         #losses = [own_metr.Meandiff_loss()]
 
         model = Model(inputs=[input_tensor], outputs=outputs, name=networkname)
