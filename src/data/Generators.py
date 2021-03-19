@@ -663,17 +663,17 @@ class PhaseRegressionGenerator(DataGenerator):
     def on_batch_end(self, *args, **kwargs):
         ref = sitk.GetArrayFromImage(sitk.ReadImage((choice(self.IMAGES))))
         self.ref = ref[ref.shape[0] // 2, ref.shape[1] // 2]
-        super().on_batch_end()
 
     def __data_generation__(self, list_IDs_temp):
 
         """
-        Loads and pre-process one entity of x and y
-
+        Loads and pre-process one batch
 
         :param list_IDs_temp:
         :return: X : (batchsize, *dim, n_channels), Y : (batchsize, self.T_SHAPE, number_of_classes)
         """
+        # use this for batch wise histogram-reference selection
+        self.on_batch_end()
 
         # Initialization
         x = np.empty_like(self.X_SHAPE)  # model input
