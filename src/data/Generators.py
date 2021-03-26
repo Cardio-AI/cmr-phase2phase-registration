@@ -654,15 +654,20 @@ class PhaseRegressionGenerator(DataGenerator):
         # load an averaged acdc image as histogram reference
         #self.ref = np.load('/mnt/ssd/data/acdc/avg.npy')
         #ref_idx = random.choice(self.LIST_IDS)
-        ref = sitk.GetArrayFromImage(sitk.ReadImage((choice(self.IMAGES))))
-        self.ref = ref[ref.shape[0]//2,ref.shape[1]//2]
+        #ref = sitk.GetArrayFromImage(sitk.ReadImage((choice(self.IMAGES))))
+        #self.ref = ref[ref.shape[0]//2,ref.shape[1]//2]
 
         # define a random seed for albumentations
         random.seed(config.get('SEED', 42))
 
-    def on_batch_end(self, *args, **kwargs):
-        ref = sitk.GetArrayFromImage(sitk.ReadImage((choice(self.IMAGES))))
-        self.ref = ref[ref.shape[0] // 2, ref.shape[1] // 2]
+    def on_batch_end(self):
+        """
+        Use this callback for methods that should be executed before each batch generation
+        """
+        pass
+        """if self.HIST_MATCHING:
+            ref = sitk.GetArrayFromImage(sitk.ReadImage((choice(self.IMAGES))))
+            self.ref = ref[ref.shape[0] // 2, ref.shape[1] // 2]"""
 
     def __data_generation__(self, list_IDs_temp):
 
@@ -724,7 +729,11 @@ class PhaseRegressionGenerator(DataGenerator):
         return x, y
 
     def __preprocess_one_image__(self, i, ID):
-        ref = self.ref.copy()
+
+        ref = None
+        if self.HIST_MATCHING:
+            ref = sitk.GetArrayFromImage(sitk.ReadImage((choice(self.IMAGES))))
+            ref = ref[choice(list(range(ref.shape[0]))), choice(list(range(ref.shape[1])))]
         t0 = time()
 
         x = self.IMAGES[ID]
@@ -769,7 +778,7 @@ class PhaseRegressionGenerator(DataGenerator):
             onehot = np.concatenate([onehot[:, rand:], onehot[:, :rand]], axis=1)
             logging.debug('temp augmentation with: {}'.format(rand))
             if self.DEBUG_MODE: plt.imshow(onehot); plt.show()
-            # if we extend the list in one line the list will be not modified
+            # if we extend the list in one line the list will not be modified
             first = model_inputs[rand:]
             first.extend(model_inputs[:rand])
             model_inputs = first

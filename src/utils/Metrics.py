@@ -5,7 +5,7 @@ import numpy as np
 import tensorflow as tf
 
 
-def meandiff( y_true, y_pred, apply_sum=True, apply_average=True, as_loss=False):
+def meandiff( y_true, y_pred, apply_sum=True, apply_average=True):
 
     """
     Average over the batches

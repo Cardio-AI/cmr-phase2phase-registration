@@ -52,6 +52,15 @@ def show_2D_or_3D(img=None, mask=None, f_size=(8,8),dpi=100, interpol='none'):
     if isinstance(mask, sitk.Image):
         mask = sitk.GetArrayFromImage(mask).astype(np.float32)
 
+    if not isinstance(img, np.ndarray) and img is not None:
+        # try it to unpack a tf.tensor
+        img = img.numpy().astype(np.float32)
+
+    if not isinstance(mask, np.ndarray) and mask is not None:
+        mask = mask.numpy().astype(np.float32)
+
+
+
     # dont print anything if no images nor masks are given
     if img is None and mask is None:
         logging.error('No image data given')

@@ -143,6 +143,7 @@ def create_PhaseRegressionModel(config, networkname='PhaseRegressionModel'):
         # add empty tensor with one-hot shape to align with gt
         zeros = tf.zeros_like(onehot)
         onehot = tf.stack([onehot, zeros], axis=1)
+
         outputs = [onehot]
 
 

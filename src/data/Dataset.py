@@ -244,8 +244,8 @@ def split_one_4d_sitk_in_list_of_3d_sitk(img_4d_sitk, HIST_MATCHING=False, ref=N
 
     img_4d_nda = sitk.GetArrayFromImage(img_4d_sitk)
 
-    # histogram matching - testing purpose
-    if HIST_MATCHING:
+    # histogram matching - apply only on 50% of the files
+    if HIST_MATCHING and random.randint(0,100) < 50:
         img_4d_nda = match_hist(img_4d_nda, ref)
 
     # create t 3d volumes
