@@ -136,11 +136,11 @@ def resample_3D(sitk_img, size=(256, 256, 12), spacing=(1.25, 1.25, 8), interpol
     """
     resamples an 3D sitk image or numpy ndarray to a new size with respect to the giving spacing
     This method expects size and spacing in sitk format: x, y, z
-    :param sitk_img:
-    :param size:
-    :param spacing:
+    :param sitk_img: sitk.Image
+    :param size: (tuple) of int with the following order x,y,z
+    :param spacing: (tuple) of float with the following order x,y,z
     :param interpolate:
-    :return: returns the same datatype as submitted, either sitk.image or numpy.ndarray
+    :return: the resampled image in the same datatype as submitted, either sitk.image or numpy.ndarray
     """
 
     return_sitk = True
@@ -151,18 +151,9 @@ def resample_3D(sitk_img, size=(256, 256, 12), spacing=(1.25, 1.25, 8), interpol
 
     assert (isinstance(sitk_img, sitk.Image)), 'wrong image type: {}'.format(type(sitk_img))
 
-    # make sure to have the correct data types
+    # minor data type corrections
     size = [int(elem) for elem in size]
     spacing = [float(elem) for elem in spacing]
-
-    #if len(size) == 3 and size[0] < size[-1]: # 3D data, but numpy shape and size, reverse order for sitk
-        # bug if z is lonnger than x or y
-    #    size = tuple(reversed(size))
-    #    spacing = tuple(reversed(spacing))
-    #logging.error('spacing in resample 3D: {}'.format(sitk_img.GetSpacing()))
-    #logging.error('size in resample 3D: {}'.format(sitk_img.GetSize()))
-    #logging.error('target spacing in resample 3D: {}'.format(spacing))
-    #logging.error('target size in resample 3D: {}'.format(size))
 
     resampler = sitk.ResampleImageFilter()
     resampler.SetInterpolator(interpolate)

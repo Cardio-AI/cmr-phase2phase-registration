@@ -150,7 +150,6 @@ def copy_meta_and_save(new_image, reference_sitk_img, full_filename=None, overri
                 new_image.SetSpacing(override_spacing)
 
         if full_filename:
-
             # copy uid
             writer = sitk.ImageFileWriter()
             # writer.KeepOriginalImageUIDOn()
@@ -478,8 +477,8 @@ def get_trainings_files(data_path, fold=0, path_to_folds_df='data/raw/gcn_05_202
     df = pd.read_csv(path_to_folds_df)
     patients = df[df.fold.isin([fold])]
     # make sure we count each patient only once
-    patients_train = patients[patients['modality'] == 'train']['patient'].unique()
-    patients_test = patients[patients['modality'] == 'test']['patient'].unique()
+    patients_train = patients[patients['modality'] == 'train']['patient'].str.lower().unique()
+    patients_test = patients[patients['modality'] == 'test']['patient'].str.lower().unique()
     logging.info('Found {} images/masks in {}'.format(len(x), data_path))
     logging.info('Patients train: {}'.format(len(patients_train)))
 
@@ -487,7 +486,7 @@ def get_trainings_files(data_path, fold=0, path_to_folds_df='data/raw/gcn_05_202
         """Helper to filter one list by a list of substrings"""
         from src.data.Dataset import get_patient
         return [str for str in list_of_filenames
-                if get_patient(str) in list_of_patients]
+                if get_patient(str).lower() in list_of_patients]
 
     x_train = sorted(filter_files_for_fold(x, patients_train))
     y_train = sorted(filter_files_for_fold(y, patients_train))
