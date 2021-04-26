@@ -76,7 +76,7 @@ def copy_meta(new_image, reference_sitk_img):
 
 
 
-def copy_meta_and_save(new_image, reference_sitk_img, full_filename=None, override_spacing=None, copy_direction=True):
+def copy_meta_and_save(new_image, reference_sitk_img, full_filename=None, overwrite_spacing=None, copy_direction=True):
     """
     Copy metadata, UID and structural information from one image to another
     Works also for different dimensions, returns new_image with copied structural info
@@ -146,8 +146,8 @@ def copy_meta_and_save(new_image, reference_sitk_img, full_filename=None, overri
 
             #logging.debug('spatial data_copied: {:0.3f}s'.format(time() - t1))
 
-            if override_spacing:
-                new_image.SetSpacing(override_spacing)
+            if overwrite_spacing:
+                new_image.SetSpacing(overwrite_spacing)
 
         if full_filename:
             # copy uid
@@ -228,7 +228,7 @@ def match_hist(nda,avg):
             nda[t,z] = skimage.exposure.match_histograms(nda[t,z], avg, multichannel=False)
     return nda
 
-def split_one_4d_sitk_in_list_of_3d_sitk(img_4d_sitk, HIST_MATCHING=False, ref=None):
+def split_one_4d_sitk_in_list_of_3d_sitk(img_4d_sitk, HIST_MATCHING=False, ref=None, axis=None):
     """
     Splits a 4D dicom image into a list of 3D sitk images, copy alldicom metadata
     Parameters
@@ -247,10 +247,18 @@ def split_one_4d_sitk_in_list_of_3d_sitk(img_4d_sitk, HIST_MATCHING=False, ref=N
     if HIST_MATCHING and random.randint(0,100) < 50:
         img_4d_nda = match_hist(img_4d_nda, ref)
 
-    # create t 3d volumes
-    list_of_3dsitk = [copy_meta_and_save(new_image=img_3d, reference_sitk_img=img_4d_sitk, full_filename = None, override_spacing = None, copy_direction = True) for img_3d in img_4d_nda]
+    if axis:
+        img_4d_nda = np.split(img_4d_nda,indices_or_sections=img_4d_nda.shape[axis], axis=axis)
+        img_4d_nda = [np.squeeze(n) for n in img_4d_nda]
+        if axis==1:
+            # copy_meta takes the values from spacing, need to swap t and z if we split along the z axis
+            old_spacing = img_4d_sitk.GetSpacing()
+            img_4d_sitk.SetSpacing((old_spacing[0], old_spacing[1], old_spacing[3], old_spacing[2]))
 
-    return list_of_3dsitk
+    # create t 3d volumes
+    list_of_3d_sitk = [copy_meta_and_save(new_image=img_3d, reference_sitk_img=img_4d_sitk, full_filename = None, overwrite_spacing = None, copy_direction = True) for img_3d in img_4d_nda]
+
+    return list_of_3d_sitk
 
 
 def create_3d_volumes_from_4d_files(img_f, mask_f, full_path='data/raw/tetra/3D/', slice_treshhold=2):

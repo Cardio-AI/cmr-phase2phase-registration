@@ -527,7 +527,7 @@ def plot_4d_vol(img_4d, timesteps=[0], save=False, path='temp/', mask_4d=None, f
 
 
 def plot_3d_vol(img_3d, mask_3d=None, timestep=0, save=False, path='reports/figures/tetra/3D_vol/temp/',
-                fig_size=[25, 8], show=True):
+                fig_size=[25, 8], show=True, allow_slicing=True):
     """
     plots a 3D nda, if a mask is given combine mask and image slices
     :param show:
@@ -573,17 +573,20 @@ def plot_3d_vol(img_3d, mask_3d=None, timestep=0, save=False, path='reports/figu
 
     slice_n = 1
     # slice very huge 3D volumes, otherwise they are too small on the plot
-    if (img_3d.shape[0] > 20) and (img_3d.ndim == 3):
+    if (img_3d.shape[0] > 20) and (img_3d.ndim == 3) and allow_slicing:
         slice_n = img_3d.shape[0] // 20
+        logging.info('{} sliced first axis {} by {}'.format('plot_3d_vol',img_3d.shape[0], slice_n ))
 
     img_3d = img_3d[::slice_n]
     mask_3d = mask_3d[::slice_n]if mask_3d is not None else mask_3d
 
     # number of subplots = no of slices in z-direction
     fig = plt.figure(figsize=fig_size)
+    row = 1
 
     for idx, slice in enumerate(img_3d):  # iterate over all slices
-        ax = fig.add_subplot(1, img_3d.shape[0], idx + 1)
+        #row = idx//40 +1
+        ax = fig.add_subplot(row, img_3d.shape[0], idx+1)
 
         if mask_3d is not None:
             ax = show_slice_transparent(img=slice, mask=mask_3d[idx], show=True, ax=ax)
@@ -802,6 +805,18 @@ def plot_radar_chart(df, index=0, ax=None):
 
 def show_phases(gt, pred=None):
 
+    '''
+
+    Parameters
+    ----------
+    gt :
+    pred :
+
+    Returns
+    -------
+
+    '''
+
     mask_given = False
     pred_given = True
     factor = 2
@@ -824,14 +839,6 @@ def show_phases(gt, pred=None):
 
     phases = ['ED', 'MS', 'ES', 'PF', 'MD']
     BATCHSIZE = gt.shape[0]
-    # not necessary as we have the masks
-    #gt_idx = np.argmax(gt, axis=1)
-    #gt_max = gt_idx.max(axis=1).astype(int)
-
-    #if mask_given: # currently not used as we have the masks
-        # get the length of one phase,
-        # as all phases of one patient have the same length
-        #gt_max = np.sum(gt_msk[:,:,0],axis=1).astype(int)
 
     f, axs = plt.subplots(1, BATCHSIZE * factor, figsize=(int(2.5 * factor * BATCHSIZE), 5))
     i = 0

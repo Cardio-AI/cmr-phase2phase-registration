@@ -63,7 +63,7 @@ def get_callbacks(config=None, batch_generator=None, validation_generator=None, 
     callbacks.append(
         tensorflow.keras.callbacks.ReduceLROnPlateau(monitor=config.get('MONITOR_FUNCTION', 'loss'),
                                                      factor=config.get('DECAY_FACTOR', 0.5),
-                                                     patience=config.get('REDUCE_LR_ON_PLAEAU_PATIENCE', 5),
+                                                     patience=config.get('REDUCE_LR_ON_PLATEAU_PATIENCE', 5),
                                                      verbose=1,
                                                      cooldown=2,
                                                      mode=config.get('MONITOR_MODE', 'auto'),

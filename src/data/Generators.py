@@ -17,7 +17,7 @@ from src.visualization.Visualize import plot_3d_vol, show_slice, show_slice_tran
 from src.data.Preprocess import resample_3D, crop_to_square_2d, center_crop_or_resize_2d, \
     clip_quantile, normalise_image, grid_dissortion_2D_or_3D, crop_to_square_2d_or_3d, center_crop_or_resize_2d_or_3d, \
     transform_to_binary_mask, load_masked_img, random_rotate_2D_or_3D, random_rotate90_2D_or_3D, \
-    elastic_transoform_2D_or_3D, augmentation_compose_2d_3d_4d, pad_and_crop
+    elastic_transoform_2D_or_3D, augmentation_compose_2d_3d_4d, pad_and_crop, resample_t_of_4d
 from src.data.Dataset import describe_sitk, get_t_position_from_filename, get_z_position_from_filename, \
     split_one_4d_sitk_in_list_of_3d_sitk
 #    get_patient, get_img_msk_files_from_split_dir
@@ -613,8 +613,21 @@ class PhaseRegressionGenerator(DataGenerator):
         self.AUGMENT_PHASES = config.get('AUGMENT_PHASES', False)
         self.AUGMENT_PHASES_RANGE = config.get('AUGMENT_PHASES_RANGE', (-3,3))
         self.T_SHAPE = config.get('T_SHAPE', 10)
+        self.T_SPACING = config.get('T_SPACING', 10)
         self.PHASES = config.get('PHASES', 5)
         self.REPEAT = config.get('REPEAT_ONEHOT', True)
+        self.TARGET_SMOOTHING = config.get('TARGET_SMOOTHING', False)
+        self.SMOOTHING_KERNEL_SIZE = config.get('SMOOTHING_KERNEL_SIZE', 10)
+        self.SMOOTHING_LOWER_BORDER = config.get('SMOOTHING_LOWER_BORDER', 0.1)
+        self.SMOOTHING_UPPER_BORDER = config.get('SMOOTHING_UPPER_BORDER', 5)
+        self.SMOOTHING_WEIGHT_CORRECT = config.get('SMOOTHING_WEIGHT_CORRECT', 20)
+        self.SIGMA = config.get('GAUS_SIGMA', 1)
+        self.HIST_MATCHING = config.get('HIST_MATCHING', False)
+        self.IMG_INTERPOLATION = config.get('IMG_INTERPOLATION', sitk.sitkLinear)
+        self.MSK_INTERPOLATION = config.get('MSK_INTERPOLATION', sitk.sitkNearestNeighbor)
+        self.AUGMENT_TEMP = config.get('AUGMENT_TEMP', False)
+        self.AUGMENT_TEMP_RANGE = config.get('AUGMENT_TEMP_RANGE', (-5,5))
+
         if self.REPEAT:
             self.TARGET_SHAPE = (self.T_SHAPE, self.PHASES)
         else:
@@ -629,13 +642,7 @@ class PhaseRegressionGenerator(DataGenerator):
         df = pd.read_csv(self.METADATA_FILE)
         self.DF_METADATA = df[['patient', 'ED#', 'MS#', 'ES#', 'PF#', 'MD#']]
 
-        self.TARGET_SMOOTHING = config.get('TARGET_SMOOTHING', False)
-        self.SMOOTHING_KERNEL_SIZE = config.get('SMOOTHING_KERNEL_SIZE', 10)
-        self.SMOOTHING_LOWER_BORDER = config.get('SMOOTHING_LOWER_BORDER', 0.1)
-        self.SMOOTHING_UPPER_BORDER = config.get('SMOOTHING_UPPER_BORDER', 5)
-        self.SMOOTHING_WEIGHT_CORRECT = config.get('SMOOTHING_WEIGHT_CORRECT', 20)
-        self.SIGMA = config.get('GAUS_SIGMA', 1)
-        self.HIST_MATCHING = config.get('HIST_MATCHING', False)
+
 
         # create a 1D kernel with linearly increasing/decreasing values in the range(lower,upper),
         # insert a fixed number in the middle, as this reflect the correct idx,
@@ -650,12 +657,6 @@ class PhaseRegressionGenerator(DataGenerator):
                      'Repeat volume: \n{}'.format(self.AUGMENT_PHASES, self.REPEAT))
 
         self.MASKS = None  # need to check if this is still necessary!
-
-        # load an averaged acdc image as histogram reference
-        #self.ref = np.load('/mnt/ssd/data/acdc/avg.npy')
-        #ref_idx = random.choice(self.LIST_IDS)
-        #ref = sitk.GetArrayFromImage(sitk.ReadImage((choice(self.IMAGES))))
-        #self.ref = ref[ref.shape[0]//2,ref.shape[1]//2]
 
         # define a random seed for albumentations
         random.seed(config.get('SEED', 42))
@@ -732,6 +733,7 @@ class PhaseRegressionGenerator(DataGenerator):
 
         ref = None
         if self.HIST_MATCHING:
+            # use a random image, given to this generator, as histogram template for histogram matching augmentation
             ref = sitk.GetArrayFromImage(sitk.ReadImage((choice(self.IMAGES))))
             ref = ref[choice(list(range(ref.shape[0]))), choice(list(range(ref.shape[1])))]
         t0 = time()
@@ -741,6 +743,14 @@ class PhaseRegressionGenerator(DataGenerator):
         # use the load_masked_img wrapper to enable masking of the images, currently not necessary, but nice to have
         model_inputs = load_masked_img(sitk_img_f=x, mask=self.MASKING_IMAGE,
                                        masking_values=self.MASKING_VALUES, replace=self.REPLACE_WILDCARD)
+
+        # resample the temporal resolution
+        # if AUGMENT_TEMP --> add an temporal augmentation factor within the range given by: AUGMENT_TEMP_RANGE
+        t_spacing = self.T_SPACING
+        if self.AUGMENT_TEMP: t_spacing = t_spacing + random.randint(self.AUGMENT_TEMP_RANGE[0], self.AUGMENT_TEMP_RANGE[1])
+        #logging.info('t-spacing: {}'.format(t_spacing))
+        temporal_sampling_factor = model_inputs.GetSpacing()[-1] / t_spacing
+        model_inputs = resample_t_of_4d(model_inputs, t_spacing=t_spacing, interpolation=self.IMG_INTERPOLATION, ismask=False)
 
         # Create a list of 3D volumes for resampling
         # apply histogram matching if given by config
@@ -764,6 +774,10 @@ class PhaseRegressionGenerator(DataGenerator):
         indices = self.DF_METADATA[self.DF_METADATA.patient.str.contains(patient_str)][
             ['ED#', 'MS#', 'ES#', 'PF#', 'MD#']]
         indices = indices.values[0].astype(int) - 1
+
+        # scale the idx as we resampled along t (we need to resample the indicies in the same way)
+        indices = np.round(indices * temporal_sampling_factor).astype(int)
+
         onehot = np.zeros((indices.size, len(model_inputs)))
         onehot[np.arange(indices.size), indices] = self.SMOOTHING_WEIGHT_CORRECT
 

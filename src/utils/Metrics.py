@@ -313,7 +313,7 @@ class MSE(tf.keras.losses.Loss):
 
 
             if self.masked:
-                y_msk = tf.cast(y_pred, tf.float32) + 1  # weight the first area by 2
+                y_msk = tf.cast(y_true, tf.float32) + 1  # weight the first area by 2
                 y_true = y_msk * y_true
                 y_pred =  y_msk * y_pred
 

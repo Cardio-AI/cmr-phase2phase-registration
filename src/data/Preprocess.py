@@ -1,4 +1,5 @@
 import logging
+from logging import info, debug
 import sys
 import os
 import SimpleITK as sitk
@@ -6,7 +7,7 @@ import SimpleITK as sitk
 from sklearn.preprocessing import RobustScaler
 from sklearn.preprocessing import StandardScaler
 from skimage.transform import resize
-from src.data.Dataset import describe_sitk, get_metadata_maybe
+from src.data.Dataset import describe_sitk, get_metadata_maybe, copy_meta_and_save, get_patient
 import numpy as np
 from src.visualization.Visualize import plot_3d_vol
 from albumentations import GridDistortion, RandomRotate90, Compose, ReplayCompose, Flip, Transpose, OneOf, IAAAdditiveGaussianNoise, \
@@ -130,6 +131,116 @@ def filter_small_vectors_2d(flowfield_2d, normalize=True, thresh_z=(-0.7, 0.7), 
         return normalise_image(flow_)
     else:
         return flow_
+
+
+def resample_t_of_4d(sitk_img, t_spacing=20, interpolation=sitk.sitkLinear, ismask=False):
+    '''
+
+    Parameters
+    ----------
+    sitk_img :
+    t_spacing :
+    interpolation :
+    ismask :
+
+    Returns
+    -------
+
+    '''
+
+    from src.data.Dataset import split_one_4d_sitk_in_list_of_3d_sitk
+
+    debug('before resample: {}'.format(sitk_img.GetSize()))
+    debug('before resample: {}'.format(sitk_img.GetSpacing()))
+    z_spacing = sitk_img.GetSpacing()[2]
+    # unstack 4D volume along t
+    images = split_one_4d_sitk_in_list_of_3d_sitk(sitk_img, axis=1)
+
+    temp_slice = images[0]
+    t_size = temp_slice.GetSize()
+    t_spacing_old = temp_slice.GetSpacing()
+
+    # calculate the sampling factor, and the corresponding new size in t
+    sampling_factor = t_spacing_old[-1] / t_spacing
+    debug('Sampling factor: {}'.format(sampling_factor))
+    new_t_size = int(np.ceil(t_size[-1] * sampling_factor))
+    target_size = (t_size[0], t_size[1], new_t_size)
+    debug('2D+t target size: {}'.format(target_size))
+    target_spacing = (t_spacing_old[0], t_spacing_old[1], t_spacing)
+
+    resampled_cmr = list(
+        map(lambda x:
+            resample_3D(x, size=target_size, spacing=target_spacing, interpolate=interpolation), images))
+
+    # get array from list of 2d+t sitk images, stack along z, unstack along t --> list of 3D volumes
+    resampled_cmr_nda = list(map(sitk.GetArrayFromImage, resampled_cmr))
+    debug('Before stack: {}'.format(resampled_cmr_nda[0].shape))
+    resampled_cmr_nda = np.stack(resampled_cmr_nda, axis=1)
+
+    if ismask:
+        idxs_orig = get_mask_idxs(sitk_img)
+        # scale the idx by the resampling factor, use this to filter the doubled resampled masks
+        # resampling and filtering of the masks to avoid double time steps/phases
+        idxs_scaled = np.round(idxs_orig * sampling_factor).astype(int)
+        debug('scaled idx: {}'.format(idxs_scaled))
+        idxs_scaled = np.clip(idxs_scaled, a_min=0, a_max=resampled_cmr_nda.shape[0] - 1)
+        debug('scaled, clipped idx: {}'.format(idxs_scaled))
+        temp = np.zeros_like(resampled_cmr_nda)
+        temp[idxs_scaled] = resampled_cmr_nda[idxs_scaled]
+        resampled_cmr_nda = temp
+
+        mask_idx = np.max(resampled_cmr_nda, axis=(1, 2, 3))
+        debug('max: {}'.format(mask_idx))
+        idxs_resampled = np.where(mask_idx >= 3)[0].astype(int)
+        debug('after stack: {}'.format(resampled_cmr_nda.shape))
+        debug('idxs of resampled 4d vol: {}'.format(idxs_resampled))
+        assert len(idxs_resampled) == 5
+
+    # split into t x 3D volumes, which is the format we need for sitk to join a series of 3D volumes
+    resampled_cmr_nda = np.split(resampled_cmr_nda, indices_or_sections=resampled_cmr_nda.shape[0], axis=0)
+    debug('after split: {}'.format(len(resampled_cmr_nda)))
+    resampled_cmr_sitk = list(map(lambda x: sitk.GetImageFromArray(np.squeeze(x)), resampled_cmr_nda))
+    debug('after as sitk: {}'.format(resampled_cmr_sitk[0].GetSize()))
+    resampled_cmr_sitk = sitk.JoinSeries(resampled_cmr_sitk)
+
+    full_spacing = (t_spacing_old[0], t_spacing_old[1], z_spacing, t_spacing)
+    resampled_cmr_sitk = copy_meta_and_save(resampled_cmr_sitk, sitk_img, None, overwrite_spacing=full_spacing)
+    debug(resampled_cmr_sitk.GetSize())
+    debug(resampled_cmr_sitk.GetSpacing())
+
+    return resampled_cmr_sitk
+
+
+def get_mask_idxs(sitk_img, slice_threshold=2):
+    '''
+    get valid temporal indices, with a slice threshold, as we have some slices labelled along all time steps
+    Parameters
+    ----------
+    sitk_img : sitk.Image of a 4D mask
+
+    Returns (list) indices of the temporal axis, where we have a mask volume
+    -------
+
+    '''
+    # from mask2idx for mask and resampled mask
+    #
+    timesteps = []
+    # get indexes for masked volumes
+    # filter 3d volumes with less masked slices than threshold
+    for t, nda_3d in enumerate(sitk.GetArrayViewFromImage(sitk_img)):
+        if nda_3d.max() > 0:  # 3d volume with masks
+            masked_slices = 0
+            success_ = False
+            for slice_ in nda_3d:  # check how many slices are masked
+                if slice_.max() > 0:
+                    masked_slices += 1
+                if masked_slices > slice_threshold:
+                    timesteps.append(t)
+                    success_ = True
+                    break
+            if not success_: logging.debug('filter {}t of volume by masked slices threshold'.format(t))
+    idxs_orig = np.array(timesteps).astype(int)
+    return idxs_orig
 
 
 def resample_3D(sitk_img, size=(256, 256, 12), spacing=(1.25, 1.25, 8), interpolate=sitk.sitkNearestNeighbor):
