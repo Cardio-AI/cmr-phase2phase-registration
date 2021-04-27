@@ -207,7 +207,7 @@ class create_RegistrationModel(tf.keras.Model):
         flow = Conv(ndims, kernel_size=3, padding='same',
                     kernel_initializer=kernel_init, name='unet2flow')(pre_flow)
 
-        transformed = nrn_layers.SpatialTransformer(interp_method=interp_method, indexing=indexing, ident=False,
+        transformed = nrn_layers.SpatialTransformer(interp_method=interp_method, indexing=indexing, ident=True,
                                           fill_value=0, name='deformable_layer')([input_tensor, flow])
 
 

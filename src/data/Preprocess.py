@@ -9,7 +9,7 @@ from sklearn.preprocessing import StandardScaler
 from skimage.transform import resize
 from src.data.Dataset import describe_sitk, get_metadata_maybe, copy_meta_and_save, get_patient
 import numpy as np
-from src.visualization.Visualize import plot_3d_vol
+
 from albumentations import GridDistortion, RandomRotate90, Compose, ReplayCompose, Flip, Transpose, OneOf, IAAAdditiveGaussianNoise, \
     MotionBlur, MedianBlur, Blur, OpticalDistortion, IAAPiecewiseAffine, CLAHE, IAASharpen, IAAEmboss, \
     RandomBrightnessContrast, HueSaturationValue, ElasticTransform, CenterCrop, PadIfNeeded, RandomBrightness, Downscale, ShiftScaleRotate
@@ -1153,11 +1153,15 @@ def normalise_image(img_nda, normaliser='minmax'):
 
 def pad_and_crop(ndarray, target_shape=(10, 10, 10)):
     """
-    Center pad and crop a np.ndarray with any shape to a given target shape
-    Parameters
-    Pad and crop must be the complementary
-    pad = floor(x),floor(x)+1
-    crop = floor(x)+1, floor(x)
+    Center pad and crop a np.ndarray in one step
+    Accepts any shape (2D,3D, ..nD) to a given target shape
+    Expects ndarray.ndim == len(target_shape)
+    This method is idempotent, which means the pad operation is the numeric inverse of the crop operation
+    Pad and crop must be the complementary,
+    In cases of non odd shapes in any dimension this method defines the center as:
+    pad_along_dimension_n = floor(border_n/2),floor(border_n/2)+1
+    crop_along_dimension_n = floor(margin_n/2)+1, floor(margin_n/2)
+    Parameters:
     ----------
     ndarray : numpy.ndarray of any shape
     target_shape : must have the same length as ndarray.ndim
@@ -1177,6 +1181,7 @@ def pad_and_crop(ndarray, target_shape=(10, 10, 10)):
     # take the same numbers for left or right padding/cropping if the difference is dividable by 2
     # else take floor(x),floor(x)+1 for PAD (diff<0)
     # else take floor(x)+1, floor(x) for CROP (diff>0)
+    # This behaviour is the same for each axis
     d = list((int(x // 2), int(x // 2)) if x % 2 == 0 else (int(np.floor(x / 2)), int(np.floor(x / 2) + 1)) if x<0 else (int(np.floor(x / 2)+1), int(np.floor(x / 2))) for x in diff)
     # replace the second slice parameter if it is None, which slice until end of ndarray
     d = list((abs(x), abs(y)) if y != 0 else (abs(x), None) for x, y in d)
@@ -1189,7 +1194,7 @@ def pad_and_crop(ndarray, target_shape=(10, 10, 10)):
     crop = list(i if b else (None, None) for i, b in zip(d, crop_bool))
 
     # Create one tuple of slice calls per pad/crop
-    # crop or pad from dif:-dif if second param not None, else replace by None to slice until the end
+    # crop or pad from dif:-dif if second param is not None, else replace by None to slice until the end
     # slice params: slice(start,end,steps)
     pad = tuple(slice(i[0], -i[1]) if i[1] != None else slice(i[0], i[1]) for i in pad)
     crop = tuple(slice(i[0], -i[1]) if i[1] != None else slice(i[0], i[1]) for i in crop)
