@@ -1,15 +1,24 @@
 from tensorflow.python.keras.layers import LSTM, Bidirectional
 
 from src.models.KerasLayers import ConvEncoder
+import sys
 import numpy as np
 import tensorflow
 import tensorflow as tf
+import tensorflow.keras.layers as KL
 from tensorflow.keras.layers import Input
 from tensorflow.keras.models import Model
 from tensorflow.keras import metrics as metr
+
+from src.models.Unets import create_unet
 from src.utils import Metrics as own_metr
 
 from src.models.ModelUtils import get_optimizer
+
+sys.path.append('src/ext/neuron')
+sys.path.append('src/ext/pynd-lib')
+sys.path.append('src/ext/pytools-lib')
+import src.ext.neuron.neuron.layers as nrn_layers
 
 
 def create_PhaseRegressionModel(config, networkname='PhaseRegressionModel'):
@@ -159,6 +168,66 @@ def create_PhaseRegressionModel(config, networkname='PhaseRegressionModel'):
         )
 
         return model
+
+
+class create_RegistrationModel(tf.keras.Model):
+    """
+    A registration wrapper for 3D image2image registration
+    """
+    def __init__(self, config=None):
+        if config is None:
+            config = {}
+        input_shape = config.get('DIM', [10, 224, 224])
+        T_SHAPE = config.get('T_SHAPE', 35)
+        PHASES = config.get('PHASES', 5)
+        input_tensor = Input(shape=(T_SHAPE, *input_shape, 1))
+        # define standard values according to the convention over configuration paradigm
+        activation = config.get('ACTIVATION', 'elu')
+        batch_norm = config.get('BATCH_NORMALISATION', False)
+        pad = config.get('PAD', 'same')
+        kernel_init = config.get('KERNEL_INIT', 'he_normal')
+        m_pool = config.get('M_POOL', (1, 2, 2))
+        f_size = config.get('F_SIZE', (3, 3, 3))
+        filters = config.get('FILTERS', 16)
+        drop_1 = config.get('DROPOUT_MIN', 0.3)
+        drop_3 = config.get('DROPOUT_MAX', 0.5)
+        bn_first = config.get('BN_FIRST', False)
+        ndims = len(config.get('DIM', [10, 224, 224]))
+        depth = config.get('DEPTH', 4)
+        Conv = getattr(KL, 'Conv{}D'.format(self.ndims))
+        indexing = 'ij'
+        interp_method = 'linear'
+
+        input_tensor = Input(shape=(T_SHAPE, *input_shape, 1))
+
+        unet = create_unet(config)
+
+        pre_flow = unet(input_tensor)
+
+        flow = Conv(ndims, kernel_size=3, padding='same',
+                    kernel_initializer=kernel_init, name='unet2flow')(pre_flow)
+
+        transformed = nrn_layers.SpatialTransformer(interp_method=interp_method, indexing=indexing, ident=False,
+                                          fill_value=0, name='deformable_layer')([input_tensor, flow])
+
+
+        outputs = [transformed, flow]
+
+        super().__init__(name='simpleregister', inputs=[input_tensor], outputs=outputs)
+
+        """losses = [own_metr.MSE(masked=False)]
+        # losses = [own_metr.Meandiff_loss()]
+
+        model = Model(inputs=[input_tensor], outputs=outputs, name='registrationmodel')
+        model.compile(
+            optimizer=get_optimizer(config),
+            loss=losses,
+            metrics=[own_metr.mse_wrapper, own_metr.ca_wrapper, own_metr.meandiff]  #
+        )
+        return model"""
+
+
+
 
 
 

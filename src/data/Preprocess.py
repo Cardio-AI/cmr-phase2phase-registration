@@ -200,7 +200,7 @@ def resample_t_of_4d(sitk_img, t_spacing=20, interpolation=sitk.sitkLinear, isma
     resampled_cmr_nda = np.split(resampled_cmr_nda, indices_or_sections=resampled_cmr_nda.shape[0], axis=0)
     debug('after split: {}'.format(len(resampled_cmr_nda)))
     resampled_cmr_sitk = list(map(lambda x: sitk.GetImageFromArray(np.squeeze(x)), resampled_cmr_nda))
-    debug('after as sitk: {}'.format(resampled_cmr_sitk[0].GetSize()))
+    debug('after as sitk: {} x {}'.format(len(resampled_cmr_nda), resampled_cmr_sitk[0].GetSize()))
     resampled_cmr_sitk = sitk.JoinSeries(resampled_cmr_sitk)
 
     full_spacing = (t_spacing_old[0], t_spacing_old[1], z_spacing, t_spacing)

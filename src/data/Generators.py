@@ -748,7 +748,7 @@ class PhaseRegressionGenerator(DataGenerator):
         # if AUGMENT_TEMP --> add an temporal augmentation factor within the range given by: AUGMENT_TEMP_RANGE
         t_spacing = self.T_SPACING
         if self.AUGMENT_TEMP: t_spacing = t_spacing + random.randint(self.AUGMENT_TEMP_RANGE[0], self.AUGMENT_TEMP_RANGE[1])
-        #logging.info('t-spacing: {}'.format(t_spacing))
+        logging.debug('t-spacing: {}'.format(t_spacing))
         temporal_sampling_factor = model_inputs.GetSpacing()[-1] / t_spacing
         model_inputs = resample_t_of_4d(model_inputs, t_spacing=t_spacing, interpolation=self.IMG_INTERPOLATION, ismask=False)
 
@@ -777,6 +777,7 @@ class PhaseRegressionGenerator(DataGenerator):
 
         # scale the idx as we resampled along t (we need to resample the indicies in the same way)
         indices = np.round(indices * temporal_sampling_factor).astype(int)
+        indices = np.clip(indices, a_min=0, a_max=len(model_inputs)-1)
 
         onehot = np.zeros((indices.size, len(model_inputs)))
         onehot[np.arange(indices.size), indices] = self.SMOOTHING_WEIGHT_CORRECT
@@ -914,7 +915,8 @@ class PhaseRegressionGenerator(DataGenerator):
         # Normalise the one-hot vector, with softmax
         """onehot = np.apply_along_axis(
             lambda x: np.exp(x)/ np.sum(np.exp(x)),
-            ax_to_normalise, onehot)""" # For the MSE-loss we dont need tht normalisation step
+            ax_to_normalise, onehot)"""
+        # For the MSE-loss we dont need that normalisation step
         #logging.debug('normalised (sum phases per timestep == 1): \n{}'.format(onehot))
         self.__plot_state_if_debug__(img=model_inputs[len(model_inputs) // 2], start_time=t1,
                                      step='clipped cropped and pad')
