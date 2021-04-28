@@ -431,8 +431,8 @@ class MotionDataGenerator(DataGenerator):
             # if this is the case we have a sequence of 3D volumes or a sequence of 2D images
             self.INPUT_VOLUMES = len(x[0])
             self.OUTPUT_VOLUMES = len(y[0])
-            self.X_SHAPE = np.empty((self.BATCHSIZE, self.INPUT_VOLUMES, *self.DIM), dtype=np.float32)
-            self.Y_SHAPE = np.empty((self.BATCHSIZE, self.OUTPUT_VOLUMES, *self.DIM), dtype=np.float32)
+            self.X_SHAPE = np.empty((self.BATCHSIZE, self.INPUT_VOLUMES, *self.DIM,1), dtype=np.float32)
+            self.Y_SHAPE = np.empty((self.BATCHSIZE, self.OUTPUT_VOLUMES, *self.DIM,1), dtype=np.float32)
 
         self.MASKS = None  # need to check if this is still necessary!
 
@@ -493,7 +493,9 @@ class MotionDataGenerator(DataGenerator):
 
         logging.debug('Batchsize: {} preprocessing took: {:0.3f} sec'.format(self.BATCHSIZE, time() - t0))
 
-        return x, y
+        zeros = np.zeros((*x.shape[:-1],3), dtype=np.float32)
+
+        return tuple([[x,zeros], [y, zeros]])
 
     def __preprocess_one_image__(self, i, ID):
 
@@ -596,7 +598,7 @@ class MotionDataGenerator(DataGenerator):
         model_outputs = normalise_image(np.stack(model_outputs), normaliser=self.SCALER)  # normalise per 4D
         self.__plot_state_if_debug__(model_inputs[0], model_outputs[0], t1, 'clipped cropped and pad')
 
-        return np.stack(model_inputs), np.stack(model_outputs), i, ID, time() - t0
+        return np.stack(model_inputs)[...,np.newaxis], np.stack(model_outputs)[...,np.newaxis], i, ID, time() - t0
 
 
 class PhaseRegressionGenerator(DataGenerator):
@@ -627,6 +629,7 @@ class PhaseRegressionGenerator(DataGenerator):
         self.MSK_INTERPOLATION = config.get('MSK_INTERPOLATION', sitk.sitkNearestNeighbor)
         self.AUGMENT_TEMP = config.get('AUGMENT_TEMP', False)
         self.AUGMENT_TEMP_RANGE = config.get('AUGMENT_TEMP_RANGE', (-5,5))
+        self.RESAMPLE_T = config.get('RESAMPLE_T', False)
 
         if self.REPEAT:
             self.TARGET_SHAPE = (self.T_SHAPE, self.PHASES)
@@ -749,9 +752,11 @@ class PhaseRegressionGenerator(DataGenerator):
         t_spacing = self.T_SPACING
         if self.AUGMENT_TEMP: t_spacing = t_spacing + random.randint(self.AUGMENT_TEMP_RANGE[0], self.AUGMENT_TEMP_RANGE[1])
         logging.debug('t-spacing: {}'.format(t_spacing))
-        temporal_sampling_factor = model_inputs.GetSpacing()[-1] / t_spacing
-        model_inputs = resample_t_of_4d(model_inputs, t_spacing=t_spacing, interpolation=self.IMG_INTERPOLATION, ismask=False)
-
+        if self.RESAMPLE_T:
+            temporal_sampling_factor = model_inputs.GetSpacing()[-1] / t_spacing
+            model_inputs = resample_t_of_4d(model_inputs, t_spacing=t_spacing, interpolation=self.IMG_INTERPOLATION, ismask=False)
+        else:
+            temporal_sampling_factor = 1 # dont scale the indices if we dont resample T
         # Create a list of 3D volumes for resampling
         # apply histogram matching if given by config
         model_inputs = split_one_4d_sitk_in_list_of_3d_sitk(model_inputs, HIST_MATCHING=self.HIST_MATCHING, ref=ref)

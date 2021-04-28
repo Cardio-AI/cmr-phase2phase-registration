@@ -170,61 +170,67 @@ def create_PhaseRegressionModel(config, networkname='PhaseRegressionModel'):
         return model
 
 
-class create_RegistrationModel(tf.keras.Model):
+def create_RegistrationModel(config):
     """
     A registration wrapper for 3D image2image registration
     """
-    def __init__(self, config=None):
-        if config is None:
-            config = {}
-        input_shape = config.get('DIM', [10, 224, 224])
-        T_SHAPE = config.get('T_SHAPE', 35)
-        PHASES = config.get('PHASES', 5)
-        input_tensor = Input(shape=(T_SHAPE, *input_shape, 1))
-        # define standard values according to the convention over configuration paradigm
-        activation = config.get('ACTIVATION', 'elu')
-        batch_norm = config.get('BATCH_NORMALISATION', False)
-        pad = config.get('PAD', 'same')
-        kernel_init = config.get('KERNEL_INIT', 'he_normal')
-        m_pool = config.get('M_POOL', (1, 2, 2))
-        f_size = config.get('F_SIZE', (3, 3, 3))
-        filters = config.get('FILTERS', 16)
-        drop_1 = config.get('DROPOUT_MIN', 0.3)
-        drop_3 = config.get('DROPOUT_MAX', 0.5)
-        bn_first = config.get('BN_FIRST', False)
-        ndims = len(config.get('DIM', [10, 224, 224]))
-        depth = config.get('DEPTH', 4)
-        Conv = getattr(KL, 'Conv{}D'.format(self.ndims))
-        indexing = 'ij'
-        interp_method = 'linear'
 
-        input_tensor = Input(shape=(T_SHAPE, *input_shape, 1))
-
-        unet = create_unet(config)
-
-        pre_flow = unet(input_tensor)
-
-        flow = Conv(ndims, kernel_size=3, padding='same',
-                    kernel_initializer=kernel_init, name='unet2flow')(pre_flow)
-
-        transformed = nrn_layers.SpatialTransformer(interp_method=interp_method, indexing=indexing, ident=True,
-                                          fill_value=0, name='deformable_layer')([input_tensor, flow])
+    if config is None:
+        config = {}
+    input_shape = config.get('DIM', [10, 224, 224])
+    T_SHAPE = config.get('T_SHAPE', 5)
+    PHASES = config.get('PHASES', 5)
+    input_tensor = Input(shape=(T_SHAPE, *input_shape, 1))
+    input_tensor_empty = Input(shape=(T_SHAPE, *input_shape, 3))
+    # define standard values according to the convention over configuration paradigm
+    activation = config.get('ACTIVATION', 'elu')
+    batch_norm = config.get('BATCH_NORMALISATION', False)
+    pad = config.get('PAD', 'same')
+    kernel_init = config.get('KERNEL_INIT', 'he_normal')
+    m_pool = config.get('M_POOL', (1, 2, 2))
+    f_size = config.get('F_SIZE', (3, 3, 3))
+    filters = config.get('FILTERS', 16)
+    drop_1 = config.get('DROPOUT_MIN', 0.3)
+    drop_3 = config.get('DROPOUT_MAX', 0.5)
+    bn_first = config.get('BN_FIRST', False)
+    ndims = len(input_shape)
+    depth = config.get('DEPTH', 4)
+    indexing = 'ij'
+    interp_method = 'linear'
+    Conv = getattr(KL, 'Conv{}D'.format(ndims))
+    Conv_layer = Conv(ndims, kernel_size=3, padding='same',
+                kernel_initializer=tensorflow.keras.initializers.RandomNormal(mean=0.0, stddev=1e-5), name='unet2flow')
+    st_layer = nrn_layers.SpatialTransformer(interp_method=interp_method, indexing=indexing, ident=True,
+                                      fill_value=0, name='deformable_layer')
 
 
-        outputs = [transformed, flow]
+    unet = create_unet(config, single_model=False)
 
-        super().__init__(name='simpleregister', inputs=[input_tensor], outputs=outputs)
+    input_vols = tf.unstack(input_tensor, axis=1)
+    print(input_vols[0].shape)
+    import random
+    indicies = list(tf.range(len(input_vols)))
+    zipped = list(zip(input_vols, indicies))
+    random.shuffle(zipped)
+    input_vols_shuffled, indicies = zip(*zipped)
+    pre_flows_shuffled = [unet(vol) for vol in input_vols_shuffled]
+    flows_shuffled = [Conv_layer(vol) for vol in pre_flows_shuffled]  # m.shape --> batchsize, timesteps, 6
+    flows, _ = zip(*sorted(zip(flows_shuffled, indicies), key=lambda tup: tup[1]))
 
-        """losses = [own_metr.MSE(masked=False)]
-        # losses = [own_metr.Meandiff_loss()]
 
-        model = Model(inputs=[input_tensor], outputs=outputs, name='registrationmodel')
-        model.compile(
-            optimizer=get_optimizer(config),
-            loss=losses,
-            metrics=[own_metr.mse_wrapper, own_metr.ca_wrapper, own_metr.meandiff]  #
-        )
-        return model"""
+    #pre_flows = unet(input_tensor)
+
+    #flow = Conv(ndims, kernel_size=3, padding='same',
+    #           kernel_initializer=kernel_init, name='unet2flow')(pre_flow)
+
+    transformed = [st_layer([input_vol, flow]) for input_vol, flow in zip(input_vols, flows)]
+    transformed = tf.stack(transformed, axis=1)
+    flow = tf.stack(flows, axis=1)
+
+    outputs = [transformed, flow]
+
+    #super().__init__(name='simpleregister', inputs=[input_tensor, input_tensor_empty], outputs=outputs)
+    return Model(name='simpleregister', inputs=[input_tensor], outputs=outputs)
 
 
 

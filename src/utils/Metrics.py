@@ -328,3 +328,122 @@ def ca_wrapper(y_true, y_pred):
     y_true, y_len = tf.unstack(y_true,num=2, axis=1)
     y_pred, _ = tf.unstack(y_pred,num=2, axis=1)
     return tf.keras.metrics.categorical_accuracy(y_true, y_pred)
+
+class Grad:
+    """
+    N-D gradient loss.
+    loss_mult can be used to scale the loss value - this is recommended if
+    the gradient is computed on a downsampled vector field (where loss_mult
+    is equal to the downsample factor).
+    """
+
+    def __init__(self, penalty='l1', loss_mult=None):
+        self.penalty = penalty
+        self.loss_mult = loss_mult
+
+    def _diffs(self, y):
+        vol_shape = y.get_shape().as_list()[1:-1]
+        ndims = len(vol_shape)
+
+        df = [None] * ndims
+        for i in range(ndims):
+            d = i + 1
+            # permute dimensions to put the ith dimension first
+            r = [d, *range(d), *range(d + 1, ndims + 2)]
+            y = K.permute_dimensions(y, r)
+            dfi = y[1:, ...] - y[:-1, ...]
+
+            # permute back
+            # note: this might not be necessary for this loss specifically,
+            # since the results are just summed over anyway.
+            r = [*range(1, d + 1), 0, *range(d + 1, ndims + 2)]
+            r = [d, *range(1, d), 0, *range(d + 1, ndims + 2)]
+            df[i] = K.permute_dimensions(dfi, r)
+
+        return df
+
+    def loss(self, _, y_pred):
+
+        if self.penalty == 'l1':
+            dif = [tf.abs(f) for f in self._diffs(y_pred)]
+        else:
+            assert self.penalty == 'l2', 'penalty can only be l1 or l2. Got: %s' % self.penalty
+            dif = [f * f for f in self._diffs(y_pred)]
+
+        df = [tf.reduce_mean(K.batch_flatten(f), axis=-1) for f in dif]
+        grad = tf.add_n(df) / len(df)
+
+        if self.loss_mult is not None:
+            grad *= self.loss_mult
+
+        return grad
+
+class NCC:
+    """
+    Local (over window) normalized cross correlation loss.
+    """
+
+    def __init__(self, win=None, eps=1e-5):
+        self.win = win
+        self.eps = eps
+
+    def ncc(self, I, J):
+        # get dimension of volume
+        # assumes I, J are sized [batch_size, *vol_shape, nb_feats]
+        ndims = len(I.get_shape().as_list()) - 2
+        assert ndims in [1, 2, 3], "volumes should be 1 to 3 dimensions. found: %d" % ndims
+
+        # set window size
+        if self.win is None:
+            self.win = [9] * ndims
+
+        # get convolution function
+        conv_fn = getattr(tf.nn, 'conv%dd' % ndims)
+
+        # compute CC squares
+        I2 = I * I
+        J2 = J * J
+        IJ = I * J
+
+        # compute filters
+        in_ch = J.get_shape().as_list()[-1]
+        sum_filt = tf.ones([*self.win, in_ch, 1])
+        strides = 1
+        if ndims > 1:
+            strides = [1] * (ndims + 2)
+
+        # compute local sums via convolution
+        padding = 'SAME'
+        I_sum = conv_fn(I, sum_filt, strides, padding)
+        J_sum = conv_fn(J, sum_filt, strides, padding)
+        I2_sum = conv_fn(I2, sum_filt, strides, padding)
+        J2_sum = conv_fn(J2, sum_filt, strides, padding)
+        IJ_sum = conv_fn(IJ, sum_filt, strides, padding)
+
+        # compute cross correlation
+        win_size = np.prod(self.win) * in_ch
+        u_I = I_sum / win_size
+        u_J = J_sum / win_size
+
+        cross = IJ_sum - u_J * I_sum - u_I * J_sum + u_I * u_J * win_size  # TODO: simplify this
+        I_var = I2_sum - 2 * u_I * I_sum + u_I * u_I * win_size
+        J_var = J2_sum - 2 * u_J * J_sum + u_J * u_J * win_size
+
+        cc = cross * cross / (I_var * J_var + self.eps)
+
+        # return mean cc for each entry in batch
+        return tf.reduce_mean(K.batch_flatten(cc), axis=-1)
+
+    def loss(self, y_true, y_pred):
+        return - self.ncc(y_true, y_pred)
+
+class MSE_:
+    """
+    Sigma-weighted mean squared error for image reconstruction.
+    """
+
+    def __init__(self, image_sigma=1.0):
+        self.image_sigma = image_sigma
+
+    def loss(self, y_true, y_pred):
+        return 1.0 / (self.image_sigma ** 2) * K.mean(K.square(y_true - y_pred))

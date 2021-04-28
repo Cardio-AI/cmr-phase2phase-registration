@@ -626,7 +626,7 @@ def unet(activation, batch_norm, bn_first, depth, drop_3, dropouts, f_size, filt
             # remember the max-pooled output from the previous layer
             input_tensor = encoder[-1][1]
         encoder.append(
-            ownkl.downsampling_block(inputs=input_tensor,
+            ownkl.downsampling_block_fn(inputs=input_tensor,
                                      filters=filters,
                                      f_size=f_size,
                                      activation=activation,
@@ -640,11 +640,11 @@ def unet(activation, batch_norm, bn_first, depth, drop_3, dropouts, f_size, filt
         filters *= 2
     # middle part
     input_tensor = encoder[-1][1]
-    fully = ownkl.conv_layer(inputs=input_tensor, filters=filters, f_size=f_size,
+    fully = ownkl.conv_layer_fn(inputs=input_tensor, filters=filters, f_size=f_size,
                              activation=activation, batch_norm=batch_norm, kernel_init=kernel_init,
                              pad=pad, bn_first=bn_first, ndims=ndims)
     fully = Dropout(drop_3)(fully)
-    fully = ownkl.conv_layer(inputs=fully, filters=filters, f_size=f_size,
+    fully = ownkl.conv_layer_fn(inputs=fully, filters=filters, f_size=f_size,
                              activation=activation, batch_norm=batch_norm, kernel_init=kernel_init,
                              pad=pad, bn_first=bn_first, ndims=ndims)
     # build the decoder
@@ -656,7 +656,7 @@ def unet(activation, batch_norm, bn_first, depth, drop_3, dropouts, f_size, filt
         input_skip = encoder.pop()[0]
         filters //= 2
         decoder.append(
-            ownkl.upsampling_block(lower_input=input_lower,
+            ownkl.upsampling_block_fn(lower_input=input_lower,
                                    conv_input=input_skip,
                                    use_upsample=use_upsample,
                                    filters=filters,
