@@ -363,7 +363,7 @@ class Grad:
         return df
 
     def loss(self, _, y_pred):
-
+        #print(tf.reduce_sum(y_pred).numpy())
         if self.penalty == 'l1':
             dif = [tf.abs(f) for f in self._diffs(y_pred)]
         else:

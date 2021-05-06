@@ -502,7 +502,7 @@ class MotionDataGenerator(DataGenerator):
         t0 = time()
 
         x = self.IMAGES[ID]
-        y = self.IMAGES[ID]
+        y = self.LABELS[ID]
 
         if not isinstance(x, list):
             x = [x]
@@ -598,7 +598,7 @@ class MotionDataGenerator(DataGenerator):
         model_outputs = normalise_image(np.stack(model_outputs), normaliser=self.SCALER)  # normalise per 4D
         self.__plot_state_if_debug__(model_inputs[0], model_outputs[0], t1, 'clipped cropped and pad')
 
-        return np.stack(model_inputs)[...,np.newaxis], np.stack(model_outputs)[...,np.newaxis], i, ID, time() - t0
+        return model_inputs[...,np.newaxis], model_outputs[...,np.newaxis], i, ID, time() - t0
 
 
 class PhaseRegressionGenerator(DataGenerator):

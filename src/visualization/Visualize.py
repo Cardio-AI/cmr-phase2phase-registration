@@ -67,20 +67,22 @@ def show_2D_or_3D(img=None, mask=None, f_size=(8,8),dpi=100, interpol='none'):
         return
     if img is not None:
         dim = img.ndim
+        temp = img
     else:
         dim = mask.ndim
+        temp = mask
 
 
     if dim == 2:
         return show_slice_transparent(img, mask, f_size=f_size, dpi=dpi, interpol=interpol)
-    elif dim == 3 and img.shape[-1] == 1:  # data from the batchgenerator
+    elif dim == 3 and temp.shape[-1] == 1:  # data from the batchgenerator
         return show_slice_transparent(img, mask, f_size=f_size, dpi=dpi, interpol=interpol)
     elif dim == 3:
         return plot_3d_vol(img, mask)
-    elif dim == 4 and img.shape[-1] == 1:  # data from the batchgenerator
+    elif dim == 4 and temp.shape[-1] == 1:  # data from the batchgenerator
         return plot_3d_vol(img, mask)
-    elif dim == 4 and img.shape[-1] ==4: # only mask
-        return plot_3d_vol(img, mask)
+    elif dim == 4 and temp.shape[-1] in [3,4]: # only mask
+        return plot_3d_vol(temp, mask)
     elif dim == 4:
         return plot_4d_vol(img, mask)
     else:
@@ -295,6 +297,12 @@ def show_slice_transparent(img=None, mask=None, show=True, f_size=(5, 5), ax=Non
         
     elif len(mask.shape) == 3 and mask.shape[2] == 3:  # handle mask with three channels
         y_ = (mask).astype(np.float32)
+        thres = 0.4
+        lower = np.where(y_<thres)
+        upper = np.where(y_>-thres)
+        y_[lower and upper] = 0
+        y_ = np.abs(y_)
+        y_ = (y_ - y_.min()) / (y_.max() - y_.min() + sys.float_info.epsilon) # scale this mask, this could also be a vectorfield
     elif len(mask.shape) == 3 and mask.shape[2] == 4:  # handle mask with 4 channels (backround = first channel)
         # ignore backround channel for plotting
         y_ = (mask[..., 1:] > 0.5).astype(np.float32)
@@ -312,9 +320,101 @@ def show_slice_transparent(img=None, mask=None, show=True, f_size=(5, 5), ax=Non
     ax.axis('off')
     
     # normalise image
-    x_ = (x_ - x_.min()) / (x_.max() - x_.min() + sys.float_info.epsilon)
-    ax.imshow(x_, 'gray',vmin=0,vmax=0.6)
-    ax.imshow(y_, interpolation=interpol, alpha=.3)
+    alpha=1.
+    vmax=0
+    if x_.max() >0:
+        x_ = (x_ - x_.min()) / (x_.max() - x_.min() + sys.float_info.epsilon)
+        vmax=0.6
+        alpha = .3
+    ax.imshow(x_, 'gray',vmin=0,vmax=vmax)
+    ax.imshow(y_, interpolation=interpol, alpha=alpha)
+
+    if show:
+        return ax
+    else:
+        return fig
+
+
+def show_vec_transparent(img=None, mask=None, show=True, f_size=(5, 5), ax=None, dpi=300, interpol='none'):
+    """
+    Plot image + masks in one figure
+    """
+    mask_values = [1, 2, 3]
+
+    if isinstance(img, sitk.Image):
+        img = sitk.GetArrayFromImage(img).astype(np.float32)
+
+    if isinstance(mask, sitk.Image):
+        mask = sitk.GetArrayFromImage(mask).astype(np.float32)
+
+    # dont print anything if no images nor masks are given
+    if img is None and mask is None:
+        logging.error('No image data given')
+        return
+
+    # replace mask with empty slice if none is given
+    if mask is None:
+        shape = img.shape
+        mask = np.zeros((shape[0], shape[1], 3))
+
+    # replace image with empty slice if none is given
+    if img is None:
+        shape = mask.shape
+        img = np.zeros((shape[0], shape[1], 1))
+
+    # check image shape
+    if len(img.shape) == 2:
+        # image already in 2d shape take it as it is
+        x_ = (img).astype(np.float32)
+    elif len(img.shape) == 3:
+        # take only the first channel, grayscale - ignore the others
+        x_ = (img[..., 0]).astype(np.float32)
+    else:
+        logging.error('invalid dimensions for image: {}'.format(img.shape))
+        return
+
+    # check masks shape, handle mask without channel per label
+    if len(mask.shape) == 2:  # mask with int as label values
+        y_ = transform_to_binary_mask(mask, mask_values=[1, 2, 3]).astype(np.float32)
+        # print(y_.shape)
+    elif len(mask.shape) == 3 and mask.shape[2] == 1:  # handle mask with empty additional channel
+        mask = mask[..., 0]
+        y_ = transform_to_binary_mask(mask, mask_values=[1, 2, 3]).astype(np.float32)
+
+    elif len(mask.shape) == 3 and mask.shape[2] == 3:  # handle mask with three channels
+        y_ = (mask).astype(np.float32)
+        thres = 0.4
+        lower = np.where(y_ < thres)
+        upper = np.where(y_ > -thres)
+        y_[lower and upper] = 0
+        y_ = np.abs(y_)
+        y_ = (y_ - y_.min()) / (
+                    y_.max() - y_.min() + sys.float_info.epsilon)  # scale this mask, this could also be a vectorfield
+    elif len(mask.shape) == 3 and mask.shape[2] == 4:  # handle mask with 4 channels (backround = first channel)
+        # ignore backround channel for plotting
+        y_ = (mask[..., 1:] > 0.5).astype(np.float32)
+    else:
+        logging.error('invalid dimensions for masks: {}'.format(mask.shape))
+        return
+
+    if not ax:  # no axis given
+        fig = plt.figure(figsize=f_size, dpi=dpi)
+        ax = fig.add_subplot(1, 1, 1, frameon=False)
+    else:  # axis given get the current fig
+        fig = plt.gcf()
+
+    fig.tight_layout(pad=0)
+    ax.axis('off')
+
+    # normalise image
+    alpha = 1.
+    vmax = 0
+    if x_.max() > 0:
+        x_ = (x_ - x_.min()) / (x_.max() - x_.min() + sys.float_info.epsilon)
+        vmax = 0.6
+        alpha = .3
+    ax.imshow(x_, 'gray', vmin=0, vmax=vmax)
+    ax.imshow(y_, interpolation=interpol, alpha=alpha)
 
     if show:
         return ax
@@ -539,6 +639,8 @@ def plot_3d_vol(img_3d, mask_3d=None, timestep=0, save=False, path='reports/figu
     :param fig_size:
     :return: plot figure
     """
+    plot_fn = show_slice_transparent
+
 
     if isinstance(img_3d, sitk.Image):
         img_3d = sitk.GetArrayFromImage(img_3d)
@@ -557,10 +659,11 @@ def plot_3d_vol(img_3d, mask_3d=None, timestep=0, save=False, path='reports/figu
     else:
         logging.debug('timestep: {} - plotting'.format(timestep))
 
-    if img_3d.shape[-1] == 4: # this image is a mask
-        img_3d = img_3d[..., 1:]  # ignore background
+    if img_3d.shape[-1] in [3,4]: # this image is a mask
+        if img_3d.shape[-1] ==4:img_3d = img_3d[..., 1:]  # ignore background
         mask_3d = img_3d # handle this image as mask
         img_3d = np.zeros((mask_3d.shape[:-1]))
+        plot_fn = show_vec_transparent
 
     elif img_3d.shape[-1] == 1:
         img_3d = img_3d[..., 0]  # matpotlib cant plot this shape
@@ -589,7 +692,7 @@ def plot_3d_vol(img_3d, mask_3d=None, timestep=0, save=False, path='reports/figu
         ax = fig.add_subplot(row, img_3d.shape[0], idx+1)
 
         if mask_3d is not None:
-            ax = show_slice_transparent(img=slice, mask=mask_3d[idx], show=True, ax=ax)
+            ax = plot_fn(img=slice, mask=mask_3d[idx], show=True, ax=ax)
         else:
             mixed = show_slice(img=slice, mask=[], show=False)
             ax.imshow(mixed)
@@ -597,7 +700,7 @@ def plot_3d_vol(img_3d, mask_3d=None, timestep=0, save=False, path='reports/figu
         ax.set_xticks([])
         ax.set_yticks([])
         #real_index = idx + (idx * slice_n)
-        ax.set_title('z-axis: {}'.format(idx), color='r', fontsize=plt.rcParams['font.size'])
+        ax.set_title('z: {}'.format(idx), color='r', fontsize=plt.rcParams['font.size'])
 
 
     fig.subplots_adjust(wspace=0, hspace=0)
@@ -681,7 +784,7 @@ def plot_value_histogram(nda, f_name='histogram.jpg', image=True, reports_path='
     plt.show()
 
 
-def create_quiver_plot(flowfield_2d=None, ax=None, N=5, scale=0.3, linewidth=.5):
+def create_quiver_plot(flowfield_2d=None, indexing='xy', ax=None, N=5, scale=0.3, linewidth=.5, figsize=(15,15)):
     """
     Function to create an easy flowfield from the voxelmorph output
     Needs a 2D flowfield, function can handle 2D or 3D vectors as channels
@@ -696,7 +799,7 @@ def create_quiver_plot(flowfield_2d=None, ax=None, N=5, scale=0.3, linewidth=.5)
     import matplotlib
 
     if not ax:
-        fig, ax = plt.subplots(figsize=(15, 15))
+        fig, ax = plt.subplots(figsize=figsize)
 
     # extract flowfield for x and y
     if flowfield_2d.shape[-1] == 3:  # originally a 3d flowfield
@@ -724,8 +827,8 @@ def create_quiver_plot(flowfield_2d=None, ax=None, N=5, scale=0.3, linewidth=.5)
     z_ = np.linspace(start_x, nz, ncols)
     x_ = np.linspace(start_x, nx, ncols)
     y_ = np.linspace(start_y, ny, nrows)
-    xi, yi = np.meshgrid(x_, y_, indexing='xy')
-    zi, _ = np.meshgrid(z_, nx, indexing='xy')
+    xi, yi = np.meshgrid(x_, y_, indexing=indexing)
+    zi, _ = np.meshgrid(z_, nx, indexing=indexing)
 
     # working, use z as color
     # this method is not as clear as the "test 3"

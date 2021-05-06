@@ -213,9 +213,9 @@ def create_RegistrationModel(config):
     zipped = list(zip(input_vols, indicies))
     random.shuffle(zipped)
     input_vols_shuffled, indicies = zip(*zipped)
-    pre_flows_shuffled = [unet(vol) for vol in input_vols_shuffled]
-    flows_shuffled = [Conv_layer(vol) for vol in pre_flows_shuffled]  # m.shape --> batchsize, timesteps, 6
-    flows, _ = zip(*sorted(zip(flows_shuffled, indicies), key=lambda tup: tup[1]))
+    pre_flows = [unet(vol) for vol in input_vols_shuffled]
+    flows= [Conv_layer(vol) for vol in pre_flows]  # m.shape --> batchsize, timesteps, 6
+    flows, _ = zip(*sorted(zip(flows, indicies), key=lambda tup: tup[1]))
 
 
     #pre_flows = unet(input_tensor)
@@ -230,7 +230,7 @@ def create_RegistrationModel(config):
     outputs = [transformed, flow]
 
     #super().__init__(name='simpleregister', inputs=[input_tensor, input_tensor_empty], outputs=outputs)
-    return Model(name='simpleregister', inputs=[input_tensor], outputs=outputs)
+    return Model(name='simpleregister', inputs=[input_tensor, input_tensor_empty], outputs=outputs)
 
 
 

@@ -1,7 +1,6 @@
 # this should import glob, os, and many other standard libs
 
 
-
 def train_fold(config):
     # make sure all neccessary params in config are set
     # if not set them with default values
@@ -57,7 +56,7 @@ def train_fold(config):
     DF_META = config.get('DF_META', '/mnt/ssd/data/gcn/02_imported_4D_unfiltered/SAx_3D_dicomTags_phase')
     EPOCHS = config.get('EPOCHS')
 
-    Console_and_file_logger(EXPERIMENT, logging.INFO)
+    Console_and_file_logger(EXP_PATH, logging.INFO)
     config = init_config(config=locals(), save=True)
     print(config)
     logging.info('Is built with tensorflow: {}'.format(tf.test.is_built_with_cuda()))
@@ -154,3 +153,150 @@ def train_fold(config):
 
     logging.info('Fold {} finished after {:0.3f} sec'.format(FOLD, time() - t0))
     return True
+
+
+def main(args=None):
+    # ------------------------------------------define logging and working directory
+    from ProjectRoot import change_wd_to_project_root
+    change_wd_to_project_root()
+    import sys, os
+    sys.path.append(os.getcwd())
+    from src.utils.Tensorflow_helper import choose_gpu_by_id
+    # ------------------------------------------define GPU id/s to use, if given
+    GPU_IDS = '0,1'
+    GPUS = choose_gpu_by_id(GPU_IDS)
+    print(GPUS)
+    # ------------------------------------------jupyter magic config
+    # ------------------------------------------ import helpers
+    # this should import glob, os, and many other standard libs
+    # local imports
+    import datetime, os
+    from logging import info
+    from src.utils.Utils_io import Console_and_file_logger, init_config, ensure_dir
+
+    # import external libs
+    from tensorflow.python.client import device_lib
+    import tensorflow as tf
+    tf.get_logger().setLevel('ERROR')
+    import cv2
+    import pandas as pd
+
+    EXPERIMENT = args.exp
+    # EXPERIMENT = 'baseline_label_transpose_smooth05/36_5_BiLSTM32_NoBn_conv5_size1_CCE_NOphaseaug_NOaug_b8'
+    # EXPERIMENT = 'mased_scores/36_5_BiLSTM32_NoBn_conv5_size1_CCE_NOphaseaug_shift_rotate_reflectbordersgridaug'
+    timestemp = str(datetime.datetime.now().strftime(
+        "%Y-%m-%d_%H_%M"))  # ad a timestep to each project to make repeated experiments unique
+
+    EXPERIMENTS_ROOT = 'exp/'
+    EXP_PATH = os.path.join(EXPERIMENTS_ROOT, EXPERIMENT, timestemp)
+    MODEL_PATH = os.path.join(EXP_PATH, 'model', )
+    TENSORBOARD_PATH = os.path.join(EXP_PATH, 'tensorboard_logs')
+    CONFIG_PATH = os.path.join(EXP_PATH, 'config')
+    HISTORY_PATH = os.path.join(EXP_PATH, 'history')
+    ensure_dir(MODEL_PATH)
+    ensure_dir(TENSORBOARD_PATH)
+    ensure_dir(CONFIG_PATH)
+    ensure_dir(HISTORY_PATH)
+    Console_and_file_logger(path=EXP_PATH)
+
+    # define the input data paths and fold
+    # first to the 4D Nrrd files,
+    # second to a dataframe with a mapping of the Fold-number
+    # Finally the path to the metadata
+    DATA_PATH_SAX = args.sax
+    DF_FOLDS = args.folds
+    DF_META = args.meta
+    FOLD = 0
+
+    # General params
+    SEED = 42  # define a seed for the generator shuffle
+    BATCHSIZE = 8  # 32, 64, 24, 16, 1 for 3D use: 4
+    GENERATOR_WORKER = BATCHSIZE  # if not set, use batchsize
+    EPOCHS = 150
+
+    DIM = [8, 64, 64]  # network input shape for spacing of 3, (z,y,x)
+    T_SHAPE = 25
+    T_SPACING = 55
+    SPACING = [8, 3, 3]  # if resample, resample to this spacing, (z,y,x)
+
+    # Model params
+    DEPTH = 4  # depth of the encoder
+    FILTERS = 20  # initial number of filters, will be doubled after each downsampling block
+    M_POOL = [1, 2, 2]  # size of max-pooling used for downsampling and upsampling
+    F_SIZE = [3, 3, 3]  # conv filter size
+    BN_FIRST = False  # decide if batch normalisation between conv and activation or afterwards
+    BATCH_NORMALISATION = True  # apply BN or not
+    PAD = 'same'  # padding strategy of the conv layers
+    KERNEL_INIT = 'he_normal'  # conv weight initialisation
+    OPTIMIZER = 'adam'  # Adam, Adagrad, RMSprop, Adadelta,  # https://keras.io/optimizers/
+    ACTIVATION = 'relu'  # tf.keras.layers.LeakyReLU(), relu or any other non linear activation function
+    LEARNING_RATE = 1e-4  # start with a huge lr to converge fast
+    REDUCE_LR_ON_PLATEAU_PATIENCE = 5
+    DECAY_FACTOR = 0.7  # Define a learning rate decay for the ReduceLROnPlateau callback
+    POLY_LR_DECAY = False
+    MIN_LR = 1e-12  # minimal lr, smaller lr does not improve the model
+    DROPOUT_MIN = 0.4  # lower dropout at the shallow layers
+    DROPOUT_MAX = 0.5  # higher dropout at the deep layers
+
+    # Callback params
+    MONITOR_FUNCTION = 'loss'
+    MONITOR_MODE = 'min'
+    SAVE_MODEL_FUNCTION = 'loss'
+    SAVE_MODEL_MODE = 'min'
+    MODEL_PATIENCE = 20
+    SAVE_LEARNING_PROGRESS_AS_TF = True
+
+    # Generator and Augmentation params
+    BORDER_MODE = cv2.BORDER_REFLECT_101  # border mode for the data generation
+    IMG_INTERPOLATION = cv2.INTER_LINEAR  # image interpolation in the genarator
+    MSK_INTERPOLATION = cv2.INTER_NEAREST  # mask interpolation in the generator
+    AUGMENT = True  # a compose of 2D augmentation (grid distortion, 90degree rotation, brightness and shift)
+    AUGMENT_PROB = 0.8
+    AUGMENT_PHASES = True
+    AUGMENT_PHASES_RANGE = (-5, 5)
+    AUGMENT_TEMP = True
+    AUGMENT_TEMP_RANGE = (-2, 2)
+    REPEAT_ONEHOT = True
+    SHUFFLE = True
+    RESAMPLE = True
+    RESAMPLE_T = True
+    HIST_MATCHING = True
+    SCALER = 'MinMax'  # MinMax, Standard or Robust
+    # We define 5 target phases and a background phase for the pad/empty volumes
+    PHASES = len(['ED#', 'MS#', 'ES#', 'PF#', 'MD#'])  # skipped 'pad backround manually added', due to repeating
+    TARGET_SMOOTHING = True
+    SMOOTHING_KERNEL_SIZE = 12
+    SMOOTHING_LOWER_BORDER = 1
+    SMOOTHING_UPPER_BORDER = 5
+    SMOOTHING_WEIGHT_CORRECT = 20
+    config = init_config(config=locals(), save=True)
+
+    folds = [i for i in range(0, 3, 1)]
+
+    for f in folds:
+        print('starting fold: {}'.format(f))
+        config_ = config.copy()
+        config_['FOLD'] = f
+        train_fold(config_)
+        print('train fold: {}'.format(f))
+
+
+if __name__ == "__main__":
+    import argparse
+
+    parser = argparse.ArgumentParser(description='train a phase registration model')
+    parser.add_argument('-sax', action='store', default='/mnt/ssd/data/gcn/02_imported_4D_unfiltered/SAX/')
+    parser.add_argument('-folds', action='store', default='/mnt/ssd/data/gcn/02_imported_4D_unfiltered/df_kfold.csv')
+    parser.add_argument('-meta', action='store',
+                        default='/mnt/ssd/data/gcn/02_imported_4D_unfiltered/SAx_3D_dicomTags_phase')
+    parser.add_argument('-exp', action='store',
+                        default='cv_histmatchchoice_newdata/8_64_64__8_2_2_4tenc_conv1_MSE_NOnorm_augshiftrot_taug_5_batch8')
+    results = parser.parse_args()
+    print(results)
+    print(results.sax)
+
+    try:
+        main(results)
+    except Exception as e:
+        print(e)
+    exit()
