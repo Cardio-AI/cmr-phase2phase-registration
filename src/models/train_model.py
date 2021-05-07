@@ -275,7 +275,7 @@ def main(args=None):
         with open(args.cfg, encoding='utf-8') as data_file:
             config = json.loads(data_file.read())
             config = init_config(config=config, save=True)
-            
+
     for f in config.get(FOLDS, [0]):
         print('starting fold: {}'.format(f))
         config_ = config.copy()
@@ -290,12 +290,15 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='train a phase registration model')
     parser.add_argument('-sax', action='store', default='/mnt/ssd/data/gcn/02_imported_4D_unfiltered/sax/')
     parser.add_argument('-folds', action='store', default='/mnt/ssd/data/gcn/02_imported_4D_unfiltered/df_kfold.csv')
-    parser.add_argument('-meta', action='store',
-                        default='/mnt/ssd/data/gcn/02_imported_4D_unfiltered/SAx_3D_dicomTags_phase')
-    parser.add_argument('-exp', action='store',
-                        default='cv_histmatchchoice_newdata/8_64_64__8_2_2_4tenc_conv1_MSE_NOnorm_augshiftrot_taug_5_batch8')
-    parser.add_argument('-cfg', action='store',
-                        default=None)
+    parser.add_argument('-meta', action='store',default='/mnt/ssd/data/gcn/02_imported_4D_unfiltered/SAx_3D_dicomTags_phase')
+    parser.add_argument('-exp', action='store',default='temp_exp')
+    parser.add_argument('-add_lstm', action='store',default=False)
+    parser.add_argument('-lstm_units', action='store',default=64)
+    parser.add_argument('-taug', action='store',default=0)
+    parser.add_argument('-blocks', action='store',default=4)
+    parser.add_argument('-filters', action='store', default=20)
+
+    parser.add_argument('-cfg', action='store',default=None)
 
     results = parser.parse_args()
     print(results)
