@@ -39,7 +39,7 @@ def show_available_gpus():
 
 # define some helper classes and a console and file logger
 class Console_and_file_logger():
-    def __init__(self, logfile_name='Log', log_lvl=logging.INFO, path='./logs/', save_debug=False):
+    def __init__(self, logfile_name='Log', log_lvl=logging.INFO, path='./logs/', save_debug=True):
         """
         Create your own logger
         log debug messages into a logfile if save_debug
