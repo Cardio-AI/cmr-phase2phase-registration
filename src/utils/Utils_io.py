@@ -39,14 +39,18 @@ def show_available_gpus():
 
 # define some helper classes and a console and file logger
 class Console_and_file_logger():
-    def __init__(self, logfile_name='Log', log_lvl=logging.INFO, path='./logs/'):
+    def __init__(self, logfile_name='Log', log_lvl=logging.INFO, path='./logs/', save_debug=False):
         """
         Create your own logger
-        log debug messages into a logfile
+        log debug messages into a logfile if save_debug
         log info messages into the console
         log error messages into a dedicated *_error logfile
-        :param logfile_name:
-        :param log_dir:
+        Parameters
+        ----------
+        logfile_name : (str)
+        log_lvl : (enum)
+        path : (str)
+        save_debug : (bool)
         """
 
         # Define the general formatting schema
@@ -66,9 +70,11 @@ class Console_and_file_logger():
         if not logger.handlers:
 
             # Define debug logfile handler
-            hdlr = logging.FileHandler(log_f)
-            hdlr.setFormatter(formatter)
-            hdlr.setLevel(logging.DEBUG)
+            # skip that so save i/O handles on the cluster
+            if save_debug:
+                hdlr = logging.FileHandler(log_f)
+                hdlr.setFormatter(formatter)
+                hdlr.setLevel(logging.DEBUG)
 
             # Define info console handler
             hdlr_console = logging.StreamHandler()
@@ -83,7 +89,7 @@ class Console_and_file_logger():
             hdlr_error.setLevel(logging.ERROR)
 
             # Add all handlers to our logger instance
-            logger.addHandler(hdlr)
+            if save_debug: logger.addHandler(hdlr)
             logger.addHandler(hdlr_console)
             logger.addHandler(hdlr_error)
 
@@ -166,13 +172,21 @@ def init_config(config, save=True):
     :param save:
     :return: config (dict) with all training/evaluation params
     """
+    import datetime
 
     # make sure config path and experiment name are set
     exp = config.get('EXPERIMENT', 'UNDEFINED')
-    config['CONFIG_PATH'] = config.get('CONFIG_PATH', os.path.join('reports/config/', exp))
-    config['TENSORBOARD_LOG_DIR'] = config.get('TENSORBOARD_LOG_DIR', os.path.join('reports/tensorboard_logs/', exp))
-    config['MODEL_PATH'] = config.get('MODEL_PATH', os.path.join('models/', exp))
-    config['HISTORY_PATH'] = config.get('HISTORY_PATH', os.path.join('reports/history/', exp))
+    timestemp = str(datetime.datetime.now().strftime(
+        "%Y-%m-%d_%H_%M"))  # ad a timestep to each project to make repeated experiments unique
+
+    EXPERIMENTS_ROOT = 'exp/'
+    EXP_PATH_TEMP = os.path.join(EXPERIMENTS_ROOT, exp, timestemp)
+
+    # make sure all paths are set, otherwise use a temp dir
+    config['CONFIG_PATH'] = config.get('CONFIG_PATH', os.path.join(EXP_PATH_TEMP, 'config'))
+    config['TENSORBOARD_LOG_DIR'] = config.get('TENSORBOARD_LOG_DIR', os.path.join(EXP_PATH_TEMP, 'tensorboard_logs'))
+    config['MODEL_PATH'] = config.get('MODEL_PATH', os.path.join(EXP_PATH_TEMP, 'model'))
+    config['HISTORY_PATH'] = config.get('HISTORY_PATH', os.path.join(EXP_PATH_TEMP, 'history'))
 
     # make sure all paths exists
     ensure_dir(config['TENSORBOARD_LOG_DIR'])

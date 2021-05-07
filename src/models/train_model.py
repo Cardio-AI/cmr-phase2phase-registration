@@ -56,7 +56,7 @@ def train_fold(config):
     DF_META = config.get('DF_META', '/mnt/ssd/data/gcn/02_imported_4D_unfiltered/SAx_3D_dicomTags_phase')
     EPOCHS = config.get('EPOCHS')
 
-    Console_and_file_logger(EXP_PATH, logging.INFO)
+    Console_and_file_logger(path=EXP_PATH, log_lvl=logging.INFO)
     config = init_config(config=locals(), save=True)
     print(config)
     logging.info('Is built with tensorflow: {}'.format(tf.test.is_built_with_cuda()))
@@ -110,6 +110,8 @@ def train_fold(config):
     val_config['AUGMENT'] = False
     val_config['AUGMENT_PHASES'] = False
     val_config['HIST_MATCHING'] = False
+    val_config['AUGMENT_TEMP'] = False
+    val_config['RESAMPLE_T'] = False
     validation_generator = PhaseRegressionGenerator(x_val_sax, x_val_sax, config=val_config)
 
     # get model
@@ -157,33 +159,26 @@ def train_fold(config):
 
 def main(args=None):
     # ------------------------------------------define logging and working directory
+    # import the packages inside this function enables to train on different folds
     from ProjectRoot import change_wd_to_project_root
     change_wd_to_project_root()
-    import sys, os
+    import sys, os, datetime
     sys.path.append(os.getcwd())
     from src.utils.Tensorflow_helper import choose_gpu_by_id
     # ------------------------------------------define GPU id/s to use, if given
     GPU_IDS = '0,1'
     GPUS = choose_gpu_by_id(GPU_IDS)
     print(GPUS)
-    # ------------------------------------------jupyter magic config
-    # ------------------------------------------ import helpers
-    # this should import glob, os, and many other standard libs
     # local imports
-    import datetime, os
     from logging import info
     from src.utils.Utils_io import Console_and_file_logger, init_config, ensure_dir
 
     # import external libs
-    from tensorflow.python.client import device_lib
     import tensorflow as tf
     tf.get_logger().setLevel('ERROR')
     import cv2
-    import pandas as pd
 
     EXPERIMENT = args.exp
-    # EXPERIMENT = 'baseline_label_transpose_smooth05/36_5_BiLSTM32_NoBn_conv5_size1_CCE_NOphaseaug_NOaug_b8'
-    # EXPERIMENT = 'mased_scores/36_5_BiLSTM32_NoBn_conv5_size1_CCE_NOphaseaug_shift_rotate_reflectbordersgridaug'
     timestemp = str(datetime.datetime.now().strftime(
         "%Y-%m-%d_%H_%M"))  # ad a timestep to each project to make repeated experiments unique
 
@@ -207,19 +202,22 @@ def main(args=None):
     DF_FOLDS = args.folds
     DF_META = args.meta
     FOLD = 0
+    FOLDS = [0,1,2,3]
 
     # General params
     SEED = 42  # define a seed for the generator shuffle
     BATCHSIZE = 8  # 32, 64, 24, 16, 1 for 3D use: 4
     GENERATOR_WORKER = BATCHSIZE  # if not set, use batchsize
-    EPOCHS = 150
+    EPOCHS = 100
 
     DIM = [8, 64, 64]  # network input shape for spacing of 3, (z,y,x)
-    T_SHAPE = 25
+    T_SHAPE = 36
     T_SPACING = 55
     SPACING = [8, 3, 3]  # if resample, resample to this spacing, (z,y,x)
 
     # Model params
+    ADD_BILSTM = True
+    BILSTM_UNITS = 64
     DEPTH = 4  # depth of the encoder
     FILTERS = 20  # initial number of filters, will be doubled after each downsampling block
     M_POOL = [1, 2, 2]  # size of max-pooling used for downsampling and upsampling
@@ -259,21 +257,26 @@ def main(args=None):
     REPEAT_ONEHOT = True
     SHUFFLE = True
     RESAMPLE = True
-    RESAMPLE_T = True
-    HIST_MATCHING = True
+    RESAMPLE_T = False
+    HIST_MATCHING = False
     SCALER = 'MinMax'  # MinMax, Standard or Robust
     # We define 5 target phases and a background phase for the pad/empty volumes
     PHASES = len(['ED#', 'MS#', 'ES#', 'PF#', 'MD#'])  # skipped 'pad backround manually added', due to repeating
     TARGET_SMOOTHING = True
-    SMOOTHING_KERNEL_SIZE = 12
-    SMOOTHING_LOWER_BORDER = 1
-    SMOOTHING_UPPER_BORDER = 5
     SMOOTHING_WEIGHT_CORRECT = 20
-    config = init_config(config=locals(), save=True)
+    GAUS_SIGMA = 1
 
-    folds = [i for i in range(0, 3, 1)]
-
-    for f in folds:
+    # initialise a new config if none is given
+    if args.cfg == None:
+        config = init_config(config=locals(), save=True)
+    else:
+        import json
+        # load the experiment config
+        with open(args.cfg, encoding='utf-8') as data_file:
+            config = json.loads(data_file.read())
+            config = init_config(config=config, save=True)
+            
+    for f in config.get(FOLDS, [0]):
         print('starting fold: {}'.format(f))
         config_ = config.copy()
         config_['FOLD'] = f
@@ -285,15 +288,19 @@ if __name__ == "__main__":
     import argparse
 
     parser = argparse.ArgumentParser(description='train a phase registration model')
-    parser.add_argument('-sax', action='store', default='/mnt/ssd/data/gcn/02_imported_4D_unfiltered/SAX/')
+    parser.add_argument('-sax', action='store', default='/mnt/ssd/data/gcn/02_imported_4D_unfiltered/sax/')
     parser.add_argument('-folds', action='store', default='/mnt/ssd/data/gcn/02_imported_4D_unfiltered/df_kfold.csv')
     parser.add_argument('-meta', action='store',
                         default='/mnt/ssd/data/gcn/02_imported_4D_unfiltered/SAx_3D_dicomTags_phase')
     parser.add_argument('-exp', action='store',
                         default='cv_histmatchchoice_newdata/8_64_64__8_2_2_4tenc_conv1_MSE_NOnorm_augshiftrot_taug_5_batch8')
+    parser.add_argument('-cfg', action='store',
+                        default=None)
+
     results = parser.parse_args()
     print(results)
     print(results.sax)
+    print(results.cfg)
 
     try:
         main(results)

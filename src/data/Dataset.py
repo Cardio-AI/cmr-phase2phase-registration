@@ -473,6 +473,7 @@ def get_trainings_files(data_path, fold=0, path_to_folds_df='data/raw/gcn_05_202
     y = sorted(glob.glob(os.path.join(data_path, mask_suffix)))
     if len(x) == 0:
         logging.info('no files found, try to load with clean.nrrd/mask.nrrd pattern')
+        logging.info('searched in: {}'.format(data_path))
         img_suffix = '*clean.nrrd'
         mask_suffix = '*mask.nrrd'
         x = sorted(glob.glob(os.path.join(data_path, img_suffix)))

@@ -32,7 +32,7 @@ def create_PhaseRegressionModel(config, networkname='PhaseRegressionModel'):
     with strategy.scope():
 
         input_shape = config.get('DIM', [10, 224, 224])
-        T_SHAPE = config.get('T_SHAPE', 35)
+        T_SHAPE = config.get('T_SHAPE', 36)
         PHASES = config.get('PHASES', 5)
         input_tensor = Input(shape=(T_SHAPE, *input_shape, 1))
         # define standard values according to the convention over configuration paradigm
@@ -49,24 +49,13 @@ def create_PhaseRegressionModel(config, networkname='PhaseRegressionModel'):
         ndims = len(config.get('DIM', [10, 224, 224]))
         depth = config.get('DEPTH', 4)
         batchsize = config.get('BATCHSIZE', 8)
+        add_bilstm = config.get('ADD_BILSTM', False)
+        lstm_units = config.get('BILSTM_UNITS', 64)
 
 
         # increase the dropout through the layer depth
         dropouts = list(np.linspace(drop_1, drop_3, depth))
         dropouts = [round(i, 1) for i in dropouts]
-
-        spatial_encoder = ConvEncoder(activation=activation,
-                              batch_norm=batch_norm,
-                              bn_first=bn_first,
-                              depth=depth,
-                              drop_3=drop_3,
-                              dropouts=dropouts,
-                              f_size=f_size,
-                              filters=filters,
-                              kernel_init=kernel_init,
-                              m_pool=m_pool,
-                              ndims=ndims,
-                              pad=pad)
 
         temporal_encoder = ConvEncoder(activation=activation,
                                       batch_norm=batch_norm,
@@ -81,26 +70,11 @@ def create_PhaseRegressionModel(config, networkname='PhaseRegressionModel'):
                                       ndims=ndims,
                                       pad=pad)
 
-
         gap = tensorflow.keras.layers.GlobalAveragePooling3D()
 
-
         # unstack along the temporal axis
-        # added shuffeling, which avoids the model to be biased by the order
+        # added shuffling, which avoids the model to be biased by the order
         # unstack along t, yielding a list of 3D volumes
-        """inputs_spatial = tf.unstack(input_tensor,axis=1)
-        import random
-        indicies = list(tf.range(len(inputs_spatial)))
-        zipped = list(zip(inputs_spatial, indicies))
-        random.shuffle(zipped)
-        inputs_spatial, indicies = zip(*zipped)
-        inputs_spatial = [spatial_encoder(vol)[0] for vol in inputs_spatial]
-        print(inputs_spatial[0].shape)
-        inputs_spatial = [gap(vol) for vol in inputs_spatial]  # m.shape --> batchsize, timesteps, 6
-        print(inputs_spatial[0].shape)
-        inputs_spatial, _ = zip(*sorted(zip(inputs_spatial, indicies), key=lambda tup: tup[1]))
-        inputs_spatial = tf.stack(inputs_spatial, axis=1)
-        print(inputs_spatial.shape)"""
 
         import random
         # unstack along Z yielding a list of 2D+t slices
@@ -109,39 +83,39 @@ def create_PhaseRegressionModel(config, networkname='PhaseRegressionModel'):
         zipped = list(zip(inputs_temporal, indicies))
         random.shuffle(zipped)
         inputs_temporal, indicies = zip(*zipped)
+        # feed the 2D+T slices as 3D volumes into the temporal encoder (3D conv)
         inputs_temporal = [temporal_encoder(vol)[0] for vol in inputs_temporal]
         inputs_temporal, _ = zip(*sorted(zip(inputs_temporal, indicies), key=lambda tup: tup[1]))
+        # stack the 2D+T encoding along the spatial axis (2, as we have b,t,z,x,y,c) --> 3D+T encoding
         inputs_temporal = tf.stack(inputs_temporal, axis=2)
         print('Shape after the temporal encoder')
         print(inputs_temporal.shape)
+        # unstack each 3D volume encoding, apply global average pooling on each
         inputs_temporal = tf.unstack(inputs_temporal, axis=1)
         inputs_temporal = [gap(vol) for vol in inputs_temporal]
         inputs_temporal = tf.stack(inputs_temporal, axis=1)
 
-        """inputs_temporal = tf.keras.layers.Flatten()(inputs_temporal)
-        inputs_temporal = tf.keras.layers.Dense(units=36*10,activation=activation)(inputs_temporal)
-        inputs_temporal = tf.keras.layers.Reshape(target_shape=(36,10))(inputs_temporal)"""
-
-        #inputs = tf.keras.layers.concatenate([inputs_spatial, inputs_temporal], axis=-1)
         inputs = inputs_temporal
         print('Shape after GAP')
         print(inputs.shape)
         # 36, 256
-        """inputs = tf.keras.layers.BatchNormalization()(inputs)
-        inputs = tf.keras.layers.Dropout(rate=0.5)(inputs)
+        if add_bilstm:
+            """inputs = tf.keras.layers.BatchNormalization()(inputs)
+            inputs = tf.keras.layers.Dropout(rate=0.5)(inputs)
+    
+            onehot_pre = tf.keras.layers.Conv1D(filters=64, kernel_size=5, strides=1, padding='same', activation=activation,
+                                            name='conv_pre_final')(inputs)"""
+            forward_layer = LSTM(lstm_units,return_sequences=True)
+            backward_layer = LSTM(lstm_units, activation='tanh', return_sequences=True,go_backwards=True) # maybe change to tanh
+            inputs = Bidirectional(forward_layer, backward_layer=backward_layer,input_shape=inputs.shape)(inputs)
 
-        onehot_pre = tf.keras.layers.Conv1D(filters=64, kernel_size=5, strides=1, padding='same', activation=activation,
-                                        name='conv_pre_final')(inputs)"""
-
-
-        """forward_layer = LSTM(32,return_sequences=True)
-        backward_layer = LSTM(32, activation='tanh', return_sequences=True,go_backwards=True) # maybe change to tanh
-        inputs = Bidirectional(forward_layer, backward_layer=backward_layer,input_shape=inputs.shape)(inputs)
-        """
         # 36,64
         print('Shape after Bi-LSTM layer')
         print(inputs.shape)
-        #onehot = tf.keras.layers.Dense(units=5,activation='softmax', name='final_conv')(inputs)
+
+        # input (36,encoding) output (36,5)
+        # either 36,256 --> from the temp encoder or
+        # 36,64 --> 64 --> number of BI-LSTM units
         onehot = tf.keras.layers.Conv1D(filters=PHASES, kernel_size=1, strides=1, padding='same', activation=activation,
                                         name='final_conv')(inputs)
 
