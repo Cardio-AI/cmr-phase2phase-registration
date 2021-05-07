@@ -216,10 +216,10 @@ def main(args=None):
     SPACING = [8, 3, 3]  # if resample, resample to this spacing, (z,y,x)
 
     # Model params
-    ADD_BILSTM = True
-    BILSTM_UNITS = 64
-    DEPTH = 4  # depth of the encoder
-    FILTERS = 20  # initial number of filters, will be doubled after each downsampling block
+    ADD_BILSTM = args.add_lstm
+    BILSTM_UNITS = args.lstm_units
+    DEPTH = args.depth  # depth of the encoder
+    FILTERS = args.filters  # initial number of filters, will be doubled after each downsampling block
     M_POOL = [1, 2, 2]  # size of max-pooling used for downsampling and upsampling
     F_SIZE = [3, 3, 3]  # conv filter size
     BN_FIRST = False  # decide if batch normalisation between conv and activation or afterwards
@@ -248,26 +248,27 @@ def main(args=None):
     BORDER_MODE = cv2.BORDER_REFLECT_101  # border mode for the data generation
     IMG_INTERPOLATION = cv2.INTER_LINEAR  # image interpolation in the genarator
     MSK_INTERPOLATION = cv2.INTER_NEAREST  # mask interpolation in the generator
-    AUGMENT = True  # a compose of 2D augmentation (grid distortion, 90degree rotation, brightness and shift)
+    AUGMENT = args.aug  # a compose of 2D augmentation (grid distortion, 90degree rotation, brightness and shift)
     AUGMENT_PROB = 0.8
-    AUGMENT_PHASES = True
-    AUGMENT_PHASES_RANGE = (-5, 5)
-    AUGMENT_TEMP = True
-    AUGMENT_TEMP_RANGE = (-2, 2)
+    AUGMENT_PHASES = args.paug
+    AUGMENT_PHASES_RANGE = (-args.prange,args.prange)
+    AUGMENT_TEMP = args.taug
+    AUGMENT_TEMP_RANGE = (-args.trange, args.trange)
     REPEAT_ONEHOT = True
     SHUFFLE = True
-    RESAMPLE = True
-    RESAMPLE_T = False
-    HIST_MATCHING = False
+    RESAMPLE = args.resample
+    RESAMPLE_T = args.tresample
+    HIST_MATCHING = args.hmatch
     SCALER = 'MinMax'  # MinMax, Standard or Robust
     # We define 5 target phases and a background phase for the pad/empty volumes
     PHASES = len(['ED#', 'MS#', 'ES#', 'PF#', 'MD#'])  # skipped 'pad backround manually added', due to repeating
     TARGET_SMOOTHING = True
-    SMOOTHING_WEIGHT_CORRECT = 20
-    GAUS_SIGMA = 1
+    SMOOTHING_WEIGHT_CORRECT = args.gausweight
+    GAUS_SIGMA = args.gaussigma
 
     # initialise a new config if none is given
     if args.cfg == None:
+        print('init config')
         config = init_config(config=locals(), save=True)
     else:
         import json
@@ -276,7 +277,7 @@ def main(args=None):
             config = json.loads(data_file.read())
             config = init_config(config=config, save=True)
 
-    for f in config.get(FOLDS, [0]):
+    for f in config.get('FOLDS', [0]):
         print('starting fold: {}'.format(f))
         config_ = config.copy()
         config_['FOLD'] = f
@@ -294,16 +295,23 @@ if __name__ == "__main__":
     parser.add_argument('-exp', action='store',default='temp_exp')
     parser.add_argument('-add_lstm', action='store',default=False)
     parser.add_argument('-lstm_units', action='store',default=64)
-    parser.add_argument('-taug', action='store',default=0)
-    parser.add_argument('-blocks', action='store',default=4)
+    parser.add_argument('-depth', action='store',default=4)
     parser.add_argument('-filters', action='store', default=20)
 
-    parser.add_argument('-cfg', action='store',default=None)
+    parser.add_argument('-aug', action='store', default=False)
+    parser.add_argument('-paug', action='store', default=False)
+    parser.add_argument('-prange', action='store', default=2)
+    parser.add_argument('-taug', action='store', default=False)
+    parser.add_argument('-trange', action='store', default=2)
+    parser.add_argument('-resample', action='store', default=True)
+    parser.add_argument('-tresample', action='store', default=False)
+    parser.add_argument('-hmatch', action='store', default=False)
+    parser.add_argument('-gausweight', action='store', default=20)
+    parser.add_argument('-gaussigma', action='store', default=1)
 
+    parser.add_argument('-cfg', action='store', default=None)
     results = parser.parse_args()
-    print(results)
-    print(results.sax)
-    print(results.cfg)
+    print('given parameters: {}'.format(results))
 
     try:
         main(results)

@@ -197,7 +197,6 @@ def init_config(config, save=True):
     # Define a config for param injection and save it for usage during evaluation, save all upper key,value pairs from global namespace
     config = dict(((key, value) for key, value in config.items()
                    if key.isupper() and key not in ['HTML', 'K']))
-
     if save:
         # convert functions to string representations
         try:
