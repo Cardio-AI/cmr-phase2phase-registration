@@ -65,6 +65,7 @@ def meandiff( y_true, y_pred, apply_sum=True, apply_average=True):
     diffs = tf.map_fn(lambda x: get_min_dist_for_list(x), stacked, dtype=tf.int32)
     if apply_sum: diffs = tf.cast(tf.reduce_sum(diffs, axis=1),tf.float32)
     if apply_average: diffs = tf.reduce_mean(diffs)
+    diffs = tf.cast(diffs, tf.float32)
     tf.math.greater_equal(diffs, 0.), 'distance cant be smaller than 0'
     return diffs
 
