@@ -201,9 +201,9 @@ def main(args=None):
         #Console_and_file_logger(path=config['EXP_PATH'])
 
         if args.data: # if we specified a different data path (training from workspace or node temporal disk)
-            config['DATA_PATH_SAX']= os.path.join(args.data, "/sax/")
-            config['DF_FOLDS']= os.path.join(args.data, "/df_kfold.csv")
-            config['DF_META']= os.path.join(args.data, "/SAx_3D_dicomTags_phase")
+            config['DATA_PATH_SAX']= os.path.join(args.data, "sax/")
+            config['DF_FOLDS']= os.path.join(args.data, "df_kfold.csv")
+            config['DF_META']= os.path.join(args.data, "SAx_3D_dicomTags_phase")
         # we dont need to initialise this config, as it should already have the correct formatings,
         # The fold configs will be saved withn each fold run
         #config = init_config(config=config, save=False)
