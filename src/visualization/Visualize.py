@@ -949,11 +949,21 @@ def show_phases(gt, pred=None):
         if pred_given:
             axs[i].title.set_text('f(x)')
             temp_pred = pred[idx] * gt_msk[idx]
+            # get the phase length as idx, we sum the number of ones for one phase of this patient
+            # gt_msk has the shape b,t,phase
+            # minus one, because: sum-1 = len of a list with ones
+            gt_max = np.sum(gt_msk[idx, :, 0], axis=0).astype(
+                int)-1
             ind = np.argmax(temp_pred, axis=0)
+            # append the gt length to the list of phase indices
+            #ind = np.append(ind, gt_max) # if we would like to have the gt length info in the pre plot
             axs[i].set_yticks(ind, minor=False)
             axs[i].set_xticks([0, 1, 2, 3, 4], minor=False)
             axs[i].set_xticklabels(phases, rotation=45)
             axs[i].imshow(pred[idx], aspect='auto')
+            # make the gt length yticklabel red
+            #axs[i].get_yticklabels()[-1].set_color('red')
+            #axs[i].get_yticklabels()[-1].set_weight('bold')
             i = i + 1
         if isinstance(axs, plt.Axes):
             ax = axs
@@ -962,14 +972,18 @@ def show_phases(gt, pred=None):
         ax.title.set_text('y')
         temp_y = gt[idx]* gt_msk[idx]
         gt_length = np.sum(gt_msk[idx, :, 0], axis=0).astype(int)-1
-        gt[idx][(gt_length),:] = 1
+        #gt[idx][(gt_length),:] = 1 # draw a line at the gt length temporal position
         ind_gt = np.argmax(temp_y, axis=0)
+        ind_gt = np.append(ind_gt, gt_length)
         ax.set_yticks(ind_gt, minor=False)
         ax.set_xticks([0, 1, 2, 3, 4], minor=False)
         ax.set_xticklabels(phases, rotation=45)
         ax.imshow(gt[idx], aspect='auto')
+        #ax.get_yticklabels()[-1].set_color('red')
+        ax.get_yticklabels()[-1].set_weight('bold')
         i = i + 1
     f.tight_layout()
+
     return f
 
 

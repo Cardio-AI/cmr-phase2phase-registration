@@ -100,6 +100,7 @@ def create_PhaseRegressionModel(config, networkname='PhaseRegressionModel'):
         print(inputs.shape)
         # 36, 256
         if add_bilstm:
+            print('add a bilstm layer with: {} lstm units'.format(lstm_units))
             """inputs = tf.keras.layers.BatchNormalization()(inputs)
             inputs = tf.keras.layers.Dropout(rate=0.5)(inputs)
     
