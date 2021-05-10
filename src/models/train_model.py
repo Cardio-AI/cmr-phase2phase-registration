@@ -143,7 +143,7 @@ def train_fold(config):
         callbacks=get_callbacks(config, batch_generator, validation_generator),
         initial_epoch=initial_epoch,
         max_queue_size=60,
-        use_multiprocessing=True,
+        use_multiprocessing=False,
         workers=20,
         verbose=1)
 
