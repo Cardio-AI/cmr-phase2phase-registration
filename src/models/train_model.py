@@ -28,6 +28,7 @@ def train_fold(config):
     import pandas as pd
     from time import time
     import datetime
+    import re
 
     # make all config params known to the local namespace
     locals().update(config)
@@ -72,7 +73,6 @@ def train_fold(config):
 
     t0 = time()
     # check if we find each patient in the corresponding dataframe
-    import re
 
     METADATA_FILE = DF_META
     df = pd.read_csv(METADATA_FILE)
@@ -142,8 +142,9 @@ def train_fold(config):
         epochs=EPOCHS,
         callbacks=get_callbacks(config, batch_generator, validation_generator),
         initial_epoch=initial_epoch,
-        max_queue_size=24,
-        use_multiprocessing=False,
+        max_queue_size=60,
+        use_multiprocessing=True,
+        workers=20,
         verbose=1)
 
     # free as much memory as possible
@@ -316,6 +317,12 @@ if __name__ == "__main__":
     import argparse
 
     parser = argparse.ArgumentParser(description='train a phase registration model')
+
+    # usually these two parameters should encapsulate all experiment parameters
+    parser.add_argument('-cfg', action='store', default=None)
+    parser.add_argument('-data', action='store', default=None)
+
+    #
     parser.add_argument('-sax', action='store', default='/mnt/ssd/data/gcn/02_imported_4D_unfiltered/sax/')
     parser.add_argument('-folds', action='store', default='/mnt/ssd/data/gcn/02_imported_4D_unfiltered/df_kfold.csv')
     parser.add_argument('-meta', action='store',default='/mnt/ssd/data/gcn/02_imported_4D_unfiltered/SAx_3D_dicomTags_phase')
@@ -336,8 +343,7 @@ if __name__ == "__main__":
     parser.add_argument('-gausweight', action='store', default=20, type=int)
     parser.add_argument('-gaussigma', action='store', default=1, type=int)
 
-    parser.add_argument('-cfg', action='store', default=None)
-    parser.add_argument('-data', action='store', default=None)
+
     results = parser.parse_args()
     print('given parameters: {}'.format(results))
 
