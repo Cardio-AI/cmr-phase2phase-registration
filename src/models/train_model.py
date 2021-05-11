@@ -14,21 +14,19 @@ def train_fold(config):
     from tensorflow.python.client import device_lib
     import tensorflow as tf
     tf.get_logger().setLevel('ERROR')
-    import gc
-    import logging
+    import gc, logging, os, datetime, re
     from logging import info
-    import os
-    import glob
+
     # local imports
     from src.utils.Utils_io import Console_and_file_logger, init_config, ensure_dir
     from src.utils.KerasCallbacks import get_callbacks
     from src.data.Dataset import get_trainings_files
+    from src.data.Generators import PhaseRegressionGenerator
+    from src.models.Models import create_PhaseRegressionModel
 
     # import external libs
     import pandas as pd
     from time import time
-    import datetime
-    import re
 
     # make all config params known to the local namespace
     locals().update(config)
@@ -98,12 +96,7 @@ def train_fold(config):
     info('Done!')
 
     # instantiate the batchgenerators
-    # logging.getLogger().setLevel(logging.INFO)
-    from src.data.Generators import PhaseRegressionGenerator
-    # config['SHUFFLE'] = False
-    # config['AUGMENT'] = False
-    # config['RESAMPLE'] = True
-    # config['AUGMENT_PHASES'] = False
+
     batch_generator = PhaseRegressionGenerator(x_train_sax, x_train_sax, config=config)
     val_config = config.copy()
     val_config['AUGMENT'] = False
@@ -114,12 +107,9 @@ def train_fold(config):
     validation_generator = PhaseRegressionGenerator(x_val_sax, x_val_sax, config=val_config)
 
     # get model
-    from src.models.Models import create_PhaseRegressionModel
     model = create_PhaseRegressionModel(config)
 
     # write the model summary to a txt file
-    # Open the file
-
     with open(os.path.join(EXP_PATH, 'model_summary.txt'), 'w') as fh:
         # Pass the file handle in as a lambda function to make it callable
         model.summary(print_fn=lambda x: fh.write(x + '\n'))
@@ -142,9 +132,9 @@ def train_fold(config):
         epochs=EPOCHS,
         callbacks=get_callbacks(config, batch_generator, validation_generator),
         initial_epoch=initial_epoch,
-        max_queue_size=60,
+        max_queue_size=24,
         use_multiprocessing=False,
-        workers=20,
+        workers=12,
         verbose=1)
 
     # free as much memory as possible

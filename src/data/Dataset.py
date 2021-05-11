@@ -482,6 +482,9 @@ def get_trainings_files(data_path, fold=0, path_to_folds_df='data/raw/gcn_05_202
     if len(x) == 0:
         logging.info('no files found, try to load with acdc file pattern')
         x, y = load_acdc_files(data_path)
+        if len(x) == 0:
+            logging.error('no files found in: {}, try to list all files in this directory:'.format(data_path))
+            logging.error(os.listdir(data_path))
 
     df = pd.read_csv(path_to_folds_df)
     patients = df[df.fold.isin([fold])]
