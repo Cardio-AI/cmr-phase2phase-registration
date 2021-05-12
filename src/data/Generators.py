@@ -663,6 +663,8 @@ class PhaseRegressionGenerator(DataGenerator):
 
         # define a random seed for albumentations
         random.seed(config.get('SEED', 42))
+        logging.info('params of generator:')
+        logging.info(list((k,v) for k,v in vars(self).items() if type(v) in [int, str, list, bool] and str(k) not in ['IMAGES', 'LABELS']))
 
     def on_batch_end(self):
         """

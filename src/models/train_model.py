@@ -103,7 +103,7 @@ def train_fold(config):
     val_config['AUGMENT_PHASES'] = False
     val_config['HIST_MATCHING'] = False
     val_config['AUGMENT_TEMP'] = False
-    val_config['RESAMPLE_T'] = False
+    #val_config['RESAMPLE_T'] = False # this could yield phases which does not fit into the given dim
     validation_generator = PhaseRegressionGenerator(x_val_sax, x_val_sax, config=val_config)
 
     # get model
@@ -132,10 +132,10 @@ def train_fold(config):
         epochs=EPOCHS,
         callbacks=get_callbacks(config, batch_generator, validation_generator),
         initial_epoch=initial_epoch,
-        max_queue_size=24,
-        use_multiprocessing=False,
-        workers=12,
-        verbose=1)
+        max_queue_size=26,
+        #use_multiprocessing=False,
+        #workers=12,
+        verbose=2)
 
     # free as much memory as possible
     del batch_generator
