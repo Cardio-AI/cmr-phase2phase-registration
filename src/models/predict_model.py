@@ -1,8 +1,7 @@
+#!/home/sven/anaconda3/envs/dcmr/bin/python
 
-
-
-def main(cfg_file, data_root,c2l=False):
-
+# predict cardiac phases for a cv experiment
+def predict(cfg_file, data_root, c2l=False):
     import json, logging, os
     from logging import info
     import numpy as np
@@ -67,7 +66,7 @@ def main(cfg_file, data_root,c2l=False):
 
 
 if __name__ == "__main__":
-    import argparse, os
+    import argparse, os, sys, glob
 
     parser = argparse.ArgumentParser(description='predict a phase registration model')
 
@@ -80,11 +79,11 @@ if __name__ == "__main__":
 
     results = parser.parse_args()
     os.chdir(results.work_dir)
+    sys.path.append(os.getcwd())
     print('given parameters: {}'.format(results))
 
     # get all cfgs
     # call main for each cfg
-    import glob, os
     search_pattern = '**/**/config/config.json'
     search_path = os.path.join(results.exp_root, search_pattern)
     print(search_path)
@@ -94,7 +93,7 @@ if __name__ == "__main__":
     assert len(cfg_files) == 4, 'No cfgs found'
     for cfg in cfg_files:
         try:
-            main(cfg_file=cfg, data_root=results.data, c2l=results.c2l)
+            predict(cfg_file=cfg, data_root=results.data, c2l=results.c2l)
         except Exception as e:
             print(e)
     exit()
