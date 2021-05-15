@@ -1,4 +1,3 @@
-#!/home/sven/anaconda3/envs/dcmr/bin/python
 
 # predict cardiac phases for a cv experiment
 def predict(cfg_file, data_root, c2l=False):
