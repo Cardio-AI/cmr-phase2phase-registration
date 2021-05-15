@@ -10,6 +10,9 @@ def main(cfg_file, data_root,c2l=False):
     from src.utils.Utils_io import Console_and_file_logger, ensure_dir
     from src.data.Generators import PhaseRegressionGenerator
     from src.models.Models import create_PhaseRegressionModel
+    from ProjectRoot import change_wd_to_project_root
+    change_wd_to_project_root()
+
 
     # load the experiment config
     with open(cfg_file, encoding='utf-8') as data_file:
@@ -23,7 +26,7 @@ def main(cfg_file, data_root,c2l=False):
     # Load SAX volumes
     # cluster to local data mapping
     if c2l:
-        config['DATA_PATH_SAX'] = os.path.join(data_root,'/sax')
+        config['DATA_PATH_SAX'] = os.path.join(data_root,'sax')
         config['DF_FOLDS'] = os.path.join(data_root,'df_kfold.csv')
         config['DF_META'] = os.path.join(data_root,'SAx_3D_dicomTags_phase')
     x_train_sax, y_train_sax, x_val_sax, y_val_sax = get_trainings_files(data_path=config['DATA_PATH_SAX'],
@@ -43,6 +46,7 @@ def main(cfg_file, data_root,c2l=False):
     validation_generator = PhaseRegressionGenerator(x_val_sax, x_val_sax, config=val_config)
 
     model = create_PhaseRegressionModel(config)
+    print(os.getcwd())
     model.load_weights(os.path.join(config['MODEL_PATH'], 'model.h5'))
     logging.info('loaded model weights as h5 file')
 
@@ -63,26 +67,31 @@ def main(cfg_file, data_root,c2l=False):
 
 
 if __name__ == "__main__":
-    import argparse
+    import argparse, os
 
     parser = argparse.ArgumentParser(description='predict a phase registration model')
 
     # usually these two parameters should encapsulate all experiment parameters
-    parser.add_argument('-exp_root', action='store', default='/mnt/ssd/git/dynamic-cmr-models/exp/local/miccai_baseline')
+    parser.add_argument('-exp_root', action='store', default='/mnt/sds/sd20i001/sven/code/exp/miccai_baseline')
     parser.add_argument('-data', action='store', default='/mnt/ssd/data/gcn/02_imported_4D_unfiltered')
+    parser.add_argument('-work_dir', action='store', default='/mnt/ssd/git/dynamic-cmr-models')
     parser.add_argument('-c2l', action='store_true', default=False)
 
+
     results = parser.parse_args()
+    os.chdir(results.work_dir)
     print('given parameters: {}'.format(results))
 
     # get all cfgs
     # call main for each cfg
     import glob, os
     search_pattern = '**/**/config/config.json'
+    search_path = os.path.join(results.exp_root, search_pattern)
+    print(search_path)
 
-    cfg_files = sorted(glob.glob(os.path.join(results.exp_root, search_pattern)))
+    cfg_files = sorted(glob.glob(search_path))
     print(cfg_files)
-    assert len(cfg_files) >= 1, 'No cfgs found'
+    assert len(cfg_files) == 4, 'No cfgs found'
     for cfg in cfg_files:
         try:
             main(cfg_file=cfg, data_root=results.data, c2l=results.c2l)
