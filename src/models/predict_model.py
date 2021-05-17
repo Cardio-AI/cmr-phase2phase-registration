@@ -1,4 +1,3 @@
-
 # predict cardiac phases for a cv experiment
 def predict(cfg_file, data_root, c2l=False):
     import json, logging, os
@@ -13,7 +12,6 @@ def predict(cfg_file, data_root, c2l=False):
     import tensorflow as tf
     tf.get_logger().setLevel('FATAL')
 
-
     # load the experiment config
     with open(cfg_file, encoding='utf-8') as data_file:
         config = json.loads(data_file.read())
@@ -26,9 +24,9 @@ def predict(cfg_file, data_root, c2l=False):
     # Load SAX volumes
     # cluster to local data mapping
     if c2l:
-        config['DATA_PATH_SAX'] = os.path.join(data_root,'sax')
-        config['DF_FOLDS'] = os.path.join(data_root,'df_kfold.csv')
-        config['DF_META'] = os.path.join(data_root,'SAx_3D_dicomTags_phase')
+        config['DATA_PATH_SAX'] = os.path.join(data_root, 'sax')
+        config['DF_FOLDS'] = os.path.join(data_root, 'df_kfold.csv')
+        config['DF_META'] = os.path.join(data_root, 'SAx_3D_dicomTags_phase')
     x_train_sax, y_train_sax, x_val_sax, y_val_sax = get_trainings_files(data_path=config['DATA_PATH_SAX'],
                                                                          path_to_folds_df=config['DF_FOLDS'],
                                                                          fold=config['FOLD'])
@@ -65,7 +63,6 @@ def predict(cfg_file, data_root, c2l=False):
     logging.info('saved as: \n{} \ndone!'.format(pred_filename))
 
 
-
 if __name__ == "__main__":
     import argparse, os, sys, glob
 
@@ -78,7 +75,6 @@ if __name__ == "__main__":
     parser.add_argument('-data', action='store', default='/mnt/ssd/data/gcn/02_imported_4D_unfiltered')
     parser.add_argument('-work_dir', action='store', default='/mnt/ssd/git/dynamic-cmr-models')
     parser.add_argument('-c2l', action='store_true', default=False)
-
 
     results = parser.parse_args()
     os.chdir(results.work_dir)
