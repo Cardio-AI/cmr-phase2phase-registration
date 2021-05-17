@@ -69,6 +69,8 @@ def predict(cfg_file, data_root, c2l=False):
 if __name__ == "__main__":
     import argparse, os, sys, glob
 
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
+
     parser = argparse.ArgumentParser(description='predict a phase registration model')
 
     # usually these two parameters should encapsulate all experiment parameters
