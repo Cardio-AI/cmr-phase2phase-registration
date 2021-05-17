@@ -1268,3 +1268,83 @@ def get_extremas(df, col='vol in ml', target_col='t_norm'):
     patients = df['patient'].unique()
     return pd.DataFrame([get_min_max_t_per_patient(df[df['patient'] == p], col, target_col) for p in patients])
 
+def get_phases_as_onehot_gcn(file_path, df, temporal_sampling_factor, length, weight):
+    """
+    load the phase info of a gcn data structure
+    and converts it into a onehot vector
+    # order of phase classes, learnt by the phase regression model
+    # ['ED#', 'MS#', 'ES#', 'PF#', 'MD#']]
+    Parameters
+    ----------
+    file_path :
+    df :
+    temporal_sampling_factor :
+    length :
+    weight :
+
+    Returns
+    -------
+
+    """
+    import re
+
+    patient_str = re.search('-(.{8})_', file_path).group(1).upper()
+    assert (len(patient_str) == 8), 'matched patient ID from the phase sheet has a length of: {}'.format(
+        len(patient_str))
+
+    # Returns the indices in the following order: 'ED#', 'MS#', 'ES#', 'PF#', 'MD#'
+    # Reduce the indices of the excel sheet by one, as the indexes start at 0, the excel-sheet at 1
+    # Transform them into an one-hot representation
+    indices = df[df.patient.str.contains(patient_str)][
+        ['ED#', 'MS#', 'ES#', 'PF#', 'MD#']]
+    indices = indices.values[0].astype(int) - 1
+
+    # scale the idx as we resampled along t (we need to resample the indicies in the same way)
+    indices = np.round(indices * temporal_sampling_factor).astype(int)
+    indices = np.clip(indices, a_min=0, a_max=length - 1)
+
+    onehot = np.zeros((indices.size, length))
+    onehot[np.arange(indices.size), indices] = weight
+    return onehot
+
+def get_phases_as_onehot_acdc(file_path, temporal_sampling_factor, length, weight):
+    """
+    load the phase info of an acdc data structure
+    and converts it into a onehot vector
+    # order of phase classes, learnt by the phase regression model
+    # ['ED#', 'MS#', 'ES#', 'PF#', 'MD#']]
+    Parameters
+    ----------
+    file_path :
+    temporal_sampling_factor :
+    weight :
+
+    Returns
+    -------
+
+    """
+    # load cfg for one file/patient
+    temp_p = os.path.dirname(os.path.abspath(file_path))
+    temp_cfg_f = os.path.join(temp_p, 'Info.cfg')
+    temp_cfg = dict()
+    cfg_f = open(temp_cfg_f)
+    for l in cfg_f:
+        key, value = l.split(':')
+        temp_cfg[key] = value.replace('\n', '').replace(' ', '')
+
+    # extract ED/ES timetemp
+    temp_ed = int(temp_cfg['ED'])
+    temp_es = int(temp_cfg['ES'])
+    temp_length = int(temp_cfg['NbFrame'])
+    # create onehot vector, set the other phases to zero
+    idx = np.zeros(5)
+    idx[0] = temp_ed
+    idx[2] = temp_es
+    # order of phase classes, learnt by the phase regression model
+    # ['ED#', 'MS#', 'ES#', 'PF#', 'MD#']]
+    indices = np.round(idx * temporal_sampling_factor).astype(int)
+    indices = np.clip(indices, a_min=0, a_max=length-1)
+
+    onehot = np.zeros((indices.size, length))
+    onehot[np.arange(indices.size), indices] = weight
+    return onehot
