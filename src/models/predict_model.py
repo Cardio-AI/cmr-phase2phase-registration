@@ -10,6 +10,8 @@ def predict(cfg_file, data_root, c2l=False):
     from src.models.Models import create_PhaseRegressionModel
     from ProjectRoot import change_wd_to_project_root
     change_wd_to_project_root()
+    import tensorflow as tf
+    tf.get_logger().setLevel('FATAL')
 
 
     # load the experiment config
