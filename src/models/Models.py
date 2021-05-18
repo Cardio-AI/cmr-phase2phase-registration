@@ -55,6 +55,8 @@ def create_PhaseRegressionModel(config, networkname='PhaseRegressionModel'):
         lstm_units = config.get('BILSTM_UNITS', 64)
         final_activation = config.get('FINAL_ACTIVATION', 'relu').lower()
         loss = config.get('LOSS', 'mse').lower()
+        mask_loss = config.get('MASK_LOSS', False)
+        pre_gap_conv = config.get('PRE_GAP_CONV', False)
 
 
         # increase the dropout through the layer depth
@@ -96,6 +98,14 @@ def create_PhaseRegressionModel(config, networkname='PhaseRegressionModel'):
         print(inputs_temporal.shape)
         # unstack each 3D volume encoding, apply global average pooling on each
         inputs_temporal = tf.unstack(inputs_temporal, axis=1)
+
+        if pre_gap_conv:
+            gap_conv = tf.keras.layers.Conv3D(filters=64, kernel_size=3, strides=(2, 1, 1), padding='valid',
+                                              activation=activation, kernel_initializer=kernel_init)
+
+            inputs_temporal = [tf.keras.layers.BatchNormalization()(elem) for elem in inputs_temporal]
+            inputs_temporal = [tf.keras.layers.Dropout(rate=0.5)(elem) for elem in inputs_temporal]
+            inputs_temporal = [gap_conv(vol) for vol in inputs_temporal]
         inputs_temporal = [gap(vol) for vol in inputs_temporal]
         inputs_temporal = tf.stack(inputs_temporal, axis=1)
 
@@ -127,7 +137,7 @@ def create_PhaseRegressionModel(config, networkname='PhaseRegressionModel'):
         if final_activation == 'relu':
             onehot = tf.keras.activations.relu(onehot)
         elif final_activation == 'softmax':
-            # axis -1 --> one class per timestep, as we repeat the phases
+            # axis -1 --> one class per timestep, as we repeat the phases its not possible to softmax the phase
             onehot = tf.keras.activations.softmax(onehot, axis=-1)
         elif final_activation == 'sigmoid':
             onehot = tf.keras.activations.sigmoid(onehot)
@@ -145,12 +155,13 @@ def create_PhaseRegressionModel(config, networkname='PhaseRegressionModel'):
         outputs = [onehot]
 
         if loss == 'cce':
-            losses = [own_metr.CCE(masked=True, smooth=0.8,transposed=True)]
+            losses = [own_metr.CCE(masked=mask_loss, smooth=0.8,transposed=False)]
         elif loss == 'meandiff':
             losses = [own_metr.Meandiff_loss()]
-        else:
-            losses = [own_metr.MSE(masked=False)]
+        else: # default fallback --> MSE - works the best
+            losses = [own_metr.MSE(masked=mask_loss)]
 
+        print('added loss: {}'.format(loss))
         model = Model(inputs=[input_tensor], outputs=outputs, name=networkname)
         model.compile(
             optimizer=get_optimizer(config, networkname),

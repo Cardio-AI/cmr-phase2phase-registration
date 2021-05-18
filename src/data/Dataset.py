@@ -221,11 +221,11 @@ def match_hist_(nda, avg):
     logging.info('fourth: {:0.3f} s'.format(time() - t0))
     return np.reshape(temp, shape_)
 
-def match_hist(nda,avg):
+def match_hist(nda,ref):
     t0 = time()
     for t in range(nda.shape[0]):
         for z in range(nda.shape[1]):
-            nda[t,z] = skimage.exposure.match_histograms(nda[t,z], avg, multichannel=False)
+            nda[t,z] = skimage.exposure.match_histograms(nda[t,z], ref, multichannel=False)
     return nda
 
 def split_one_4d_sitk_in_list_of_3d_sitk(img_4d_sitk, HIST_MATCHING=False, ref=None, axis=None):
@@ -244,7 +244,7 @@ def split_one_4d_sitk_in_list_of_3d_sitk(img_4d_sitk, HIST_MATCHING=False, ref=N
     img_4d_nda = sitk.GetArrayFromImage(img_4d_sitk)
 
     # histogram matching - apply only on 50% of the files
-    if HIST_MATCHING and random.randint(0,100) < 50:
+    if HIST_MATCHING and random.randint(0,100) > 60:
         img_4d_nda = match_hist(img_4d_nda, ref)
 
     if axis:
