@@ -19,7 +19,7 @@ from src.data.Preprocess import resample_3D, crop_to_square_2d, center_crop_or_r
     transform_to_binary_mask, load_masked_img, random_rotate_2D_or_3D, random_rotate90_2D_or_3D, \
     elastic_transoform_2D_or_3D, augmentation_compose_2d_3d_4d, pad_and_crop, resample_t_of_4d
 from src.data.Dataset import describe_sitk, get_t_position_from_filename, get_z_position_from_filename, \
-    split_one_4d_sitk_in_list_of_3d_sitk
+    split_one_4d_sitk_in_list_of_3d_sitk, get_phases_as_onehot_gcn, get_phases_as_onehot_acdc
 #    get_patient, get_img_msk_files_from_split_dir
 
 import concurrent.futures
@@ -645,7 +645,9 @@ class PhaseRegressionGenerator(DataGenerator):
         df = pd.read_csv(self.METADATA_FILE)
         self.DF_METADATA = df[['patient', 'ED#', 'MS#', 'ES#', 'PF#', 'MD#']]
 
-
+        self.ISACDC=False
+        if 'acdc' in self.IMAGES[0].lower():
+            self.ISACDC = True
 
         # create a 1D kernel with linearly increasing/decreasing values in the range(lower,upper),
         # insert a fixed number in the middle, as this reflect the correct idx,
@@ -668,12 +670,9 @@ class PhaseRegressionGenerator(DataGenerator):
 
     def on_batch_end(self):
         """
-        Use this callback for methods that should be executed before each batch generation
+        Use this callback for methods that should be executed after each new batch generation
         """
         pass
-        """if self.HIST_MATCHING:
-            ref = sitk.GetArrayFromImage(sitk.ReadImage((choice(self.IMAGES))))
-            self.ref = ref[ref.shape[0] // 2, ref.shape[1] // 2]"""
 
     def __data_generation__(self, list_IDs_temp):
 
@@ -768,26 +767,32 @@ class PhaseRegressionGenerator(DataGenerator):
         reps = 1
         if self.REPEAT: reps = int(np.ceil(self.T_SHAPE / gt_length))
 
-        # Load the phase info for this patient
-        # Extract the the 8 digits-patient ID from the filename (starts with '_', ends with '-')
-        # Next search this patient ID in the loaded Phase dataframe
-        patient_str = re.search('-(.{8})_', x).group(1).upper()
-        assert (len(patient_str) == 8), 'matched patient ID from the phase sheet has a length of: {}'.format(
-            len(patient_str))
-
         # Returns the indices in the following order: 'ED#', 'MS#', 'ES#', 'PF#', 'MD#'
-        # Reduce the indices of the excel sheet by one, as the indexes start at 0, the excel-sheet at 1
-        # Transform them into an one-hot representation
-        indices = self.DF_METADATA[self.DF_METADATA.patient.str.contains(patient_str)][
-            ['ED#', 'MS#', 'ES#', 'PF#', 'MD#']]
-        indices = indices.values[0].astype(int) - 1
+        if self.ISACDC:
+            onehot = get_phases_as_onehot_acdc(x, temporal_sampling_factor, len(model_inputs), self.SMOOTHING_WEIGHT_CORRECT)
+        else:
+            onehot = get_phases_as_onehot_gcn(x, self.DF_METADATA, temporal_sampling_factor, len(model_inputs), self.SMOOTHING_WEIGHT_CORRECT)
 
-        # scale the idx as we resampled along t (we need to resample the indicies in the same way)
-        indices = np.round(indices * temporal_sampling_factor).astype(int)
-        indices = np.clip(indices, a_min=0, a_max=len(model_inputs)-1)
-
-        onehot = np.zeros((indices.size, len(model_inputs)))
-        onehot[np.arange(indices.size), indices] = self.SMOOTHING_WEIGHT_CORRECT
+        """        # Load the phase info for this patient
+                # Extract the the 8 digits-patient ID from the filename (starts with '_', ends with '-')
+                # Next search this patient ID in the loaded Phase dataframe
+                patient_str = re.search('-(.{8})_', x).group(1).upper()
+                assert (len(patient_str) == 8), 'matched patient ID from the phase sheet has a length of: {}'.format(
+                    len(patient_str))
+        
+                # Returns the indices in the following order: 'ED#', 'MS#', 'ES#', 'PF#', 'MD#'
+                # Reduce the indices of the excel sheet by one, as the indexes start at 0, the excel-sheet at 1
+                # Transform them into an one-hot representation
+                indices = self.DF_METADATA[self.DF_METADATA.patient.str.contains(patient_str)][
+                    ['ED#', 'MS#', 'ES#', 'PF#', 'MD#']]
+                indices = indices.values[0].astype(int) - 1
+        
+                # scale the idx as we resampled along t (we need to resample the indicies in the same way)
+                indices = np.round(indices * temporal_sampling_factor).astype(int)
+                indices = np.clip(indices, a_min=0, a_max=len(model_inputs)-1)
+        
+                onehot = np.zeros((indices.size, len(model_inputs)))
+                onehot[np.arange(indices.size), indices] = self.SMOOTHING_WEIGHT_CORRECT"""
 
         logging.debug('onehot initialised:')
         if self.DEBUG_MODE: plt.imshow(onehot); plt.show()
