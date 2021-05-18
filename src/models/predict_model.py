@@ -89,7 +89,7 @@ if __name__ == "__main__":
 
     cfg_files = sorted(glob.glob(search_path))
     print(cfg_files)
-    assert len(cfg_files) == 4, 'No cfgs found'
+    assert len(cfg_files) == 4, 'Expect 4 cfgs, but found {}'.format(len(cfg_files))
     for cfg in cfg_files:
         try:
             predict(cfg_file=cfg, data_root=results.data, c2l=results.c2l)
