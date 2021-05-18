@@ -89,11 +89,13 @@ def get_min_distance(vals):
 
 class Meandiff_loss():
 
-    def __init__(self):
+    def __init__(self, apply_sum=True, apply_average=True):
         self.__name__ = 'meandiff_loss'
+        self.apply_sum=apply_sum
+        self.apply_average = apply_average
 
     def __call__(self, y_true, y_pred, **kwargs):
-        return  meandiff_loss(y_true, y_pred, apply_sum=True, apply_average=True) # this should yield a loss between 1 and 0.0001
+        return  meandiff_loss(y_true, y_pred, apply_sum=self.apply_sum, apply_average=self.apply_average) # this should yield a loss between 1 and 0.0001
 
 
 def meandiff_loss( y_true, y_pred, apply_sum=True, apply_average=True, as_loss=False):
@@ -261,19 +263,21 @@ class CCE(tf.keras.losses.Loss):
         self.smooth = smooth
         self.transposed = transposed
 
-    def __call__(self, y_pred, y_true, **kwargs):
+    def __call__(self, y_true, y_pred, **kwargs):
 
         if y_true.shape[1] == 2: # this is a stacked onehot vector
             y_true, y_msk = tf.unstack(y_true, num=2, axis=1)
             y_pred, _ = tf.unstack(y_pred, num=2, axis=1)
 
             if self.masked:
+                y_msk = tf.cast(y_msk, tf.float32)
                 y_true = y_true * y_msk
                 y_pred = y_pred * y_msk
 
         if self.transposed:
-            y_true = tf.nn.softmax(tf.transpose(y_true, perm=[0, 2, 1]), axis=-1)
-            y_pred = tf.nn.softmax(tf.transpose(y_pred, perm=[0, 2, 1]), axis=-1)
+            #, perm=[0, 2, 1]
+            y_true = tf.nn.softmax(tf.transpose(y_true), axis=-1)
+            y_pred = tf.nn.softmax(tf.transpose(y_pred), axis=-1)
 
         loss = tf.keras.losses.categorical_crossentropy(y_true, y_pred, label_smoothing=self.smooth)
 
@@ -306,7 +310,7 @@ class MSE(tf.keras.losses.Loss):
         self.masked = masked
 
 
-    def __call__(self, y_pred, y_true, **kwargs):
+    def __call__(self, y_true, y_pred, **kwargs):
 
         if y_true.shape[1] == 2: # this is a stacked onehot vector
             y_true, y_msk = tf.unstack(y_true, num=2, axis=1)
@@ -314,11 +318,11 @@ class MSE(tf.keras.losses.Loss):
 
 
             if self.masked:
-                y_msk = tf.cast(y_true, tf.float32) + 1  # weight the first area by 2
+                y_msk = tf.cast(y_msk, tf.float32)  # weight the first area by 2
                 y_true = y_msk * y_true
-                y_pred =  y_msk * y_pred
+                y_pred = y_msk * y_pred
 
-        return tf.keras.losses.mse(y_true, y_pred)
+        return tf.keras.losses.mse(y_true, y_pred) #* y_msk[...,0]
 
 def mse_wrapper(y_true,y_pred):
     y_true, y_len = tf.unstack(y_true,num=2, axis=1)

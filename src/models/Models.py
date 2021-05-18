@@ -1,3 +1,5 @@
+import logging
+
 from tensorflow.python.keras.layers import LSTM, Bidirectional
 
 from src.models.KerasLayers import ConvEncoder
@@ -51,6 +53,8 @@ def create_PhaseRegressionModel(config, networkname='PhaseRegressionModel'):
         batchsize = config.get('BATCHSIZE', 8)
         add_bilstm = config.get('ADD_BILSTM', False)
         lstm_units = config.get('BILSTM_UNITS', 64)
+        final_activation = config.get('FINAL_ACTIVATION', 'relu').lower()
+        loss = config.get('LOSS', 'mse').lower()
 
 
         # increase the dropout through the layer depth
@@ -117,8 +121,18 @@ def create_PhaseRegressionModel(config, networkname='PhaseRegressionModel'):
         # input (36,encoding) output (36,5)
         # either 36,256 --> from the temp encoder or
         # 36,64 --> 64 --> number of BI-LSTM units
-        onehot = tf.keras.layers.Conv1D(filters=PHASES, kernel_size=1, strides=1, padding='same', activation=activation,
+        # activation to linear
+        onehot = tf.keras.layers.Conv1D(filters=PHASES, kernel_size=1, strides=1, padding='same', activation='linear',
                                         name='final_conv')(inputs)
+        if final_activation == 'relu':
+            onehot = tf.keras.activations.relu(onehot)
+        elif final_activation == 'softmax':
+            # axis -1 --> one class per timestep, as we repeat the phases
+            onehot = tf.keras.activations.softmax(onehot, axis=-1)
+        elif final_activation == 'sigmoid':
+            onehot = tf.keras.activations.sigmoid(onehot)
+        else:
+            logging.info('No final activation given! Please check the "FINAL_ACTIVATION" param!')
 
         # 36, 5
         print('Shape after final conv layer')
@@ -130,10 +144,12 @@ def create_PhaseRegressionModel(config, networkname='PhaseRegressionModel'):
 
         outputs = [onehot]
 
-
-        #losses = [own_metr.CCE(masked=True, smooth=0.2,transposed=True)]
-        losses = [own_metr.MSE(masked=False)]
-        #losses = [own_metr.Meandiff_loss()]
+        if loss == 'cce':
+            losses = [own_metr.CCE(masked=True, smooth=0.8,transposed=True)]
+        elif loss == 'meandiff':
+            losses = [own_metr.Meandiff_loss()]
+        else:
+            losses = [own_metr.MSE(masked=False)]
 
         model = Model(inputs=[input_tensor], outputs=outputs, name=networkname)
         model.compile(
