@@ -640,22 +640,21 @@ class PhaseRegressionGenerator(DataGenerator):
         self.Y_SHAPE = np.empty((self.BATCHSIZE, 2, *self.TARGET_SHAPE),
                                 dtype=np.float32)  # onehot and mask with gt length
 
-        # opens a dataframe with cleaned phases per patient
-        self.METADATA_FILE = config.get('DF_META', '/mnt/ssd/data/gcn/02_imported_4D_unfiltered/SAx_3D_dicomTags_phase')
-        df = pd.read_csv(self.METADATA_FILE)
-        self.DF_METADATA = df[['patient', 'ED#', 'MS#', 'ES#', 'PF#', 'MD#']]
-
         self.ISACDC = False
         if 'acdc' in self.IMAGES[0].lower():
             self.ISACDC = True
 
+        # opens a dataframe with cleaned phases per patient
+        if not self.ISACDC:
+            self.METADATA_FILE = config.get('DF_META', '/mnt/ssd/data/gcn/02_imported_4D_unfiltered/SAx_3D_dicomTags_phase')
+            df = pd.read_csv(self.METADATA_FILE)
+            self.DF_METADATA = df[['patient', 'ED#', 'MS#', 'ES#', 'PF#', 'MD#']]
+
+
+
         # create a 1D kernel with linearly increasing/decreasing values in the range(lower,upper),
         # insert a fixed number in the middle, as this reflect the correct idx,
         # which might should have an greater weighting than an linear function could reflect
-        self.KERNEL = np.concatenate([
-            np.linspace(self.SMOOTHING_LOWER_BORDER, self.SMOOTHING_UPPER_BORDER, self.SMOOTHING_KERNEL_SIZE // 2),
-            [self.SMOOTHING_WEIGHT_CORRECT],
-            np.linspace(self.SMOOTHING_UPPER_BORDER, self.SMOOTHING_LOWER_BORDER, self.SMOOTHING_KERNEL_SIZE // 2)])
         logging.info('Smoothing kernel: \n{}'.format(self.KERNEL))
         logging.info('Temporal phase augmentation: \n{}'
                      '\n'
