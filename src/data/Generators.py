@@ -13,6 +13,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import tensorflow.keras
+from scipy.ndimage import gaussian_filter1d
 
 from src.data.Dataset import describe_sitk, split_one_4d_sitk_in_list_of_3d_sitk, get_phases_as_onehot_gcn, \
     get_phases_as_onehot_acdc
@@ -807,7 +808,6 @@ class PhaseRegressionGenerator(DataGenerator):
             # By this we avoid hard borders
             # Later divide the smoothed vectors by the sum or via softmax
             # to make sure they sum up to 1 for each class
-            from scipy.ndimage import gaussian_filter1d
             onehot = np.apply_along_axis(
                 lambda x: gaussian_filter1d(x, sigma=self.SIGMA),
                 axis=1, arr=onehot)
