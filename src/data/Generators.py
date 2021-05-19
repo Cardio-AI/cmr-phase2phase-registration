@@ -656,7 +656,6 @@ class PhaseRegressionGenerator(DataGenerator):
         # create a 1D kernel with linearly increasing/decreasing values in the range(lower,upper),
         # insert a fixed number in the middle, as this reflect the correct idx,
         # which might should have an greater weighting than an linear function could reflect
-        logging.info('Smoothing kernel: \n{}'.format(self.KERNEL))
         logging.info('Temporal phase augmentation: \n{}'
                      '\n'
                      'Repeat volume: \n{}'.format(self.AUGMENT_PHASES, self.REPEAT))
