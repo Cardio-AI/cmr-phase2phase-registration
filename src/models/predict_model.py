@@ -38,7 +38,8 @@ def predict(cfg_file, data_root, c2l=False):
     config['AUGMENT_PHASES'] = False
     config['AUGMENT_TEMP'] = False
     config['BATCHSIZE'] = 1
-    batch_generator = PhaseRegressionGenerator(x_train_sax, x_train_sax, config=config)
+    config['HIST_MATCHING'] = False
+    #batch_generator = PhaseRegressionGenerator(x_train_sax, x_train_sax, config=config)
     # create another config for the validation data, for the case of different evaluation
     val_config = config.copy()
     validation_generator = PhaseRegressionGenerator(x_val_sax, x_val_sax, config=val_config)
