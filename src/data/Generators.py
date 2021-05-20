@@ -692,7 +692,8 @@ class PhaseRegressionGenerator(DataGenerator):
         futures = set()
 
         # spawn one thread per worker
-        with concurrent.futures.ThreadPoolExecutor(max_workers=self.MAX_WORKERS) as executor:
+        #with concurrent.futures.ThreadPoolExecutor(max_workers=self.MAX_WORKERS) as executor:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=16) as executor:
 
             t0 = time()
             ID = ''
