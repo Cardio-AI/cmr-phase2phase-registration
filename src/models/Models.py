@@ -158,6 +158,11 @@ def create_PhaseRegressionModel(config, networkname='PhaseRegressionModel'):
             losses = [own_metr.CCE(masked=mask_loss, smooth=0.8,transposed=False)]
         elif loss == 'meandiff':
             losses = [own_metr.Meandiff_loss()]
+        elif loss == 'msecce':
+            print(loss)
+            #own_metr.CCE(masked=False,smooth=0.8,transposed=False)
+            losses = [own_metr.MSE(), own_metr.CCE(masked=mask_loss, smooth=0.8,transposed=False)]
+            print(losses)
         else: # default fallback --> MSE - works the best
             losses = [own_metr.MSE(masked=mask_loss)]
 

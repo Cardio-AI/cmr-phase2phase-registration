@@ -238,20 +238,20 @@ def DifferentiableArgmax(inputs, axis=-1):
 
 class CCE_combined(tf.keras.losses.Loss):
 
-    def __init__(self, masked=True, smooth=0, transposed=True):
+    def __init__(self, masked=True, smooth=0.8, transposed=True):
 
         super().__init__(name='mse_cce_t')
         self.masked = masked
         self.smooth = smooth
         self.transposed = transposed
         self.mse = MSE(masked=False)
-        self.cce_t = CCE(masked=masked, smooth=smooth, transposed=transposed)
+        self.cce = CCE(masked=masked, smooth=smooth, transposed=transposed)
         self.cce_weight = 0.5
-        self.cce_t_weight = 0.5
+        self.mse_weight = 0.5
 
     def __call__(self, y_true, y_pred, **kwargs):
 
-        return self.cce_weight*self.cce(y_true, y_pred) + self.cce_t_weight * self.cce_t(y_true,y_pred)
+        return self.cce_weight*self.cce(y_true, y_pred) + self.mse_weight * self.mse(y_true,y_pred)
 
 
 class CCE(tf.keras.losses.Loss):
@@ -276,10 +276,16 @@ class CCE(tf.keras.losses.Loss):
 
         if self.transposed:
             #, perm=[0, 2, 1]
-            y_true = tf.nn.softmax(tf.transpose(y_true), axis=-1)
-            y_pred = tf.nn.softmax(tf.transpose(y_pred), axis=-1)
+            y_true = tf.transpose(y_true, perm=[0,2,1,3]),
+            y_pred = tf.transpose(y_pred, perm=[0,2,1,3])
 
-        loss = tf.keras.losses.categorical_crossentropy(y_true, y_pred, label_smoothing=self.smooth)
+        y_true = tf.nn.softmax(y_true, axis=-1)
+        y_pred = tf.nn.softmax(y_pred, axis=-1)
+
+        loss = tf.keras.losses.CategoricalCrossentropy(label_smoothing=self.smooth, reduction=tf.keras.losses.Reduction.NONE)(y_true, y_pred)
+        if self.transposed:
+            #loss = tf.transpose(loss, perm=[0,2,1])
+            pass
 
         return loss
 

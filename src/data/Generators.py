@@ -737,10 +737,10 @@ class PhaseRegressionGenerator(DataGenerator):
 
         ref = None
         if self.HIST_MATCHING:
-            ignore_z = 3
+            ignore_z = 2
             # use a random image, given to this generator, as histogram template for histogram matching augmentation
-            ref = sitk.GetArrayViewFromImage(sitk.ReadImage((choice(self.IMAGES))))
-            ref = ref[choice(list(range(ref.shape[0]))), choice(list(range(ref.shape[1]))[ignore_z:-ignore_z])]
+            ref = sitk.GetArrayFromImage(sitk.ReadImage((choice(self.IMAGES))))
+            ref = ref[choice(list(range(ref.shape[0]-1))), choice(list(range(ref.shape[1]-1))[ignore_z:-ignore_z])]
         t0 = time()
 
         x = self.IMAGES[ID]
@@ -763,7 +763,7 @@ class PhaseRegressionGenerator(DataGenerator):
             temporal_sampling_factor = 1  # dont scale the indices if we dont resample T
         # Create a list of 3D volumes for resampling
         # apply histogram matching if given by config
-        model_inputs = split_one_4d_sitk_in_list_of_3d_sitk(model_inputs, HIST_MATCHING=self.HIST_MATCHING, ref=ref)
+        model_inputs = split_one_4d_sitk_in_list_of_3d_sitk(model_inputs, HIST_MATCHING=self.HIST_MATCHING, ref=ref, axis=0)
         logging.debug('load + hist matching took: {:0.3f} s'.format(time() - t0))
         gt_length = len(model_inputs)
         # How many times do we need to repeat that cycle along t to cover the desired output size

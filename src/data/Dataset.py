@@ -7,7 +7,7 @@ import glob
 import os
 import SimpleITK as sitk
 import skimage
-import skimage.exposure
+
 
 from src.utils.Utils_io import ensure_dir
 from src.visualization.Visualize import plot_value_histogram
@@ -221,11 +221,13 @@ def match_hist_(nda, avg):
     logging.info('fourth: {:0.3f} s'.format(time() - t0))
     return np.reshape(temp, shape_)
 
-def match_hist(nda,ref):
+def match_hist(nda,ref, prob_per_z=50):
+    import skimage.exposure
     t0 = time()
-    for t in range(nda.shape[0]):
-        for z in range(nda.shape[1]):
-            nda[t,z] = skimage.exposure.match_histograms(nda[t,z], ref, multichannel=False)
+    for z in range(nda.shape[1]):
+        if random.randint(0,100) > prob_per_z: # apply hit matching only on some 2d slices +t, this is more realistic, as some series have different scanner settings
+            for t in range(nda.shape[0]):
+                nda[t,z] = skimage.exposure.match_histograms(nda[t,z], ref, multichannel=False)
     return nda
 
 def split_one_4d_sitk_in_list_of_3d_sitk(img_4d_sitk, HIST_MATCHING=False, ref=None, axis=None):
@@ -242,9 +244,8 @@ def split_one_4d_sitk_in_list_of_3d_sitk(img_4d_sitk, HIST_MATCHING=False, ref=N
     """
 
     img_4d_nda = sitk.GetArrayFromImage(img_4d_sitk)
-
     # histogram matching - apply only on 50% of the files
-    if HIST_MATCHING and random.randint(0,100) > 60:
+    if HIST_MATCHING and random.randint(0,100) > 0: # apply always
         img_4d_nda = match_hist(img_4d_nda, ref)
 
     if axis:

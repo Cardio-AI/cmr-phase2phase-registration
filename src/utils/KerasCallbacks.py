@@ -640,7 +640,7 @@ class PhaseRegressionCallback(Callback):
 
                 for key, x, y in zip(self.keys, self.xs, self.ys):
                     predictions = self.model.predict(x)
-                    logging.info(predictions.shape)
+                    #logging.info(predictions.shape)
                     # xs and ys have the shape n, x, y, 1, they are grouped by the key
                     # count the samples provided by each key to sort them
                     #for i in range(x.shape[0]):
