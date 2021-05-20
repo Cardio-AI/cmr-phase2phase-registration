@@ -921,6 +921,9 @@ class PhaseRegressionGenerator(DataGenerator):
                 np.ones((gt_length, self.PHASES)),
                 ((0, self.T_SHAPE - gt_length), (0, 0)))
 
+        if self.ISACDC:
+            model_inputs = np.flip(model_inputs,axis=1)
+
         onehot = np.stack([onehot, msk], axis=0)
         # make sure we do not introduce Nans to the model
         assert not np.any(np.isnan(onehot))

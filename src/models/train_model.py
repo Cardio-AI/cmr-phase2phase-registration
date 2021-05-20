@@ -5,7 +5,7 @@ def train_fold(config):
     # if not set them with default values
     from src.utils.Tensorflow_helper import choose_gpu_by_id
     # ------------------------------------------define GPU id/s to use
-    GPU_IDS = '0,1'
+    GPU_IDS = config.get('GPU_IDS', '0,1')
     GPUS = choose_gpu_by_id(GPU_IDS)
     print(GPUS)
     # ------------------------------------------ import helpers
