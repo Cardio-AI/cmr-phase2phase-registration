@@ -16,7 +16,7 @@ import tensorflow.keras
 from scipy.ndimage import gaussian_filter1d
 
 from src.data.Dataset import describe_sitk, split_one_4d_sitk_in_list_of_3d_sitk, get_phases_as_onehot_gcn, \
-    get_phases_as_onehot_acdc
+    get_phases_as_onehot_acdc, get_n_windows_from_single4D, get_phases_as_idx_gcn, get_phases_as_idx_acdc
 from src.data.Preprocess import resample_3D, clip_quantile, normalise_image, grid_dissortion_2D_or_3D, \
     transform_to_binary_mask, load_masked_img, random_rotate90_2D_or_3D, \
     augmentation_compose_2d_3d_4d, pad_and_crop, resample_t_of_4d
@@ -692,9 +692,7 @@ class PhaseRegressionGenerator(DataGenerator):
         futures = set()
 
         # spawn one thread per worker
-        #with concurrent.futures.ThreadPoolExecutor(max_workers=self.MAX_WORKERS) as executor:
-        with concurrent.futures.ThreadPoolExecutor(max_workers=16) as executor:
-
+        with concurrent.futures.ThreadPoolExecutor(max_workers=self.MAX_WORKERS) as executor:
             t0 = time()
             ID = ''
             # Generate data
@@ -931,6 +929,229 @@ class PhaseRegressionGenerator(DataGenerator):
         assert not np.any(np.isnan(model_inputs))
 
         return model_inputs[..., None], onehot, i, ID, time() - t0
+
+class PhaseWindowGenerator(DataGenerator):
+    """
+    yields n input volumes and n output volumes
+    """
+
+    def __init__(self, x=None, y=None, config=None):
+
+        if config is None:
+            config = {}
+        super().__init__(x=x, y=y, config=config)
+
+        self.T_SPACING = config.get('T_SPACING', 10)
+        self.PHASES = config.get('PHASES', 5)
+        self.HIST_MATCHING = config.get('HIST_MATCHING', False)
+        self.IMG_INTERPOLATION = config.get('IMG_INTERPOLATION', sitk.sitkLinear)
+        self.MSK_INTERPOLATION = config.get('MSK_INTERPOLATION', sitk.sitkNearestNeighbor)
+        self.AUGMENT_TEMP = config.get('AUGMENT_TEMP', False)
+        self.AUGMENT_TEMP_RANGE = config.get('AUGMENT_TEMP_RANGE', (-2, 2))
+        self.RESAMPLE_T = config.get('RESAMPLE_T', False)
+
+        self.X_SHAPE = np.empty((self.BATCHSIZE, self.PHASES, *self.DIM, 1), dtype=np.float32)
+        self.Y_SHAPE = np.empty((self.BATCHSIZE, self.PHASES, *self.DIM, 1), dtype=np.float32)
+
+        self.ISACDC = False
+        if 'acdc' in self.IMAGES[0].lower():
+            self.ISACDC = True
+
+        # opens a dataframe with cleaned phases per patient
+        if not self.ISACDC:
+            self.METADATA_FILE = config.get('DF_META', '/mnt/ssd/data/gcn/02_imported_4D_unfiltered/SAx_3D_dicomTags_phase')
+            df = pd.read_csv(self.METADATA_FILE)
+            self.DF_METADATA = df[['patient', 'ED#', 'MS#', 'ES#', 'PF#', 'MD#']]
+
+        self.MASKS = None  # need to check if this is still necessary!
+
+        # define a random seed for albumentations
+        random.seed(config.get('SEED', 42))
+        logging.info('params of generator:')
+        logging.info(list((k, v) for k, v in vars(self).items() if
+                          type(v) in [int, str, list, bool] and str(k) not in ['IMAGES', 'LABELS']))
+
+    def on_batch_end(self):
+        """
+        Use this callback for methods that should be executed after each new batch generation
+        """
+        pass
+
+    def __data_generation__(self, list_IDs_temp):
+
+        """
+        Loads and pre-process one batch
+
+        :param list_IDs_temp:
+        :return: X : (batchsize, *dim, n_channels), Y : (batchsize, self.T_SHAPE, number_of_classes)
+        """
+        # use this for batch wise histogram-reference selection
+        self.on_batch_end()
+
+        # Initialization
+        x = np.empty_like(self.X_SHAPE)  # model input
+        y = np.empty_like(self.Y_SHAPE)  # model output
+
+        futures = set()
+
+        # spawn one thread per worker
+        with concurrent.futures.ThreadPoolExecutor(max_workers=self.MAX_WORKERS) as executor:
+            t0 = time()
+            ID = ''
+            # Generate data
+            for i, ID in enumerate(list_IDs_temp):
+
+                try:
+                    # remember the ordering of the shuffled indexes,
+                    # otherwise files, that take longer are always at the batch end
+                    futures.add(executor.submit(self.__preprocess_one_image__, i, ID))
+
+                except Exception as e:
+                    PrintException()
+                    print(e)
+                    logging.error(
+                        'Exception {} in datagenerator with: image: {} or mask: {}'.format(str(e), self.IMAGES[ID],
+                                                                                           self.LABELS[ID]))
+
+        for i, future in enumerate(as_completed(futures)):
+            # use the indexes to order the batch
+            # otherwise slower images will always be at the end of the batch
+            try:
+                x_, y_, i, ID, needed_time = future.result()
+                x[i,], y[i,] = x_, y_
+                logging.debug('img finished after {:0.3f} sec.'.format(needed_time))
+            except Exception as e:
+                # write these files into a dedicated error log
+                PrintException()
+                print(e)
+                logging.error(
+                    'Exception {} in datagenerator with:\n'
+                    'image:\n'
+                    '{}\n'
+                    'mask:\n'
+                    '{}'.format(str(e), self.IMAGES[ID], self.LABELS[ID]))
+
+        logging.debug('Batchsize: {} preprocessing took: {:0.3f} sec'.format(self.BATCHSIZE, time() - t0))
+        zeros = np.zeros((*x.shape[:-1], 3), dtype=np.float32)
+        return tuple([[x, zeros], [y, zeros]])
+
+    def __preprocess_one_image__(self, i, ID):
+
+        ref = None
+        if self.HIST_MATCHING:
+            ignore_z = 1
+            # use a random image, given to this generator, as histogram template for histogram matching augmentation
+            ref = sitk.GetArrayFromImage(sitk.ReadImage((choice(self.IMAGES))))
+            ref = ref[choice(list(range(ref.shape[0]-1))), choice(list(range(ref.shape[1]-1))[ignore_z:-ignore_z])]
+        t0 = time()
+
+        x = self.IMAGES[ID]
+
+        # use the load_masked_img wrapper to enable masking of the images, currently not necessary, but nice to have
+        model_inputs = load_masked_img(sitk_img_f=x, mask=self.MASKING_IMAGE,
+                                       masking_values=self.MASKING_VALUES, replace=self.REPLACE_WILDCARD)
+
+        # resample the temporal resolution
+        # if AUGMENT_TEMP --> add an temporal augmentation factor within the range given by: AUGMENT_TEMP_RANGE
+        t_spacing = self.T_SPACING
+        if self.AUGMENT_TEMP: t_spacing = t_spacing + random.randint(self.AUGMENT_TEMP_RANGE[0],
+                                                                     self.AUGMENT_TEMP_RANGE[1])
+        logging.debug('t-spacing: {}'.format(t_spacing))
+        if self.RESAMPLE_T:
+            temporal_sampling_factor = model_inputs.GetSpacing()[-1] / t_spacing
+            model_inputs = resample_t_of_4d(model_inputs, t_spacing=t_spacing, interpolation=self.IMG_INTERPOLATION,
+                                            ismask=False)
+        else:
+            temporal_sampling_factor = 1  # dont scale the indices if we dont resample T
+        # Create a list of 3D volumes for volume resampling
+        # apply histogram matching if given by config
+        model_inputs = split_one_4d_sitk_in_list_of_3d_sitk(model_inputs, HIST_MATCHING=self.HIST_MATCHING, ref=ref, axis=0)
+        logging.debug('load + hist matching took: {:0.3f} s'.format(time() - t0))
+
+        # Returns the indices in the following order: 'ED#', 'MS#', 'ES#', 'PF#', 'MD#'
+        if self.ISACDC:
+            idx = get_phases_as_idx_acdc(x, temporal_sampling_factor, len(model_inputs))
+        else:
+            idx = get_phases_as_idx_gcn(x, self.DF_METADATA, temporal_sampling_factor, len(model_inputs))
+
+        # logging.debug('transposed: \n{}'.format(onehot))
+        self.__plot_state_if_debug__(img=model_inputs[len(model_inputs) // 2], start_time=t0, step='raw')
+        t1 = time()
+
+        if self.RESAMPLE:
+            if model_inputs[0].GetDimension() in [2, 3]:
+
+                # calculate the new size (after resample with the given spacing) of each 3D volume
+                # sitk.spacing has the opposite order than np.shape and tf.shape
+                # In the config we use the numpy order z, y, x which needs to be reversed for sitk
+                def calc_resampled_size(sitk_img, target_spacing):
+                    if type(target_spacing) in [list, tuple]:
+                        target_spacing = np.array(target_spacing)
+                    old_size = np.array(sitk_img.GetSize())
+                    old_spacing = np.array(sitk_img.GetSpacing())
+                    logging.debug('old size: {}, old spacing: {}, target spacing: {}'.format(old_size, old_spacing,
+                                                                                             target_spacing))
+                    new_size = (old_size * old_spacing) / target_spacing
+                    return list(np.around(new_size).astype(np.int))
+
+                # transform the spacing from numpy representation towards the sitk representation
+                target_spacing = list(reversed(self.SPACING))
+                new_size_inputs = list(map(lambda elem: calc_resampled_size(elem, target_spacing), model_inputs))
+
+            else:
+                raise NotImplementedError('dimension not supported: {}'.format(model_inputs[0].GetDimension()))
+
+            logging.debug('dimension: {}'.format(model_inputs[0].GetDimension()))
+            logging.debug('Size before resample: {}'.format(model_inputs[0].GetSize()))
+
+            model_inputs = list(map(lambda x:
+                                    resample_3D(sitk_img=x[0],
+                                                size=x[1],
+                                                spacing=target_spacing,
+                                                interpolate=sitk.sitkLinear),
+                                    zip(model_inputs, new_size_inputs)))
+
+        logging.debug('Spacing after resample: {}'.format(model_inputs[0].GetSpacing()))
+        logging.debug('Size after resample: {}'.format(model_inputs[0].GetSize()))
+
+        # transform to nda for further processing
+        # repeat the 3D volumes along t (we did the same with the onehot vector)
+        model_inputs = np.stack(list(map(lambda x: sitk.GetArrayFromImage(x), model_inputs)), axis=0)
+
+        self.__plot_state_if_debug__(img=model_inputs[len(model_inputs) // 2], start_time=t1, step='resampled')
+
+        if self.AUGMENT:
+            # use albumentation to apply random rotation scaling and shifts
+            model_inputs = augmentation_compose_2d_3d_4d(img=model_inputs, mask=None,
+                                                         probabillity=self.AUGMENT_PROB)
+            self.__plot_state_if_debug__(img=model_inputs[0], start_time=t1, step='augmented')
+            t1 = time()
+
+        # clip, pad/crop and normalise & extend last axis
+        # We repeat/tile the 3D volume at this time, to avoid resampling/augmenting the same slices multiple times
+        # Ideally this saves computation time and memory
+        model_inputs = clip_quantile(model_inputs, .9999)
+
+
+        # get the volumes of each phase window
+        inputs, targets = get_n_windows_from_single4D(model_inputs, idx, window_size=2)
+
+        inputs = pad_and_crop(inputs, target_shape=(self.PHASES,*self.DIM))
+        targets = pad_and_crop(targets, target_shape=(self.PHASES, *self.DIM))
+
+
+
+        model_inputs = normalise_image(inputs, normaliser=self.SCALER)  # normalise per 4D
+        model_targets = normalise_image(targets, normaliser=self.SCALER)  # normalise per 4D
+
+        self.__plot_state_if_debug__(img=model_inputs[len(model_inputs) // 2], start_time=t1,
+                                     step='clipped cropped and pad')
+
+
+        assert not np.any(np.isnan(inputs))
+        assert not np.any(np.isnan(targets))
+
+        return model_inputs[..., np.newaxis], model_targets[..., np.newaxis], i, ID, time() - t0
 
 
 import linecache

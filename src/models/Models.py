@@ -171,7 +171,8 @@ def create_PhaseRegressionModel(config, networkname='PhaseRegressionModel'):
         model.compile(
             optimizer=get_optimizer(config, networkname),
             loss=losses,
-            metrics=[own_metr.mse_wrapper, own_metr.ca_wrapper, own_metr.meandiff] #
+            #metrics=[own_metr.mse_wrapper, own_metr.ca_wrapper, own_metr.meandiff] #
+            metrics=[own_metr.meandiff]  #
         )
 
         return model

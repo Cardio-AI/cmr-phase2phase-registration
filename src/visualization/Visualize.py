@@ -678,7 +678,7 @@ def plot_3d_vol(img_3d, mask_3d=None, timestep=0, save=False, path='reports/figu
     # slice very huge 3D volumes, otherwise they are too small on the plot
     if (img_3d.shape[0] > 20) and (img_3d.ndim == 3) and allow_slicing:
         slice_n = img_3d.shape[0] // 20
-        logging.info('{} sliced first axis {} by {}'.format('plot_3d_vol',img_3d.shape[0], slice_n ))
+        logging.debug('{} sliced first axis {} by {}'.format('plot_3d_vol',img_3d.shape[0], slice_n ))
 
     img_3d = img_3d[::slice_n]
     mask_3d = mask_3d[::slice_n]if mask_3d is not None else mask_3d
