@@ -1,5 +1,3 @@
-from src.data.Dataset import save_all_3d_vols
-
 
 def train_fold(config):
     # make sure all neccessary params in config are set
@@ -144,6 +142,7 @@ def train_fold(config):
     info(transformed.shape)
     info(flow.shape)
     # TODO: refactor
+    from src.data.Dataset import save_all_3d_vols
     save_all_3d_vols(inputs[0], outputs[0], flow[0], config.get('EXP_PATH'), 'example_flow_0')
     save_all_3d_vols(inputs[1], outputs[1], flow[1], config.get('EXP_PATH'), 'example_flow_1')
 
