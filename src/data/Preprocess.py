@@ -336,7 +336,7 @@ def random_rotate90_2D_or_3D(img, mask, probabillity=0.8):
 
     return augmented['image'], augmented['mask']
 
-def augmentation_compose_2d_3d_4d(img, mask, probabillity=1, get_params=False):
+def augmentation_compose_2d_3d_4d(img, mask, probabillity=1, config={}):
     """
     Apply an compisition of different augmentation steps,
     either on 2D or 3D image/mask pairs,
@@ -421,10 +421,8 @@ def augmentation_compose_2d_3d_4d(img, mask, probabillity=1, get_params=False):
                 if img_given: targets['{}_{}_{}'.format(img_placeholder, t, z)] = 'image'
                 if mask_given: targets['{}_{}{}'.format(mask_placeholder, t,z)] = 'mask'
 
-
-
     # create a callable augmentation composition
-    aug = _create_aug_compose(p=probabillity, targets=targets)
+    aug = _create_aug_compose(p=probabillity, targets=targets, config=config)
 
     # apply the augmentation
     augmented = aug(**data)
@@ -464,24 +462,18 @@ def augmentation_compose_2d_3d_4d(img, mask, probabillity=1, get_params=False):
         return augmented['image']
 
 
-def _create_aug_compose(p=1, border_mode=cv2.BORDER_REPLICATE, val=0, targets=None):
+def _create_aug_compose(p=1, border_mode=cv2.BORDER_REPLICATE, val=0, targets=None, config={}):
     if targets is None:
         targets = {}
-    return ReplayCompose([
-        #RandomRotate90(p=0.2),
-        #Flip(0.1),
-        #Transpose(p=0.1),
-        ShiftScaleRotate(p=p, rotate_limit=45,shift_limit=0.025, scale_limit=0,value=val, border_mode=border_mode),
-        #GridDistortion(p=p, value=val,border_mode=border_mode),
-        #CenterCrop(height=target_dim[0], width=target_dim[1], p=1),
-        # HueSaturationValue(p=1)
-        #RandomBrightnessContrast(brightness_limit=0.02,contrast_limit=0.02,brightness_by_max=False, p=0.4),
-        #Downscale(scale_min=0.9, scale_max=0.9, p=0.4),
-        #RandomGamma(p=p)
-        # OneOf([
-        # OpticalDistortion(p=1),
-        # ], p=1),
-    ], p=p,
+    prob = config.get('AUGMENT_PROB', 0.8)
+    augmentations = []
+    if config.get('RANDOMROTATE', False): augmentations.appen(RandomRotate90(p=0.2))
+    if config.get('SHIFTSCALEROTATE', False): augmentations.appen(ShiftScaleRotate(p=prob, rotate_limit=45,shift_limit=0.025, scale_limit=0,value=val, border_mode=border_mode))
+    if config.get('GRIDDISTORTION', False): augmentations.appen(GridDistortion(p=prob, value=val,border_mode=border_mode))
+    if config.get('DOWNSCALE', False): augmentations.appen(Downscale(scale_min=0.9, scale_max=0.9, p=0.4))
+    if config.get('RANDOMBRIGHTNESS', False): augmentations.appen(RandomBrightnessContrast(brightness_limit=0.02,contrast_limit=0.02,brightness_by_max=False, p=0.4))
+
+    return ReplayCompose(augmentations, p=p,
         additional_targets=targets)
 
 def random_rotate_2D_or_3D(img, mask, probabillity=0.8, shift_limit=0.0625, scale_limit=0.0, rotate_limit=0):

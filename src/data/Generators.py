@@ -941,6 +941,7 @@ class PhaseWindowGenerator(DataGenerator):
             config = {}
         super().__init__(x=x, y=y, config=config)
 
+        self.config=config
         self.T_SPACING = config.get('T_SPACING', 10)
         self.PHASES = config.get('PHASES', 5)
         self.HIST_MATCHING = config.get('HIST_MATCHING', False)
@@ -1124,7 +1125,7 @@ class PhaseWindowGenerator(DataGenerator):
         if self.AUGMENT:
             # use albumentation to apply random rotation scaling and shifts
             model_inputs = augmentation_compose_2d_3d_4d(img=model_inputs, mask=None,
-                                                         probabillity=self.AUGMENT_PROB)
+                                                         probabillity=self.AUGMENT_PROB, config=self.config)
             self.__plot_state_if_debug__(img=model_inputs[0], start_time=t1, step='augmented')
             t1 = time()
 
