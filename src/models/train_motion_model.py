@@ -1,3 +1,4 @@
+from src.data.Dataset import save_all_3d_vols
 
 
 def train_fold(config):
@@ -130,8 +131,21 @@ def train_fold(config):
         epochs=EPOCHS,
         callbacks=cb,
         initial_epoch=initial_epoch,
-        max_queue_size=config.get('QUEUE_SIZE',40),
-        verbose=2)
+        max_queue_size=config.get('QUEUE_SIZE',12),
+        verbose=1)
+
+    # predict on a some trainings-files
+    example_batch = 0
+    inputs, outputs = batch_generator.__getitem__(example_batch)
+    pred = model.predict(x=inputs)
+
+    transformed, flow = pred
+    info('example predictions shape')
+    info(transformed.shape)
+    info(flow.shape)
+    # TODO: refactor
+    save_all_3d_vols(inputs[0], outputs[0], flow[0], config.get('EXP_PATH'), 'example_flow_0')
+    save_all_3d_vols(inputs[1], outputs[1], flow[1], config.get('EXP_PATH'), 'example_flow_1')
 
     # free as much memory as possible
     del batch_generator

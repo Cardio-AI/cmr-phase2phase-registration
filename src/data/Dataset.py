@@ -1471,3 +1471,37 @@ def get_n_windows_from_single4D(nda4d, idx, window_size=2):
     t_range = tf.stack([t_lower, t_upper], axis=1)
     debug('stacked windows: {}'.format(t_range.shape))
     return t_lower, t_upper
+
+
+def save_3d(nda, fname):
+    # save one flowfield
+    sitk_img = sitk.GetImageFromArray(nda, isVector=False)
+    sitk.WriteImage(sitk_img, fname)
+
+
+def save_all_3d_vols(inputs, outputs, flow, EXP_PATH, exp='example_flows'):
+    from logging import info
+    experiment_ = '{}/{}'.format(EXP_PATH, exp)
+    info(experiment_)
+    ensure_dir(experiment_)
+    flowname = os.path.join(experiment_, '_flow.nii')
+    firstfilename = os.path.join(experiment_, '_cmr.nii')
+    secondfilename = os.path.join(experiment_, '_targetcmr.nii')
+
+    # invert the axis
+    flow = np.einsum('tzyxc->cxyzt', flow)
+    inputs = np.einsum('tzyxc->cxyzt', inputs)
+    outputs = np.einsum('tzyxc->cxyzt', outputs)
+
+    _ = [save_3d(flow[..., t], flowname.replace('.nii', '_{}_.nii'.format(t))) for t in range(flow.shape[-1])]
+    _ = [save_3d(inputs[..., t], firstfilename.replace('.nii', '_{}_.nii'.format(t))) for t in range(inputs.shape[-1])]
+    _ = [save_3d(outputs[..., t], secondfilename.replace('.nii', '_{}_.nii'.format(t))) for t in
+         range(outputs.shape[-1])]
+
+    _ = [save_3d(flow[..., t, :], flowname.replace('.nii', '_sequence_{}_.nii'.format(t))) for t in
+         range(flow.shape[-2])]
+    _ = [save_3d(inputs[..., t, :], firstfilename.replace('.nii', '_sequence_{}_.nii'.format(t))) for t in
+         range(inputs.shape[-2])]
+    _ = [save_3d(outputs[..., t, :], secondfilename.replace('.nii', '_sequence_{}_.nii'.format(t))) for t in
+         range(outputs.shape[-2])]
+
