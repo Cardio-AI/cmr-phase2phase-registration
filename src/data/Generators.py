@@ -949,6 +949,7 @@ class PhaseWindowGenerator(DataGenerator):
         self.AUGMENT_TEMP = config.get('AUGMENT_TEMP', False)
         self.AUGMENT_TEMP_RANGE = config.get('AUGMENT_TEMP_RANGE', (-2, 2))
         self.RESAMPLE_T = config.get('RESAMPLE_T', False)
+        self.WINDOW_SIZE = config.get('WINDOW_SIZE', 2)
 
         self.X_SHAPE = np.empty((self.BATCHSIZE, self.PHASES, *self.DIM, 1), dtype=np.float32)
         self.Y_SHAPE = np.empty((self.BATCHSIZE, self.PHASES, *self.DIM, 1), dtype=np.float32)

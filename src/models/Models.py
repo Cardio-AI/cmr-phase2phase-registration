@@ -182,63 +182,59 @@ def create_RegistrationModel(config):
     """
     A registration wrapper for 3D image2image registration
     """
+    if tf.distribute.has_strategy():
+        strategy = tf.distribute.get_strategy()
+    else:
+        # distribute the training with the "mirrored data"-paradigm across multiple gpus if available, if not use gpu 0
+        strategy = tf.distribute.MirroredStrategy(devices=config.get('GPUS', ["/gpu:0"]))
+    with strategy.scope():
+        if config is None:
+            config = {}
+        input_shape = config.get('DIM', [10, 224, 224])
+        T_SHAPE = config.get('T_SHAPE', 5)
+        input_tensor = Input(shape=(T_SHAPE, *input_shape, 1))
+        input_tensor_empty = Input(shape=(T_SHAPE, *input_shape, 3))
+        # define standard values according to the convention over configuration paradigm
 
-    if config is None:
-        config = {}
-    input_shape = config.get('DIM', [10, 224, 224])
-    T_SHAPE = config.get('T_SHAPE', 5)
-    PHASES = config.get('PHASES', 5)
-    input_tensor = Input(shape=(T_SHAPE, *input_shape, 1))
-    input_tensor_empty = Input(shape=(T_SHAPE, *input_shape, 3))
-    # define standard values according to the convention over configuration paradigm
-    activation = config.get('ACTIVATION', 'elu')
-    batch_norm = config.get('BATCH_NORMALISATION', False)
-    pad = config.get('PAD', 'same')
-    kernel_init = config.get('KERNEL_INIT', 'he_normal')
-    m_pool = config.get('M_POOL', (1, 2, 2))
-    f_size = config.get('F_SIZE', (3, 3, 3))
-    filters = config.get('FILTERS', 16)
-    drop_1 = config.get('DROPOUT_MIN', 0.3)
-    drop_3 = config.get('DROPOUT_MAX', 0.5)
-    bn_first = config.get('BN_FIRST', False)
-    ndims = len(input_shape)
-    depth = config.get('DEPTH', 4)
-    indexing = 'ij'
-    interp_method = 'linear'
-    Conv = getattr(KL, 'Conv{}D'.format(ndims))
-    Conv_layer = Conv(ndims, kernel_size=3, padding='same',
-                kernel_initializer=tensorflow.keras.initializers.RandomNormal(mean=0.0, stddev=1e-5), name='unet2flow')
-    st_layer = nrn_layers.SpatialTransformer(interp_method=interp_method, indexing=indexing, ident=True,
-                                      fill_value=0, name='deformable_layer')
+        ndims = len(input_shape)
+        depth = config.get('DEPTH', 4)
+        indexing = 'ij'
+        interp_method = 'linear'
+        Conv = getattr(KL, 'Conv{}D'.format(ndims))
+        Conv_layer = Conv(ndims, kernel_size=3, padding='same',
+                    kernel_initializer=tensorflow.keras.initializers.RandomNormal(mean=0.0, stddev=1e-5), name='unet2flow')
+        st_layer = nrn_layers.SpatialTransformer(interp_method=interp_method, indexing=indexing, ident=True,
+                                          fill_value=0, name='deformable_layer')
 
+        unet = create_unet(config, single_model=False)
 
-    unet = create_unet(config, single_model=False)
+        input_vols = tf.unstack(input_tensor, axis=1)
+        print(input_vols[0].shape)
+        import random
+        indicies = list(tf.range(len(input_vols)))
+        zipped = list(zip(input_vols, indicies))
+        random.shuffle(zipped)
+        input_vols_shuffled, indicies = zip(*zipped)
+        pre_flows = [unet(vol) for vol in input_vols_shuffled]
+        flows= [Conv_layer(vol) for vol in pre_flows]  # m.shape --> batchsize, timesteps, 6
+        flows, _ = zip(*sorted(zip(flows, indicies), key=lambda tup: tup[1]))
+        transformed = [st_layer([input_vol, flow]) for input_vol, flow in zip(input_vols, flows)]
+        transformed = tf.stack(transformed, axis=1)
+        flow = tf.stack(flows, axis=1)
 
-    input_vols = tf.unstack(input_tensor, axis=1)
-    print(input_vols[0].shape)
-    import random
-    indicies = list(tf.range(len(input_vols)))
-    zipped = list(zip(input_vols, indicies))
-    random.shuffle(zipped)
-    input_vols_shuffled, indicies = zip(*zipped)
-    pre_flows = [unet(vol) for vol in input_vols_shuffled]
-    flows= [Conv_layer(vol) for vol in pre_flows]  # m.shape --> batchsize, timesteps, 6
-    flows, _ = zip(*sorted(zip(flows, indicies), key=lambda tup: tup[1]))
+        outputs = [transformed, flow]
 
+        model = Model(name='simpleregister', inputs=[input_tensor, input_tensor_empty], outputs=outputs)
 
-    #pre_flows = unet(input_tensor)
+        from tensorflow.keras.losses import mse
+        from src.utils.Metrics import Grad, MSE_
 
-    #flow = Conv(ndims, kernel_size=3, padding='same',
-    #           kernel_initializer=kernel_init, name='unet2flow')(pre_flow)
-
-    transformed = [st_layer([input_vol, flow]) for input_vol, flow in zip(input_vols, flows)]
-    transformed = tf.stack(transformed, axis=1)
-    flow = tf.stack(flows, axis=1)
-
-    outputs = [transformed, flow]
+        losses = [mse, Grad('l1').loss]
+        weights = [1, 0.01]
+        model.compile(optimizer=tensorflow.keras.optimizers.Adam(), loss=losses, loss_weights=weights)
 
     #super().__init__(name='simpleregister', inputs=[input_tensor, input_tensor_empty], outputs=outputs)
-    return Model(name='simpleregister', inputs=[input_tensor, input_tensor_empty], outputs=outputs)
+    return model
 
 
 
