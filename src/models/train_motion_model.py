@@ -123,14 +123,14 @@ def train_fold(config):
     initial_epoch = 0
     cb = get_callbacks(config, batch_generator, validation_generator)
     print('start training')
-    """model.fit(
+    model.fit(
         x=batch_generator,
         validation_data=validation_generator,
         epochs=1,
         callbacks=cb,
         initial_epoch=initial_epoch,
         max_queue_size=config.get('QUEUE_SIZE',12),
-        verbose=2)"""
+        verbose=2)
 
     try:
         # predict on a some trainings-files
