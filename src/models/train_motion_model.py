@@ -123,19 +123,20 @@ def train_fold(config):
     initial_epoch = 0
     cb = get_callbacks(config, batch_generator, validation_generator)
     print('start training')
-    model.fit(
+    """model.fit(
         x=batch_generator,
         validation_data=validation_generator,
-        epochs=EPOCHS,
+        epochs=1,
         callbacks=cb,
         initial_epoch=initial_epoch,
         max_queue_size=config.get('QUEUE_SIZE',12),
-        verbose=2)
+        verbose=2)"""
 
     try:
         # predict on a some trainings-files
         example_batch = 0
         inputs, outputs = batch_generator.__getitem__(example_batch)
+        if type(inputs) == list: inputs, outputs = inputs[0], outputs[0]
         pred = model.predict(x=inputs)
 
         transformed, flow = pred
@@ -148,6 +149,10 @@ def train_fold(config):
         save_all_3d_vols(inputs[1], outputs[1], flow[1], config.get('EXP_PATH'), 'example_flow_1')
     except Exception as e:
         logging.error(e)
+        logging.error(inputs.shape)
+        logging.error(outputs.shape)
+        logging.error(flow.shape)
+
 
     # free as much memory as possible
     del batch_generator
