@@ -132,19 +132,22 @@ def train_fold(config):
         max_queue_size=config.get('QUEUE_SIZE',12),
         verbose=2)
 
-    # predict on a some trainings-files
-    example_batch = 0
-    inputs, outputs = batch_generator.__getitem__(example_batch)
-    pred = model.predict(x=inputs)
+    try:
+        # predict on a some trainings-files
+        example_batch = 0
+        inputs, outputs = batch_generator.__getitem__(example_batch)
+        pred = model.predict(x=inputs)
 
-    transformed, flow = pred
-    info('example predictions shape')
-    info(transformed.shape)
-    info(flow.shape)
-    # TODO: refactor
-    from src.data.Dataset import save_all_3d_vols
-    save_all_3d_vols(inputs[0], outputs[0], flow[0], config.get('EXP_PATH'), 'example_flow_0')
-    save_all_3d_vols(inputs[1], outputs[1], flow[1], config.get('EXP_PATH'), 'example_flow_1')
+        transformed, flow = pred
+        info('example predictions shape')
+        info(transformed.shape)
+        info(flow.shape)
+        # TODO: refactor
+        from src.data.Dataset import save_all_3d_vols
+        save_all_3d_vols(inputs[0], outputs[0], flow[0], config.get('EXP_PATH'), 'example_flow_0')
+        save_all_3d_vols(inputs[1], outputs[1], flow[1], config.get('EXP_PATH'), 'example_flow_1')
+    except Exception as e:
+        logging.error(e)
 
     # free as much memory as possible
     del batch_generator
