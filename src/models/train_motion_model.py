@@ -126,7 +126,7 @@ def train_fold(config):
     model.fit(
         x=batch_generator,
         validation_data=validation_generator,
-        epochs=1,
+        epochs=EPOCHS,
         callbacks=cb,
         initial_epoch=initial_epoch,
         max_queue_size=config.get('QUEUE_SIZE',12),
