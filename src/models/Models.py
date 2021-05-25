@@ -192,6 +192,10 @@ def create_RegistrationModel(config):
             config = {}
         input_shape = config.get('DIM', [10, 224, 224])
         T_SHAPE = config.get('T_SHAPE', 5)
+        image_loss_weight = config.get('IMAGE_LOSS_WEIGHT', 1)
+        reg_loss_weight = config.get('REG_LOSS_WEIGHT', 0.001)
+
+
         input_tensor = Input(shape=(T_SHAPE, *input_shape, 1))
         input_tensor_empty = Input(shape=(T_SHAPE, *input_shape, 3))
         # define standard values according to the convention over configuration paradigm
@@ -230,7 +234,7 @@ def create_RegistrationModel(config):
         from src.utils.Metrics import Grad, MSE_
 
         losses = [mse, Grad('l1').loss]
-        weights = [1, 0.01]
+        weights = [image_loss_weight, reg_loss_weight]
         model.compile(optimizer=tensorflow.keras.optimizers.Adam(), loss=losses, loss_weights=weights)
 
     #super().__init__(name='simpleregister', inputs=[input_tensor, input_tensor_empty], outputs=outputs)

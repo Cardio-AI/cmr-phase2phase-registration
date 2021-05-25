@@ -1479,7 +1479,7 @@ def save_3d(nda, fname):
     sitk.WriteImage(sitk_img, fname)
 
 
-def save_all_3d_vols(inputs, outputs, flow, EXP_PATH, exp='example_flows'):
+def save_all_3d_vols(inputs, outputs, flow, EXP_PATH, exp='example_flows', save2dplus_t=False):
     from logging import info
     experiment_ = '{}/{}'.format(EXP_PATH, exp)
     info(experiment_)
@@ -1497,11 +1497,11 @@ def save_all_3d_vols(inputs, outputs, flow, EXP_PATH, exp='example_flows'):
     _ = [save_3d(inputs[..., t], firstfilename.replace('.nii', '_{}_.nii'.format(t))) for t in range(inputs.shape[-1])]
     _ = [save_3d(outputs[..., t], secondfilename.replace('.nii', '_{}_.nii'.format(t))) for t in
          range(outputs.shape[-1])]
-
-    _ = [save_3d(flow[..., t, :], flowname.replace('.nii', '_sequence_{}_.nii'.format(t))) for t in
-         range(flow.shape[-2])]
-    _ = [save_3d(inputs[..., t, :], firstfilename.replace('.nii', '_sequence_{}_.nii'.format(t))) for t in
-         range(inputs.shape[-2])]
-    _ = [save_3d(outputs[..., t, :], secondfilename.replace('.nii', '_sequence_{}_.nii'.format(t))) for t in
-         range(outputs.shape[-2])]
+    if save2dplus_t:
+        _ = [save_3d(flow[..., t, :], flowname.replace('.nii', '_sequence_{}_.nii'.format(t))) for t in
+             range(flow.shape[-2])]
+        _ = [save_3d(inputs[..., t, :], firstfilename.replace('.nii', '_sequence_{}_.nii'.format(t))) for t in
+             range(inputs.shape[-2])]
+        _ = [save_3d(outputs[..., t, :], secondfilename.replace('.nii', '_sequence_{}_.nii'.format(t))) for t in
+             range(outputs.shape[-2])]
 

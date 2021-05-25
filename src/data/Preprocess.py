@@ -467,11 +467,11 @@ def _create_aug_compose(p=1, border_mode=cv2.BORDER_REPLICATE, val=0, targets=No
         targets = {}
     prob = config.get('AUGMENT_PROB', 0.8)
     augmentations = []
-    if config.get('RANDOMROTATE', False): augmentations.appen(RandomRotate90(p=0.2))
-    if config.get('SHIFTSCALEROTATE', False): augmentations.appen(ShiftScaleRotate(p=prob, rotate_limit=45,shift_limit=0.025, scale_limit=0,value=val, border_mode=border_mode))
-    if config.get('GRIDDISTORTION', False): augmentations.appen(GridDistortion(p=prob, value=val,border_mode=border_mode))
-    if config.get('DOWNSCALE', False): augmentations.appen(Downscale(scale_min=0.9, scale_max=0.9, p=0.4))
-    if config.get('RANDOMBRIGHTNESS', False): augmentations.appen(RandomBrightnessContrast(brightness_limit=0.02,contrast_limit=0.02,brightness_by_max=False, p=0.4))
+    if config.get('RANDOMROTATE', False): augmentations.append(RandomRotate90(p=0.2))
+    if config.get('SHIFTSCALEROTATE', False): augmentations.append(ShiftScaleRotate(p=prob, rotate_limit=45,shift_limit=0.025, scale_limit=0,value=val, border_mode=border_mode))
+    if config.get('GRIDDISTORTION', False): augmentations.append(GridDistortion(p=prob, value=val,border_mode=border_mode))
+    if config.get('DOWNSCALE', False): augmentations.append(Downscale(scale_min=0.9, scale_max=0.9, p=0.4))
+    if config.get('RANDOMBRIGHTNESS', False): augmentations.append(RandomBrightnessContrast(brightness_limit=0.02,contrast_limit=0.02,brightness_by_max=False, p=0.4))
 
     return ReplayCompose(augmentations, p=p,
         additional_targets=targets)

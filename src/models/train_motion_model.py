@@ -130,13 +130,19 @@ def train_fold(config):
         callbacks=cb,
         initial_epoch=initial_epoch,
         max_queue_size=config.get('QUEUE_SIZE',12),
-        verbose=2)
+        verbose=1)
 
     try:
+        del model
         # predict on a some trainings-files
         example_batch = 0
         inputs, outputs = batch_generator.__getitem__(example_batch)
         if type(inputs) == list: inputs, outputs = inputs[0], outputs[0]
+
+        # load the model, to make sure we use the same as later for the evaluations
+        model = create_RegistrationModel(config)
+        model.load_weights(os.path.join(config['MODEL_PATH'], 'model.h5'))
+        logging.info('loaded model weights as h5 file')
         pred = model.predict(x=inputs)
 
         transformed, flow = pred
