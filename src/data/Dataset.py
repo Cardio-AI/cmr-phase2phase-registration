@@ -14,6 +14,7 @@ from src.visualization.Visualize import plot_value_histogram
 #import yaml
 from time import time
 #from sklearn.model_selection import KFold
+import tensorflow as tf
 
 def copy_meta(new_image, reference_sitk_img):
 
@@ -230,7 +231,7 @@ def match_hist(nda,ref, prob_per_z=50):
                 nda[t,z] = skimage.exposure.match_histograms(nda[t,z], ref, multichannel=False)
     return nda
 
-def split_one_4d_sitk_in_list_of_3d_sitk(img_4d_sitk, HIST_MATCHING=False, ref=None, axis=None):
+def split_one_4d_sitk_in_list_of_3d_sitk(img_4d_sitk, HIST_MATCHING=False, ref=None, axis=None, prob=0.8):
     """
     Splits a 4D dicom image into a list of 3D sitk images, copy alldicom metadata
     Parameters
@@ -245,10 +246,10 @@ def split_one_4d_sitk_in_list_of_3d_sitk(img_4d_sitk, HIST_MATCHING=False, ref=N
 
     img_4d_nda = sitk.GetArrayFromImage(img_4d_sitk)
     # histogram matching - apply only on 50% of the files
-    if HIST_MATCHING and random.randint(0,100) > 0: # apply always
+    if HIST_MATCHING: # apply always
         img_4d_nda = match_hist(img_4d_nda, ref)
 
-    if axis:
+    if axis: # if we want to split by any other axis than 0, split by this axis and rearange the spacing in the reference sitk
         img_4d_nda = np.split(img_4d_nda,indices_or_sections=img_4d_nda.shape[axis], axis=axis)
         img_4d_nda = [np.squeeze(n) for n in img_4d_nda]
         if axis==1:
@@ -1444,7 +1445,7 @@ def get_n_windows_from_single4D(nda4d, idx, window_size=2):
     """
     import logging
     from logging import debug as debug
-    import tensorflow as tf
+    t1 = time()
     debug('nda4d shape: {}'.format(nda4d.shape))
     debug('idx shape: {}'.format(idx.shape))
     y_len = nda4d.shape[0]-1
@@ -1458,6 +1459,8 @@ def get_n_windows_from_single4D(nda4d, idx, window_size=2):
     idxs_upper = tf.math.mod(idxs_upper, y_len)
     debug('idx lower: {}'.format(idxs_lower))
     debug('idx upper: {}'.format(idxs_upper))
+    logging.debug('mod took: {:0.3f} s'.format(time() - t1))
+    t1 = time()
 
     # slice the five timesteps from all batches
     # inputs shape: (8, 36, 8, 64, 64, 1)
@@ -1468,8 +1471,7 @@ def get_n_windows_from_single4D(nda4d, idx, window_size=2):
     # and define the number of leading batch dimensions
     t_lower = tf.gather_nd(nda4d, idxs_lower[..., tf.newaxis], batch_dims=0)
     t_upper = tf.gather_nd(nda4d, idxs_upper[..., tf.newaxis], batch_dims=0)
-    t_range = tf.stack([t_lower, t_upper], axis=1)
-    debug('stacked windows: {}'.format(t_range.shape))
+    logging.debug('gather nd took: {:0.3f} s'.format(time() - t1))
     return t_lower, t_upper
 
 

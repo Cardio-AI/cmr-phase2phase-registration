@@ -629,10 +629,7 @@ class PhaseRegressionCallback(Callback):
 
             # xs and ys have the shape n, x, y, 1, they are grouped by the key
             # xs will have the shape: (len(keys), samples, z, x, y, 1)
-
-
-            from src.visualization.Visualize import show_phases, show_phases_transpose
-
+            from src.visualization.Visualize import show_phases
 
             # create one tensorboard entry per key in feed_inputs_display
             pred_i = 0
@@ -643,18 +640,9 @@ class PhaseRegressionCallback(Callback):
                     #logging.info(predictions.shape)
                     # xs and ys have the shape n, x, y, 1, they are grouped by the key
                     # count the samples provided by each key to sort them
-                    #for i in range(x.shape[0]):
-
-                    # pred has the same order as x and y but no grouping tag (e.g. 'train_generator')
-                    # keep track of the matching
-
                     tensorflow.summary.image(name='plot/{}/_pred'.format(key, pred_i),
                                                  data=self.make_image(show_phases(y,predictions)),
                                                  step=epoch)
-            # del xs, ys, pred
-
-            # self.writer.add_summary(tf.Summary(value=summary_str), global_step=self.e)
-
 
 
 
@@ -709,12 +697,12 @@ class ImageSaver(Callback):
 
         """
         save figure as png with given resolution
+        Converts the matplotlib plot specified by 'figure' to a PNG image and
+        return it. The supplied figure is closed and inaccessible after this call.
         :param numpy_img: Greyscale image with shape (x, y, 1)
         :return:
         """
-        """Converts the matplotlib plot specified by 'figure' to a PNG image and
-          returns it. The supplied figure is closed and inaccessible after this call."""
-        # Save the plot to a PNG in memory.
+        # Save the plot as PNG in memory.
         fname = os.path.join(self.image_dir, fname)
 
         plt.savefig(fname, format='png', dpi=dpi)

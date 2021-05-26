@@ -709,7 +709,7 @@ def plot_3d_vol(img_3d, mask_3d=None, timestep=0, save=False, path='reports/figu
 
     if show:
         #fig.show()
-        pass
+        return fig
     else:
         fig.canvas.draw()
         data = np.frombuffer(fig.canvas.tostring_rgb(), dtype=np.uint8)

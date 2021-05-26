@@ -1040,19 +1040,23 @@ class PhaseWindowGenerator(DataGenerator):
     def __preprocess_one_image__(self, i, ID):
 
         ref = None
-        if self.HIST_MATCHING:
+        apply_hist_matchinng=False
+        if self.HIST_MATCHING and random.random() <= self.AUGMENT_PROB:
+            apply_hist_matchinng = True
             ignore_z = 1
             # use a random image, given to this generator, as histogram template for histogram matching augmentation
             ref = sitk.GetArrayFromImage(sitk.ReadImage((choice(self.IMAGES))))
             ref = ref[choice(list(range(ref.shape[0]-1))), choice(list(range(ref.shape[1]-1))[ignore_z:-ignore_z])]
         t0 = time()
+        t1 = time()
 
         x = self.IMAGES[ID]
 
         # use the load_masked_img wrapper to enable masking of the images, currently not necessary, but nice to have
         model_inputs = load_masked_img(sitk_img_f=x, mask=self.MASKING_IMAGE,
                                        masking_values=self.MASKING_VALUES, replace=self.REPLACE_WILDCARD)
-
+        logging.debug('load and masking took: {:0.3f} s'.format(time() - t1))
+        t1 = time()
         # resample the temporal resolution
         # if AUGMENT_TEMP --> add an temporal augmentation factor within the range given by: AUGMENT_TEMP_RANGE
         t_spacing = self.T_SPACING
@@ -1065,17 +1069,20 @@ class PhaseWindowGenerator(DataGenerator):
                                             ismask=False)
         else:
             temporal_sampling_factor = 1  # dont scale the indices if we dont resample T
+        logging.debug('temp resampling took: {:0.3f} s'.format(time() - t1))
+        t1 = time()
         # Create a list of 3D volumes for volume resampling
         # apply histogram matching if given by config
-        model_inputs = split_one_4d_sitk_in_list_of_3d_sitk(model_inputs, HIST_MATCHING=self.HIST_MATCHING, ref=ref, axis=0)
-        logging.debug('load + hist matching took: {:0.3f} s'.format(time() - t0))
+        model_inputs = split_one_4d_sitk_in_list_of_3d_sitk(model_inputs, HIST_MATCHING=apply_hist_matchinng, ref=ref, axis=0, prob=self.AUGMENT_PROB)
+        logging.debug('load + hist matching took: {:0.3f} s'.format(time() - t1))
+        t1 = time()
 
         # Returns the indices in the following order: 'ED#', 'MS#', 'ES#', 'PF#', 'MD#'
         if self.ISACDC:
             idx = get_phases_as_idx_acdc(x, temporal_sampling_factor, len(model_inputs))
         else:
             idx = get_phases_as_idx_gcn(x, self.DF_METADATA, temporal_sampling_factor, len(model_inputs))
-
+        logging.debug('index loading took: {:0.3f} s'.format(time() - t1))
         # logging.debug('transposed: \n{}'.format(onehot))
         self.__plot_state_if_debug__(img=model_inputs[len(model_inputs) // 2], start_time=t0, step='raw')
         t1 = time()
@@ -1115,43 +1122,57 @@ class PhaseWindowGenerator(DataGenerator):
 
         logging.debug('Spacing after resample: {}'.format(model_inputs[0].GetSpacing()))
         logging.debug('Size after resample: {}'.format(model_inputs[0].GetSize()))
+        logging.debug('spatial resampling took: {:0.3f} s'.format(time() - t1))
+        t1 = time()
 
         # transform to nda for further processing
         # repeat the 3D volumes along t (we did the same with the onehot vector)
         model_inputs = np.stack(list(map(lambda x: sitk.GetArrayFromImage(x), model_inputs)), axis=0)
-
+        logging.debug('transform to nda took: {:0.3f} s'.format(time() - t1))
+        t1 = time()
         self.__plot_state_if_debug__(img=model_inputs[len(model_inputs) // 2], start_time=t1, step='resampled')
 
-        if self.AUGMENT:
+        # get the volumes of each phase window
+        model_inputs, model_targets = get_n_windows_from_single4D(model_inputs, idx, window_size=self.WINDOW_SIZE)
+        logging.debug('windowing slicing took: {:0.3f} s'.format(time() - t1))
+        t1 = time()
+
+        if self.AUGMENT and random.random() <= self.AUGMENT_PROB:
             # use albumentation to apply random rotation scaling and shifts
-            model_inputs = augmentation_compose_2d_3d_4d(img=model_inputs, mask=None,
-                                                         probabillity=self.AUGMENT_PROB, config=self.config)
+            # we need to make sure to apply the same augmentation on the input and target data
+            combined = np.concatenate([model_inputs, model_targets], axis=0)
+            logging.debug('shape combined: {}'.format(combined.shape))
+            combined = augmentation_compose_2d_3d_4d(img=combined, mask=None, config=self.config)
+            logging.debug('shape combined: {}'.format(combined.shape))
+            model_inputs, model_targets = np.split(combined, indices_or_sections=2, axis=0)
             self.__plot_state_if_debug__(img=model_inputs[0], start_time=t1, step='augmented')
+            logging.debug('augmentation took: {:0.3f} s'.format(time() - t1))
             t1 = time()
+
+        model_inputs = pad_and_crop(model_inputs, target_shape=(self.PHASES,*self.DIM))
+        model_targets = pad_and_crop(model_targets, target_shape=(self.PHASES, *self.DIM))
+        logging.debug('pad/crop took: {:0.3f} s'.format(time() - t1))
+        t1 = time()
 
         # clip, pad/crop and normalise & extend last axis
         # We repeat/tile the 3D volume at this time, to avoid resampling/augmenting the same slices multiple times
         # Ideally this saves computation time and memory
         model_inputs = clip_quantile(model_inputs, .9999)
+        model_targets = clip_quantile(model_targets, .9999)
+        logging.debug('quantile clipping took: {:0.3f} s'.format(time() - t1))
+        t1 = time()
 
-
-        # get the volumes of each phase window
-        inputs, targets = get_n_windows_from_single4D(model_inputs, idx, window_size=2)
-
-        inputs = pad_and_crop(inputs, target_shape=(self.PHASES,*self.DIM))
-        targets = pad_and_crop(targets, target_shape=(self.PHASES, *self.DIM))
-
-
-
-        model_inputs = normalise_image(inputs, normaliser=self.SCALER)  # normalise per 4D
-        model_targets = normalise_image(targets, normaliser=self.SCALER)  # normalise per 4D
+        model_inputs = normalise_image(model_inputs, normaliser=self.SCALER)  # normalise per 4D
+        model_targets = normalise_image(model_targets, normaliser=self.SCALER)  # normalise per 4D
+        logging.debug('normalisation took: {:0.3f} s'.format(time() - t1))
+        t1 = time()
 
         self.__plot_state_if_debug__(img=model_inputs[len(model_inputs) // 2], start_time=t1,
                                      step='clipped cropped and pad')
 
 
-        assert not np.any(np.isnan(inputs))
-        assert not np.any(np.isnan(targets))
+        assert not np.any(np.isnan(model_inputs))
+        assert not np.any(np.isnan(model_targets))
 
         return model_inputs[..., np.newaxis], model_targets[..., np.newaxis], i, ID, time() - t0
 

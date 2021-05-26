@@ -130,7 +130,7 @@ def train_fold(config):
         callbacks=cb,
         initial_epoch=initial_epoch,
         max_queue_size=config.get('QUEUE_SIZE',12),
-        verbose=1)
+        verbose=2)
 
     try:
         del model
@@ -143,21 +143,35 @@ def train_fold(config):
         model = create_RegistrationModel(config)
         model.load_weights(os.path.join(config['MODEL_PATH'], 'model.h5'))
         logging.info('loaded model weights as h5 file')
-        pred = model.predict(x=inputs)
+        
+        # create a generator with idemptent behaviour (no shuffle etc.)
+        # make sure we save always the same patient
+        pred_config = config.copy()
+        pred_config['SHUFFLE'] = False
+        pred_config['AUGMENT'] = False
+        pred_config['AUGMENT_PHASES'] = False
+        pred_config['AUGMENT_TEMP'] = False
+        pred_config['BATCHSIZE'] = 4
+        pred_config['HIST_MATCHING'] = False
+        pred_generator = PhaseWindowGenerator(x_train_sax, x_train_sax, config=pred_config)
 
-        transformed, flow = pred
-        info('example predictions shape')
-        info(transformed.shape)
-        info(flow.shape)
+        first_vols, _ = pred_generator[0]
+        first_vols = first_vols[0]
+
+        second_vols, vects = model.predict(pred_generator, steps=1)
+        info('first vols shape: {}'.format(first_vols.shape))
+        info('second vols shape: {}'.format(second_vols.shape))
+        info('vectors vols shape: {}'.format(vects.shape))
+
         # TODO: refactor
         from src.data.Dataset import save_all_3d_vols
-        save_all_3d_vols(inputs[0], outputs[0], flow[0], config.get('EXP_PATH'), 'example_flow_0')
-        save_all_3d_vols(inputs[1], outputs[1], flow[1], config.get('EXP_PATH'), 'example_flow_1')
+        save_all_3d_vols(first_vols[0], second_vols[0], vects[0], config.get('EXP_PATH'), 'example_flow_0')
+        save_all_3d_vols(first_vols[1], second_vols[1], vects[1], config.get('EXP_PATH'), 'example_flow_1')
     except Exception as e:
         logging.error(e)
-        logging.error(inputs.shape)
-        logging.error(outputs.shape)
-        logging.error(flow.shape)
+        logging.error(first_vols.shape)
+        logging.error(second_vols.shape)
+        logging.error(vects.shape)
 
 
     # free as much memory as possible
