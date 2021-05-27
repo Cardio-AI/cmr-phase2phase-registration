@@ -151,7 +151,7 @@ def train_fold(config):
         pred_config['AUGMENT'] = False
         pred_config['AUGMENT_PHASES'] = False
         pred_config['AUGMENT_TEMP'] = False
-        pred_config['BATCHSIZE'] = 4
+        pred_config['BATCHSIZE'] = 2
         pred_config['HIST_MATCHING'] = False
         pred_generator = PhaseWindowGenerator(x_train_sax, x_train_sax, config=pred_config)
 

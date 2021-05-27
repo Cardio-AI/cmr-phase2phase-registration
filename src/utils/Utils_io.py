@@ -184,12 +184,12 @@ def init_config(config, save=True):
 
     # make sure all paths are set, otherwise use a temp dir
     config['CONFIG_PATH'] = config.get('CONFIG_PATH', os.path.join(EXP_PATH_TEMP, 'config'))
-    config['TENSORBOARD_LOG_DIR'] = config.get('TENSORBOARD_LOG_DIR', os.path.join(EXP_PATH_TEMP, 'tensorboard_logs'))
+    config['TENSORBOARD_PATH'] = config.get('TENSORBOARD_PATH', os.path.join(EXP_PATH_TEMP, 'tensorboard_logs'))
     config['MODEL_PATH'] = config.get('MODEL_PATH', os.path.join(EXP_PATH_TEMP, 'model'))
     config['HISTORY_PATH'] = config.get('HISTORY_PATH', os.path.join(EXP_PATH_TEMP, 'history'))
 
     # make sure all paths exists
-    ensure_dir(config['TENSORBOARD_LOG_DIR'])
+    ensure_dir(config['TENSORBOARD_PATH'])
     ensure_dir(config['MODEL_PATH'])
     ensure_dir(config['CONFIG_PATH'])
     ensure_dir(config['HISTORY_PATH'])
