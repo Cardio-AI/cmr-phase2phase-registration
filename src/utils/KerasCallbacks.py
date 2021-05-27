@@ -10,11 +10,12 @@ from tensorflow.keras import backend as K
 from tensorflow.keras.callbacks import TensorBoard
 from tensorflow.keras.callbacks import Callback
 from tensorflow.keras.callbacks import EarlyStopping, ModelCheckpoint, ReduceLROnPlateau, LearningRateScheduler
-from src.visualization.Visualize import plot_3d_vol
+from src.visualization.Visualize import plot_3d_vol, plot_4d_vol
 from src.visualization.Visualize import show_slice_transparent as show_slice
 from src.utils.Utils_io import ensure_dir
 
 from src.data.Preprocess import normalise_image
+from src.visualization.Visualize import show_2D_or_3D
 
 
 def get_callbacks(config=None, batch_generator=None, validation_generator=None, metrics=None):
@@ -46,6 +47,12 @@ def get_callbacks(config=None, batch_generator=None, validation_generator=None, 
                              feed_inputs_4_display=feed_inputs_4_tensorboard(config, batch_generator,
                                                                              validation_generator),
                              ))
+        callbacks.append(
+            WindowMotionCallback(log_dir=config['TENSORBOARD_PATH'],
+                                    image_freq=config.get('SAVE_LEARNING_PROGRESS_FREQUENCY', 2),
+                                    feed_inputs_4_display=feed_inputs_4_tensorboard(config, batch_generator,
+                                                                                    validation_generator),
+                                    ))
 
     # dont save the test models
     """callbacks.append(
@@ -536,6 +543,153 @@ class CustomImageWritertf2(Callback):
             # self.writer.add_summary(tf.Summary(value=summary_str), global_step=self.e)
 
 
+
+class WindowMotionCallback(Callback):
+
+    # Keras Callback for training progress visualisation in the Tensorboard
+    # Creates a new summary file
+    # Usage:
+    # custom_image_writer = CustomImageWriter(experiment_path, 10, create_feeds_for_tensorboard(batch_generator, val_generator)
+    # model.fit_generator(batch_generator, val_generator, *args, callbacks=[custom_image_writer, ...]
+    # original code from:
+    # https://stackoverflow.com/questions/43784921/how-to-display-custom-images-in-tensorboard-using-keras?rq=1
+
+    def __init__(self, log_dir='./logs/tmp/', image_freq=10, feed_inputs_4_display=None, dpi=200,f_size=(5,5), interpol='bilinear', force_plot_first_n_epochs=5):
+
+        """
+        This callback gets a dict with key: x,y entries
+        When the on_epoch_end callback is invoked this callback predicts the current output for all xs
+        Afterwards it writes the image, gt and prediction into a summary file to make the learning visually in the Tensorboard
+        :param log_dir: String, path - folder for the tensorboard summary file Imagewriter will create a subdir "images" for the imagesummary file
+        :param image_freq: int - run this callback every n epoch to save disk space and increase speed
+        :param feed_inputs_4_display: dict {'train':(x_tensor,y_tensor), 'val' : (x_tensor. y_tensor)}
+        x and ys to predict and visualise + key for summary description
+        x_tensor and y_tensor have the shape n, x, y, 1 or classes for y, they are grouped by a key, eg. 'train', 'val'
+        """
+
+        super(WindowMotionCallback, self).__init__()
+        self.freq = image_freq
+        self.f_size = f_size
+        self.dpi = dpi
+        self.interpol = interpol
+        self.e = 0
+        self.every_n_in_z = 5
+        self.n_start_epochs = force_plot_first_n_epochs
+        self.feed_inputs_4_display = feed_inputs_4_display
+        log_dir = os.path.join(log_dir, 'images')  # create a subdir for the imagewriter summary file
+        ensure_dir(log_dir)
+        self.writer = tensorflow.summary.create_file_writer(log_dir)
+        self.xs, self.ys = zip(*self.feed_inputs_4_display.values())
+        self.keys = self.feed_inputs_4_display.keys()
+
+    def custom_set_feed_input_to_display(self, feed_inputs_display):
+
+        """
+        sets the feeding data for TensorBoard visualization;
+        :param feed_inputs_display: dict {'train':(x_tensor,y_tensor), 'val' : (x_tensor. y_tensor)}
+        x and ys to predict and visualise + key for summary description
+        x_tensor and y_tensor have the shape n, x, y, 1 or classes for y, they are grouped by a key, eg. 'train', 'val'
+        :return: None
+        """
+
+        self.feed_inputs_display = feed_inputs_display
+
+    def make_image(self, figure):
+
+        """
+        Create a tf.Summary.Image from an ndarray
+        :param numpy_img: Greyscale image with shape (x, y, 1)
+        :return:
+        """
+        """Converts the matplotlib plot specified by 'figure' to a PNG image and
+          returns it. The supplied figure is closed and inaccessible after this call."""
+        # Save the plot to a PNG in memory.
+        buf = io.BytesIO()
+        plt.savefig(buf, format='png')
+        # Closing the figure prevents it from being displayed directly inside
+        # the notebook.
+        plt.close(figure)
+        buf.seek(0)
+        # Convert PNG buffer to TF image
+        image = tensorflow.image.decode_png(buf.getvalue(), channels=4)
+        # Add the batch dimension
+        image = tensorflow.expand_dims(image, 0)
+        return image
+
+    def on_epoch_end(self, epoch, logs=None):
+
+        """
+        Keras will call this methods after each epoch on all Callbacks provided to the method fit or fit_generator
+        A callback has access to its associated model through the class property self.model.
+        :param epoch:
+        :param logs:
+        :return:
+        """
+
+        logs = logs or {}
+        self.e += 1
+        if self.e % self.freq == 0 or self.e < self.n_start_epochs:  # every n epoch (and the first 20 epochs), write pred in a TensorBorad summary file;
+            summary_str = []
+
+            # xs and ys have the shape n, x, y, 1, they are grouped by the key
+            # xs will have the shape: (len(keys), samples, z, x, y, 1)
+
+            # create one tensorboard entry per key in feed_inputs_display
+            pred_i = 0
+            with self.writer.as_default():
+
+                for key, x, y in zip(self.keys, self.xs, self.ys):
+
+                    movings, vects = self.model.predict(x)
+                    #logging.info(predictions.shape)
+                    # xs and ys have the shape n, x, y, 1, they are grouped by the key
+                    # count the samples provided by each key to sort them
+
+                    phases = ['ED#', 'MS#', 'ES#', 'PF#', 'MD#']
+                    b = 0
+                    # one plot per phase
+                    for p in range(len(phases)):
+                        first_vol, second_vol = x[b][0][p], y[b][0][p]
+                        moved, vect = movings[b][p], vects[b][p]
+                        nrows = 3
+                        ncols = 6
+                        fig, axes = plt.subplots(nrows, ncols)
+                        picks = [40,30,10]
+                        y_label = ['Basal', 'Mid', 'Apex']
+                        col_titles = ['t1', 't2', 't1 moved', 'vect', 't1-t2' ,'moved-t2']
+                        for i,z in enumerate(picks):
+                            axes[i,0] = show_slice(first_vol[z], ax=axes[i,0])
+                            #axes[i, 0].set_ylabel(y_label[i], color='r')
+                            axes[i, 1] = show_slice(second_vol[z], ax=axes[i, 1])
+                            axes[i, 2] = show_slice(moved[z], ax=axes[i, 2])
+                            axes[i, 3].imshow(normalise_image(vect[z]))
+                            axes[i, 3].set_xticks([])
+                            axes[i, 3].set_yticks([])
+                            axes[i, 4] = show_slice(first_vol[z] - second_vol[z], ax=axes[i, 4])
+                            axes[i, 5] = show_slice(moved[z] - second_vol[z], ax=axes[i, 5])
+                        for i in range(ncols):
+                            axes[0,i].set_title(col_titles[i])
+                        fig.subplots_adjust(wspace=0.0, hspace=0.0)
+
+                        tensorflow.summary.image(name='plot/{}/batch_{}/{}/summary'.format(key, b, phases[p]),
+                                                 data=self.make_image(fig),
+                                                 step=epoch)
+
+                    """tensorflow.summary.image(name='plot/{}/{}/{}/first'.format(key, b, p),
+                                                 data=self.make_image(show_2D_or_3D(first_vol)),
+                                                 step=epoch)
+                    tensorflow.summary.image(name='plot/{}/{}/{}/second'.format(key, b, p),
+                                             data=self.make_image(show_2D_or_3D(second_vol)),
+                                             step=epoch)
+                    tensorflow.summary.image(name='plot/{}/{}/{}/moved'.format(key, b, p),
+                                             data=self.make_image(show_2D_or_3D(moved)),
+                                             step=epoch)
+                    tensorflow.summary.image(name='plot/{}/{}/{}/vect'.format(key, b, p),
+                                             data=self.make_image(show_2D_or_3D(vect)),
+                                             step=epoch)"""
+
+
+
 class PhaseRegressionCallback(Callback):
 
     # Keras Callback for training progress visualisation in the Tensorboard
@@ -661,7 +815,7 @@ class ImageSaver(Callback):
         """
         This callback gets a dict with key: x,y entries
         When the on_epoch_end callback is invoked this callback predicts the current output for all xs
-        Afterwards it writes the image, gt and prediction into a summary file to make the learning visually in the Tensorboard
+        Afterwards it writes the image, gt and prediction into a summary file to show the learning progress in the Tensorboard
         :param log_dir: String, path - folder for the tensorboard summary file Imagewriter will create a subdir "images" for the imagesummary file
         :param image_freq: int - run this callback every n epoch to save disk space and increase speed
         :param feed_inputs_4_display: dict {'train':(x_tensor,y_tensor), 'val' : (x_tensor. y_tensor)}

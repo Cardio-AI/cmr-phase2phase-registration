@@ -1486,7 +1486,7 @@ def save_3d(nda, fname):
     sitk.WriteImage(sitk_img, fname)
 
 
-def save_all_3d_vols(inputs, outputs, flow, EXP_PATH, exp='example_flows', save2dplus_t=False):
+def save_all_3d_vols(inputs, outputs, moved, flow, EXP_PATH, exp='example_flows', save2dplus_t=False):
     from logging import info
     experiment_ = '{}/{}'.format(EXP_PATH, exp)
     info(experiment_)
@@ -1494,16 +1494,20 @@ def save_all_3d_vols(inputs, outputs, flow, EXP_PATH, exp='example_flows', save2
     flowname = os.path.join(experiment_, '_flow.nii')
     firstfilename = os.path.join(experiment_, '_cmr.nii')
     secondfilename = os.path.join(experiment_, '_targetcmr.nii')
+    secondmovedfilename = os.path.join(experiment_, '_movedcmr.nii')
 
     # invert the axis
     flow = np.einsum('tzyxc->cxyzt', flow)
     inputs = np.einsum('tzyxc->cxyzt', inputs)
     outputs = np.einsum('tzyxc->cxyzt', outputs)
+    moved = np.einsum('tzyxc->cxyzt', moved)
 
     _ = [save_3d(flow[..., t], flowname.replace('.nii', '_{}_.nii'.format(t))) for t in range(flow.shape[-1])]
     _ = [save_3d(inputs[..., t], firstfilename.replace('.nii', '_{}_.nii'.format(t))) for t in range(inputs.shape[-1])]
     _ = [save_3d(outputs[..., t], secondfilename.replace('.nii', '_{}_.nii'.format(t))) for t in
          range(outputs.shape[-1])]
+    _ = [save_3d(moved[..., t], secondmovedfilename.replace('.nii', '_{}_.nii'.format(t))) for t in
+         range(moved.shape[-1])]
     if save2dplus_t:
         _ = [save_3d(flow[..., t, :], flowname.replace('.nii', '_sequence_{}_.nii'.format(t))) for t in
              range(flow.shape[-2])]

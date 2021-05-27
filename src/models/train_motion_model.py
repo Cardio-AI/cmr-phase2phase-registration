@@ -93,7 +93,9 @@ def train_fold(config):
     info('Done!')
 
     # instantiate the batchgenerators
-
+    """n = 4
+    x_train_sax = x_train_sax[:n]
+    x_val_sax = x_val_sax[:n]"""
     batch_generator = PhaseWindowGenerator(x_train_sax, x_train_sax, config=config)
     val_config = config.copy()
     val_config['AUGMENT'] = False
@@ -130,7 +132,7 @@ def train_fold(config):
         callbacks=cb,
         initial_epoch=initial_epoch,
         max_queue_size=config.get('QUEUE_SIZE',12),
-        verbose=2)
+        verbose=1)
 
     try:
         del model
@@ -155,18 +157,19 @@ def train_fold(config):
         pred_config['HIST_MATCHING'] = False
         pred_generator = PhaseWindowGenerator(x_train_sax, x_train_sax, config=pred_config)
 
-        first_vols, _ = pred_generator[0]
-        first_vols = first_vols[0]
+        first_vols, second_vols = pred_generator[0]
+        first_vols, second_vols = first_vols[0], second_vols[0]
 
-        second_vols, vects = model.predict(pred_generator, steps=1)
+        moved, vects = model.predict(pred_generator, steps=1)
+        moved = tf.cast(moved, tf.float32)
         info('first vols shape: {}'.format(first_vols.shape))
         info('second vols shape: {}'.format(second_vols.shape))
         info('vectors vols shape: {}'.format(vects.shape))
 
-        # TODO: refactor
+        # TODO: refactor, this could be any number of examples
         from src.data.Dataset import save_all_3d_vols
-        save_all_3d_vols(first_vols[0], second_vols[0], vects[0], config.get('EXP_PATH'), 'example_flow_0')
-        save_all_3d_vols(first_vols[1], second_vols[1], vects[1], config.get('EXP_PATH'), 'example_flow_1')
+        save_all_3d_vols(first_vols[0], second_vols[0], moved[0], vects[0], config.get('EXP_PATH'), 'example_flow_0')
+        save_all_3d_vols(first_vols[1], second_vols[1], moved[0], vects[1], config.get('EXP_PATH'), 'example_flow_1')
     except Exception as e:
         logging.error(e)
         logging.error(first_vols.shape)

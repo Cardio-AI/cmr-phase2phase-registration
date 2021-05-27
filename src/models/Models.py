@@ -205,8 +205,9 @@ def create_RegistrationModel(config):
         indexing = 'ij'
         interp_method = 'linear'
         Conv = getattr(KL, 'Conv{}D'.format(ndims))
+        # start with very small deformation
         Conv_layer = Conv(ndims, kernel_size=3, padding='same',
-                    kernel_initializer=tensorflow.keras.initializers.RandomNormal(mean=0.0, stddev=1e-5), name='unet2flow')
+                    kernel_initializer=tensorflow.keras.initializers.RandomNormal(mean=0.0, stddev=1e-10), name='unet2flow')
         st_layer = nrn_layers.SpatialTransformer(interp_method=interp_method, indexing=indexing, ident=True,
                                           fill_value=0, name='deformable_layer')
 

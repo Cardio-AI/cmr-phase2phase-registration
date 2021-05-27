@@ -606,7 +606,7 @@ def plot_4d_vol(img_4d, timesteps=[0], save=False, path='temp/', mask_4d=None, f
                 
                 ax[t_][z] = show_slice_transparent(slice, mask_4d[t_, z, ...], show=True, ax=ax[t_][z])
             else:
-                ax[t_][z] = show_slice_transparent(slice, show=True, ax=ax[t_][z])
+                ax[t_][z] = show_slice_transparent(slice, show=False, ax=ax[t_][z])
             ax[t_][z].set_xticks([])
             ax[t_][z].set_yticks([])
             # ax[t_][z].set_aspect('equal')
