@@ -158,15 +158,15 @@ def resample_t_of_4d(sitk_img, t_spacing=20, interpolation=sitk.sitkLinear, isma
 
     temp_slice = images[0]
     t_size = temp_slice.GetSize()
-    t_spacing_old = temp_slice.GetSpacing()
+    spacing_old = temp_slice.GetSpacing()
 
     # calculate the sampling factor, and the corresponding new size in t
-    sampling_factor = t_spacing_old[-1] / t_spacing
+    sampling_factor = spacing_old[-1] / t_spacing
     debug('Sampling factor: {}'.format(sampling_factor))
     new_t_size = int(np.ceil(t_size[-1] * sampling_factor))
     target_size = (t_size[0], t_size[1], new_t_size)
     debug('2D+t target size: {}'.format(target_size))
-    target_spacing = (t_spacing_old[0], t_spacing_old[1], t_spacing)
+    target_spacing = (spacing_old[0], spacing_old[1], t_spacing)
 
     resampled_cmr = list(
         map(lambda x:
@@ -203,7 +203,7 @@ def resample_t_of_4d(sitk_img, t_spacing=20, interpolation=sitk.sitkLinear, isma
     debug('after as sitk: {} x {}'.format(len(resampled_cmr_nda), resampled_cmr_sitk[0].GetSize()))
     resampled_cmr_sitk = sitk.JoinSeries(resampled_cmr_sitk)
 
-    full_spacing = (t_spacing_old[0], t_spacing_old[1], z_spacing, t_spacing)
+    full_spacing = (spacing_old[0], spacing_old[1], z_spacing, t_spacing)
     resampled_cmr_sitk = copy_meta_and_save(resampled_cmr_sitk, sitk_img, None, overwrite_spacing=full_spacing)
     debug(resampled_cmr_sitk.GetSize())
     debug(resampled_cmr_sitk.GetSpacing())
@@ -1133,7 +1133,7 @@ def normalise_image(img_nda, normaliser='minmax'):
     normaliser = normaliser.lower()
 
     if normaliser == 'standard':
-        return (img_nda - np.mean(img_nda)) / (np.std(img_nda) + sys.float_info.epsilon)
+        return (img_nda - np.mean(img_nda)) / (np.std(img_nda))
 
         #return StandardScaler(copy=False, with_mean=True, with_std=True).fit_transform(img_nda)
     elif normaliser == 'robust':

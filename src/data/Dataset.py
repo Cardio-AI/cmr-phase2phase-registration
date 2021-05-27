@@ -1,20 +1,24 @@
+import glob
+import logging
+import os
 import random
+from logging import debug as debug
+# import yaml
+from time import time
+
+import SimpleITK as sitk
 import numpy as np
 import pandas as pd
-import logging
-import matplotlib.pyplot as plt
-import glob
-import os
-import SimpleITK as sitk
 import skimage
-
+import skimage.exposure
+import yaml
+from sklearn.model_selection import KFold
 
 from src.utils.Utils_io import ensure_dir
 from src.visualization.Visualize import plot_value_histogram
-#import yaml
-from time import time
+
+
 #from sklearn.model_selection import KFold
-import tensorflow as tf
 
 def copy_meta(new_image, reference_sitk_img):
 
@@ -222,16 +226,16 @@ def match_hist_(nda, avg):
     logging.info('fourth: {:0.3f} s'.format(time() - t0))
     return np.reshape(temp, shape_)
 
-def match_hist(nda,ref, prob_per_z=50):
-    import skimage.exposure
-    t0 = time()
+def match_hist(nda,ref, prob_per_z=10):
+
     for z in range(nda.shape[1]):
-        if random.randint(0,100) > prob_per_z: # apply hit matching only on some 2d slices +t, this is more realistic, as some series have different scanner settings
+        # apply hist matching only on some 2d slices +t, this is more realistic, as some series have different scanner settings
+        if random.randint(0,100) <= prob_per_z:
             for t in range(nda.shape[0]):
                 nda[t,z] = skimage.exposure.match_histograms(nda[t,z], ref, multichannel=False)
     return nda
 
-def split_one_4d_sitk_in_list_of_3d_sitk(img_4d_sitk, HIST_MATCHING=False, ref=None, axis=None, prob=0.8):
+def split_one_4d_sitk_in_list_of_3d_sitk(img_4d_sitk, axis=None, prob=0.8):
     """
     Splits a 4D dicom image into a list of 3D sitk images, copy alldicom metadata
     Parameters
@@ -245,9 +249,6 @@ def split_one_4d_sitk_in_list_of_3d_sitk(img_4d_sitk, HIST_MATCHING=False, ref=N
     """
 
     img_4d_nda = sitk.GetArrayFromImage(img_4d_sitk)
-    # histogram matching - apply only on 50% of the files
-    if HIST_MATCHING: # apply always
-        img_4d_nda = match_hist(img_4d_nda, ref)
 
     if axis: # if we want to split by any other axis than 0, split by this axis and rearange the spacing in the reference sitk
         img_4d_nda = np.split(img_4d_nda,indices_or_sections=img_4d_nda.shape[axis], axis=axis)
@@ -1443,8 +1444,7 @@ def get_n_windows_from_single4D(nda4d, idx, window_size=2):
     -------
 
     """
-    import logging
-    from logging import debug as debug
+
     t1 = time()
     debug('nda4d shape: {}'.format(nda4d.shape))
     debug('idx shape: {}'.format(idx.shape))
@@ -1455,8 +1455,10 @@ def get_n_windows_from_single4D(nda4d, idx, window_size=2):
     idxs_upper = idx + window_size
     debug('idx: {}'.format(idx))
     # fake ring functionality with mod
-    idxs_lower = tf.math.mod(idxs_lower, y_len)
-    idxs_upper = tf.math.mod(idxs_upper, y_len)
+    idxs_lower = np.mod(idxs_lower, y_len) # this is faster in the generator, than the tf functions
+    idxs_upper = np.mod(idxs_upper, y_len)
+    #idxs_lower = tf.math.mod(idxs_lower, y_len)
+    #idxs_upper = tf.math.mod(idxs_upper, y_len)
     debug('idx lower: {}'.format(idxs_lower))
     debug('idx upper: {}'.format(idxs_upper))
     logging.debug('mod took: {:0.3f} s'.format(time() - t1))
@@ -1469,8 +1471,11 @@ def get_n_windows_from_single4D(nda4d, idx, window_size=2):
     # with: (batch,phase,z,x,y,1)
     # we need to fill the dimensions from behind by [...,tf.newaxis]
     # and define the number of leading batch dimensions
-    t_lower = tf.gather_nd(nda4d, idxs_lower[..., tf.newaxis], batch_dims=0)
-    t_upper = tf.gather_nd(nda4d, idxs_upper[..., tf.newaxis], batch_dims=0)
+    #t_lower = tf.gather_nd(nda4d, idxs_lower[..., tf.newaxis], batch_dims=0)
+    #t_upper = tf.gather_nd(nda4d, idxs_upper[..., tf.newaxis], batch_dims=0)
+    t_lower = np.squeeze(np.take(nda4d, indices=idxs_lower[..., np.newaxis], axis=0))
+    t_upper = np.squeeze(np.take(nda4d, indices=idxs_upper[..., np.newaxis], axis=0))
+    logging.debug('first vols shape: {}'.format(t_lower.shape))
     logging.debug('gather nd took: {:0.3f} s'.format(time() - t1))
     return t_lower, t_upper
 

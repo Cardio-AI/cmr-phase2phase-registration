@@ -16,7 +16,7 @@ import tensorflow.keras
 from scipy.ndimage import gaussian_filter1d
 
 from src.data.Dataset import describe_sitk, split_one_4d_sitk_in_list_of_3d_sitk, get_phases_as_onehot_gcn, \
-    get_phases_as_onehot_acdc, get_n_windows_from_single4D, get_phases_as_idx_gcn, get_phases_as_idx_acdc
+    get_phases_as_onehot_acdc, get_n_windows_from_single4D, get_phases_as_idx_gcn, get_phases_as_idx_acdc, match_hist
 from src.data.Preprocess import resample_3D, clip_quantile, normalise_image, grid_dissortion_2D_or_3D, \
     transform_to_binary_mask, load_masked_img, random_rotate90_2D_or_3D, \
     augmentation_compose_2d_3d_4d, pad_and_crop, resample_t_of_4d
@@ -1073,8 +1073,8 @@ class PhaseWindowGenerator(DataGenerator):
         t1 = time()
         # Create a list of 3D volumes for volume resampling
         # apply histogram matching if given by config
-        model_inputs = split_one_4d_sitk_in_list_of_3d_sitk(model_inputs, HIST_MATCHING=apply_hist_matchinng, ref=ref, axis=0, prob=self.AUGMENT_PROB)
-        logging.debug('load + hist matching took: {:0.3f} s'.format(time() - t1))
+        model_inputs = split_one_4d_sitk_in_list_of_3d_sitk(model_inputs, axis=0, prob=self.AUGMENT_PROB)
+        logging.debug('split in t x 3D took: {:0.3f} s'.format(time() - t1))
         t1 = time()
 
         # Returns the indices in the following order: 'ED#', 'MS#', 'ES#', 'PF#', 'MD#'
@@ -1126,11 +1126,15 @@ class PhaseWindowGenerator(DataGenerator):
         t1 = time()
 
         # transform to nda for further processing
-        # repeat the 3D volumes along t (we did the same with the onehot vector)
         model_inputs = np.stack(list(map(lambda x: sitk.GetArrayFromImage(x), model_inputs)), axis=0)
         logging.debug('transform to nda took: {:0.3f} s'.format(time() - t1))
         t1 = time()
         self.__plot_state_if_debug__(img=model_inputs[len(model_inputs) // 2], start_time=t1, step='resampled')
+
+        if apply_hist_matchinng:
+            model_inputs = match_hist(model_inputs, ref)
+            logging.debug('hist matching took: {:0.3f} s'.format(time() - t1))
+            t1 = time()
 
         # get the volumes of each phase window
         model_inputs, model_targets = get_n_windows_from_single4D(model_inputs, idx, window_size=self.WINDOW_SIZE)
@@ -1148,6 +1152,7 @@ class PhaseWindowGenerator(DataGenerator):
             self.__plot_state_if_debug__(img=model_inputs[0], start_time=t1, step='augmented')
             logging.debug('augmentation took: {:0.3f} s'.format(time() - t1))
             t1 = time()
+
 
         model_inputs = pad_and_crop(model_inputs, target_shape=(self.PHASES,*self.DIM))
         model_targets = pad_and_crop(model_targets, target_shape=(self.PHASES, *self.DIM))
