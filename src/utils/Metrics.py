@@ -333,6 +333,7 @@ class Grad:
 
     def __init__(self, penalty='l1', loss_mult=None):
         self.penalty = penalty
+        self.name = '{}_reg_loss'.format(penalty)
         self.loss_mult = loss_mult
 
     def _diffs(self, y):

@@ -11,7 +11,7 @@ def train_fold(config):
     # this should import glob, os, and many other standard libs
     from tensorflow.python.client import device_lib
     import tensorflow as tf
-    tf.get_logger().setLevel('ERROR')
+    tf.get_logger().setLevel('FATAL')
     import gc, logging, os, datetime, re
     from logging import info
 
@@ -55,9 +55,9 @@ def train_fold(config):
 
     Console_and_file_logger(path=EXP_PATH, log_lvl=logging.INFO)
     config = init_config(config=locals(), save=True)
-    logging.info('Is built with tensorflow: {}'.format(tf.test.is_built_with_cuda()))
+    """logging.info('Is built with tensorflow: {}'.format(tf.test.is_built_with_cuda()))
     logging.info('Visible devices:\n{}'.format(tf.config.list_physical_devices()))
-    logging.info('Local devices: \n {}'.format(device_lib.list_local_devices()))
+    logging.info('Local devices: \n {}'.format(device_lib.list_local_devices()))"""
 
     # get kfolded data from DATA_ROOT and subdirectories
     # Load SAX volumes
@@ -93,7 +93,7 @@ def train_fold(config):
     info('Done!')
 
     # instantiate the batchgenerators
-    """n = 4
+    """n = 50
     x_train_sax = x_train_sax[:n]
     x_val_sax = x_val_sax[:n]"""
     batch_generator = PhaseWindowGenerator(x_train_sax, x_train_sax, config=config)
@@ -176,7 +176,6 @@ def train_fold(config):
         logging.error(second_vols.shape)
         logging.error(vects.shape)
 
-
     # free as much memory as possible
     del batch_generator
     del validation_generator
@@ -194,12 +193,11 @@ def main(args=None):
     change_wd_to_project_root()
     import sys, os, datetime
     sys.path.append(os.getcwd())
-    from src.utils.Tensorflow_helper import choose_gpu_by_id
+    os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
     # ------------------------------------------define GPU id/s to use, if given
 
     # local imports
     from src.utils.Utils_io import Console_and_file_logger, init_config
-
     # import external libs
     import tensorflow as tf
     tf.get_logger().setLevel('ERROR')
@@ -325,10 +323,6 @@ def main(args=None):
 
         print('init config')
         config = init_config(config=locals(), save=False)
-
-    GPU_IDS = '0,1'
-    GPUS = choose_gpu_by_id(GPU_IDS)
-    print(GPUS)
 
     for f in config.get('FOLDS', [0]):
         print('starting fold: {}'.format(f))

@@ -654,7 +654,8 @@ class WindowMotionCallback(Callback):
                         nrows = 3
                         ncols = 6
                         fig, axes = plt.subplots(nrows, ncols)
-                        picks = [40,30,10]
+                        spatial_slices = first_vol.shape[0]
+                        picks = (np.array([0.7,0.5,0.2]) * spatial_slices).astype(int)
                         y_label = ['Basal', 'Mid', 'Apex']
                         col_titles = ['t1', 't2', 't1 moved', 'vect', 't1-t2' ,'moved-t2']
                         for i,z in enumerate(picks):
@@ -662,15 +663,25 @@ class WindowMotionCallback(Callback):
                             #axes[i, 0].set_ylabel(y_label[i], color='r')
                             axes[i, 1] = show_slice(second_vol[z], ax=axes[i, 1])
                             axes[i, 2] = show_slice(moved[z], ax=axes[i, 2])
-                            axes[i, 3].imshow(normalise_image(vect[z]))
+                            temp = np.absolute(vect[z])
+                            axes[i, 3].imshow(normalise_image(temp), interpolation=None)
                             axes[i, 3].set_xticks([])
                             axes[i, 3].set_yticks([])
-                            axes[i, 4] = show_slice(first_vol[z] - second_vol[z], ax=axes[i, 4])
-                            axes[i, 5] = show_slice(moved[z] - second_vol[z], ax=axes[i, 5])
+                            axes[i, 4].imshow(first_vol[z] - second_vol[z], interpolation=None)
+                            axes[i, 4].set_xticks([])
+                            axes[i, 4].set_yticks([])
+                            axes[i, 5].imshow(moved[z] - second_vol[z], interpolation=None)
+                            axes[i, 5].set_xticks([])
+                            axes[i, 5].set_yticks([])
+                        # set column names
                         for i in range(ncols):
                             axes[0,i].set_title(col_titles[i])
-                        fig.subplots_adjust(wspace=0.0, hspace=0.0)
+                        # set row names
+                        for j in range(nrows):
+                            axes[j,0].set_ylabel(y_label[j], rotation=0, size='large')
 
+                        fig.subplots_adjust(wspace=0.0, hspace=0.0)
+                        fig.tight_layout()
                         tensorflow.summary.image(name='plot/{}/batch_{}/{}/summary'.format(key, b, phases[p]),
                                                  data=self.make_image(fig),
                                                  step=epoch)

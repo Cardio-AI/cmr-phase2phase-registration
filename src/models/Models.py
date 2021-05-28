@@ -207,22 +207,22 @@ def create_RegistrationModel(config):
         Conv = getattr(KL, 'Conv{}D'.format(ndims))
         # start with very small deformation
         Conv_layer = Conv(ndims, kernel_size=3, padding='same',
-                    kernel_initializer=tensorflow.keras.initializers.RandomNormal(mean=0.0, stddev=1e-10), name='unet2flow')
-        st_layer = nrn_layers.SpatialTransformer(interp_method=interp_method, indexing=indexing, ident=True,
-                                          fill_value=0, name='deformable_layer')
+                    kernel_initializer=tensorflow.keras.initializers.RandomNormal(mean=0.0, stddev=1e-5), name='unet2flow')
+        st_layer = nrn_layers.SpatialTransformer(interp_method=interp_method, indexing=indexing, ident=True, name='deformable_layer')
 
         unet = create_unet(config, single_model=False)
 
         input_vols = tf.unstack(input_tensor, axis=1)
         print(input_vols[0].shape)
-        import random
+        """import random
         indicies = list(tf.range(len(input_vols)))
         zipped = list(zip(input_vols, indicies))
         random.shuffle(zipped)
-        input_vols_shuffled, indicies = zip(*zipped)
+        input_vols_shuffled, indicies = zip(*zipped)"""
+        input_vols_shuffled = input_vols
         pre_flows = [unet(vol) for vol in input_vols_shuffled]
         flows= [Conv_layer(vol) for vol in pre_flows]  # m.shape --> batchsize, timesteps, 6
-        flows, _ = zip(*sorted(zip(flows, indicies), key=lambda tup: tup[1]))
+        #flows, _ = zip(*sorted(zip(flows, indicies), key=lambda tup: tup[1]))
         transformed = [st_layer([input_vol, flow]) for input_vol, flow in zip(input_vols, flows)]
         transformed = tf.stack(transformed, axis=1)
         flow = tf.stack(flows, axis=1)
@@ -234,11 +234,10 @@ def create_RegistrationModel(config):
         from tensorflow.keras.losses import mse
         from src.utils.Metrics import Grad, MSE_
 
-        losses = [mse, Grad('l1').loss]
+        losses = [mse, Grad('l2').loss]
         weights = [image_loss_weight, reg_loss_weight]
-        model.compile(optimizer=tensorflow.keras.optimizers.Adam(), loss=losses, loss_weights=weights)
+        model.compile(optimizer=tf.keras.optimizers.Adam(), loss=losses, loss_weights=weights)
 
-    #super().__init__(name='simpleregister', inputs=[input_tensor, input_tensor_empty], outputs=outputs)
     return model
 
 
