@@ -650,6 +650,8 @@ class WindowMotionCallback(Callback):
                     # one plot per phase
                     for p in range(len(phases)):
                         first_vol, second_vol = x[b][0][p], y[b][0][p]
+                        if first_vol.shape[-1] == 3:
+                            first_vol= first_vol[...,1][...,np.newaxis]
                         moved, vect = movings[b][p], vects[b][p]
                         nrows = 3
                         ncols = 6

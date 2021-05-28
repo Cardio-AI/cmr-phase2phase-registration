@@ -952,7 +952,7 @@ class PhaseWindowGenerator(DataGenerator):
         self.RESAMPLE_T = config.get('RESAMPLE_T', False)
         self.WINDOW_SIZE = config.get('WINDOW_SIZE', 2)
 
-        self.X_SHAPE = np.empty((self.BATCHSIZE, self.PHASES, *self.DIM, 1), dtype=np.float32)
+        self.X_SHAPE = np.empty((self.BATCHSIZE, self.PHASES, *self.DIM, 3), dtype=np.float32)
         self.Y_SHAPE = np.empty((self.BATCHSIZE, self.PHASES, *self.DIM, 1), dtype=np.float32)
 
         self.ISACDC = False
@@ -1137,7 +1137,7 @@ class PhaseWindowGenerator(DataGenerator):
             t1 = time()
 
         # get the volumes of each phase window
-        model_inputs, model_targets = get_n_windows_from_single4D(model_inputs, idx, window_size=self.WINDOW_SIZE)
+        model_inputs, model_targets, pre, post = get_n_windows_from_single4D(model_inputs, idx, window_size=self.WINDOW_SIZE)
         logging.debug('windowing slicing took: {:0.3f} s'.format(time() - t1))
         t1 = time()
 
@@ -1154,6 +1154,9 @@ class PhaseWindowGenerator(DataGenerator):
             t1 = time()
 
 
+        pre = pad_and_crop(pre, target_shape=(self.PHASES,*self.DIM))
+        post = pad_and_crop(post, target_shape=(self.PHASES, *self.DIM))
+
         model_inputs = pad_and_crop(model_inputs, target_shape=(self.PHASES,*self.DIM))
         model_targets = pad_and_crop(model_targets, target_shape=(self.PHASES, *self.DIM))
         logging.debug('pad/crop took: {:0.3f} s'.format(time() - t1))
@@ -1162,10 +1165,16 @@ class PhaseWindowGenerator(DataGenerator):
         # clip, pad/crop and normalise & extend last axis
         # We repeat/tile the 3D volume at this time, to avoid resampling/augmenting the same slices multiple times
         # Ideally this saves computation time and memory
+        pre = clip_quantile(pre, .9999)
+        post = clip_quantile(post, .9999)
+
         model_inputs = clip_quantile(model_inputs, .9999)
         model_targets = clip_quantile(model_targets, .9999)
         logging.debug('quantile clipping took: {:0.3f} s'.format(time() - t1))
         t1 = time()
+
+        pre = normalise_image(pre, normaliser=self.SCALER)
+        post = normalise_image(post, normaliser=self.SCALER)
 
         model_inputs = normalise_image(model_inputs, normaliser=self.SCALER)  # normalise per 4D
         model_targets = normalise_image(model_targets, normaliser=self.SCALER)  # normalise per 4D
@@ -1175,11 +1184,12 @@ class PhaseWindowGenerator(DataGenerator):
         self.__plot_state_if_debug__(img=model_inputs[len(model_inputs) // 2], start_time=t1,
                                      step='clipped cropped and pad')
 
+        model_inputs = np.stack([pre, model_inputs, post], axis=-1)
 
         assert not np.any(np.isnan(model_inputs))
         assert not np.any(np.isnan(model_targets))
 
-        return model_inputs[..., np.newaxis], model_targets[..., np.newaxis], i, ID, time() - t0
+        return model_inputs, model_targets[..., np.newaxis], i, ID, time() - t0
 
 
 import linecache

@@ -1453,10 +1453,18 @@ def get_n_windows_from_single4D(nda4d, idx, window_size=2):
     # define the motion window --> [t-window,t+window] one of [1,2,3] depending on the temporal resolution/temporal resampling
     idxs_lower = idx - window_size
     idxs_upper = idx + window_size
+
+    idxs_lower_pre = idxs_lower-1
+    idxs_lower_post = idxs_lower + 1
+
     debug('idx: {}'.format(idx))
     # fake ring functionality with mod
     idxs_lower = np.mod(idxs_lower, y_len) # this is faster in the generator, than the tf functions
     idxs_upper = np.mod(idxs_upper, y_len)
+
+    idx_lower_pre = np.mod(idxs_lower_pre, y_len)
+    idx_lower_post = np.mod(idxs_lower_post, y_len)
+
     #idxs_lower = tf.math.mod(idxs_lower, y_len)
     #idxs_upper = tf.math.mod(idxs_upper, y_len)
     debug('idx lower: {}'.format(idxs_lower))
@@ -1473,11 +1481,15 @@ def get_n_windows_from_single4D(nda4d, idx, window_size=2):
     # and define the number of leading batch dimensions
     #t_lower = tf.gather_nd(nda4d, idxs_lower[..., tf.newaxis], batch_dims=0)
     #t_upper = tf.gather_nd(nda4d, idxs_upper[..., tf.newaxis], batch_dims=0)
+    t_lower_pre = np.squeeze(np.take(nda4d, indices=idxs_lower_pre[..., np.newaxis], axis=0))
+    t_lower_post = np.squeeze(np.take(nda4d, indices=idxs_lower_post[..., np.newaxis], axis=0))
+
+
     t_lower = np.squeeze(np.take(nda4d, indices=idxs_lower[..., np.newaxis], axis=0))
     t_upper = np.squeeze(np.take(nda4d, indices=idxs_upper[..., np.newaxis], axis=0))
     logging.debug('first vols shape: {}'.format(t_lower.shape))
     logging.debug('gather nd took: {:0.3f} s'.format(time() - t1))
-    return t_lower, t_upper
+    return t_lower, t_upper, t_lower_pre, t_lower_post
 
 
 def save_3d(nda, fname):

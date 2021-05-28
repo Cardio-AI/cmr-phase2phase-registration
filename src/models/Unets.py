@@ -68,7 +68,7 @@ def create_unet(config, metrics=None, networkname='unet', single_model=True, sup
         strategy = tf.distribute.MirroredStrategy(devices=config.get('GPUS', ["/gpu:0"]))
     with strategy.scope():
 
-        inputs = Input((*config.get('DIM', [224, 224]), config.get('IMG_CHANNELS', 1)))
+        inputs = Input((*config.get('DIM', [224, 224]), config.get('IMG_CHANNELS', 3)))
         print(inputs.shape)
 
         # define standard values according to convention over configuration paradigm

@@ -196,7 +196,7 @@ def create_RegistrationModel(config):
         reg_loss_weight = config.get('REG_LOSS_WEIGHT', 0.001)
 
 
-        input_tensor = Input(shape=(T_SHAPE, *input_shape, 1))
+        input_tensor = Input(shape=(T_SHAPE, *input_shape, config.get('IMG_CHANNELS', 3)))
         input_tensor_empty = Input(shape=(T_SHAPE, *input_shape, 3))
         # define standard values according to the convention over configuration paradigm
 
@@ -223,7 +223,8 @@ def create_RegistrationModel(config):
         pre_flows = [unet(vol) for vol in input_vols_shuffled]
         flows= [Conv_layer(vol) for vol in pre_flows]  # m.shape --> batchsize, timesteps, 6
         #flows, _ = zip(*sorted(zip(flows, indicies), key=lambda tup: tup[1]))
-        transformed = [st_layer([input_vol, flow]) for input_vol, flow in zip(input_vols, flows)]
+
+        transformed = [st_layer([input_vol[...,1][...,tf.newaxis], flow]) for input_vol, flow in zip(input_vols, flows)]
         transformed = tf.stack(transformed, axis=1)
         flow = tf.stack(flows, axis=1)
 
