@@ -659,20 +659,23 @@ class WindowMotionCallback(Callback):
                         spatial_slices = first_vol.shape[0]
                         picks = (np.array([0.7,0.5,0.2]) * spatial_slices).astype(int)
                         y_label = ['Basal', 'Mid', 'Apex']
-                        col_titles = ['t1', 't2', 't1 moved', 'vect', 't1-t2' ,'moved-t2']
+                        from tensorflow.keras.metrics import mse
+                        mse_1 = np.mean((first_vol - second_vol)**2)
+                        mse_2 = np.mean((moved - second_vol)**2)
+                        col_titles = ['t1', 't2', 't1 moved', 'vect', 't1-t2 \n {:6.4f}'.format(mse_1) ,'moved-t2 \n {:6.4f}'.format(mse_2)]
                         for i,z in enumerate(picks):
                             axes[i,0] = show_slice(first_vol[z], ax=axes[i,0])
                             #axes[i, 0].set_ylabel(y_label[i], color='r')
                             axes[i, 1] = show_slice(second_vol[z], ax=axes[i, 1])
                             axes[i, 2] = show_slice(moved[z], ax=axes[i, 2])
                             temp = np.absolute(vect[z])
-                            axes[i, 3].imshow(normalise_image(temp), interpolation=None)
+                            axes[i, 3].imshow(normalise_image(temp))
                             axes[i, 3].set_xticks([])
                             axes[i, 3].set_yticks([])
-                            axes[i, 4].imshow(first_vol[z] - second_vol[z], interpolation=None)
+                            axes[i, 4].imshow(first_vol[z] - second_vol[z], interpolation='none')
                             axes[i, 4].set_xticks([])
                             axes[i, 4].set_yticks([])
-                            axes[i, 5].imshow(moved[z] - second_vol[z], interpolation=None)
+                            axes[i, 5].imshow(moved[z] - second_vol[z], interpolation='none')
                             axes[i, 5].set_xticks([])
                             axes[i, 5].set_yticks([])
                         # set column names

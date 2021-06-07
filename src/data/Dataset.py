@@ -1462,8 +1462,8 @@ def get_n_windows_from_single4D(nda4d, idx, window_size=2):
     idxs_lower = np.mod(idxs_lower, y_len) # this is faster in the generator, than the tf functions
     idxs_upper = np.mod(idxs_upper, y_len)
 
-    idx_lower_pre = np.mod(idxs_lower_pre, y_len)
-    idx_lower_post = np.mod(idxs_lower_post, y_len)
+    idxs_lower_pre = np.mod(idxs_lower_pre, y_len)
+    idxs_lower_post = np.mod(idxs_lower_post, y_len)
 
     #idxs_lower = tf.math.mod(idxs_lower, y_len)
     #idxs_upper = tf.math.mod(idxs_upper, y_len)
@@ -1506,7 +1506,7 @@ def save_all_3d_vols(inputs, outputs, moved, flow, EXP_PATH, exp='example_flows'
     flowname = os.path.join(experiment_, '_flow.nii')
     firstfilename = os.path.join(experiment_, '_cmr.nii')
     secondfilename = os.path.join(experiment_, '_targetcmr.nii')
-    secondmovedfilename = os.path.join(experiment_, '_movedcmr.nii')
+    movedfilename = os.path.join(experiment_, '_movedcmr.nii')
 
     # invert the axis
     flow = np.einsum('tzyxc->cxyzt', flow)
@@ -1518,7 +1518,7 @@ def save_all_3d_vols(inputs, outputs, moved, flow, EXP_PATH, exp='example_flows'
     _ = [save_3d(inputs[..., t], firstfilename.replace('.nii', '_{}_.nii'.format(t))) for t in range(inputs.shape[-1])]
     _ = [save_3d(outputs[..., t], secondfilename.replace('.nii', '_{}_.nii'.format(t))) for t in
          range(outputs.shape[-1])]
-    _ = [save_3d(moved[..., t], secondmovedfilename.replace('.nii', '_{}_.nii'.format(t))) for t in
+    _ = [save_3d(moved[..., t], movedfilename.replace('.nii', '_{}_.nii'.format(t))) for t in
          range(moved.shape[-1])]
     if save2dplus_t:
         _ = [save_3d(flow[..., t, :], flowname.replace('.nii', '_sequence_{}_.nii'.format(t))) for t in

@@ -214,15 +214,15 @@ def create_RegistrationModel(config):
 
         input_vols = tf.unstack(input_tensor, axis=1)
         print(input_vols[0].shape)
-        """import random
+        import random
         indicies = list(tf.range(len(input_vols)))
         zipped = list(zip(input_vols, indicies))
         random.shuffle(zipped)
-        input_vols_shuffled, indicies = zip(*zipped)"""
-        input_vols_shuffled = input_vols
+        input_vols_shuffled, indicies = zip(*zipped)
+        #input_vols_shuffled = input_vols
         pre_flows = [unet(vol) for vol in input_vols_shuffled]
         flows= [Conv_layer(vol) for vol in pre_flows]  # m.shape --> batchsize, timesteps, 6
-        #flows, _ = zip(*sorted(zip(flows, indicies), key=lambda tup: tup[1]))
+        flows, _ = zip(*sorted(zip(flows, indicies), key=lambda tup: tup[1]))
 
         transformed = [st_layer([input_vol[...,1][...,tf.newaxis], flow]) for input_vol, flow in zip(input_vols, flows)]
         transformed = tf.stack(transformed, axis=1)

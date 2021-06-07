@@ -126,27 +126,28 @@ def train_fold(config):
     # training
     initial_epoch = 0
     cb = get_callbacks(config, batch_generator, validation_generator)
+    TEST_EPOCHS = 1
     print('start training')
-    model.fit(
+    """model.fit(
         x=batch_generator,
         validation_data=validation_generator,
-        epochs=EPOCHS,
+        epochs=TEST_EPOCHS,
         callbacks=cb,
         initial_epoch=initial_epoch,
         max_queue_size=config.get('QUEUE_SIZE',12),
-        verbose=1)
+        verbose=1)"""
 
     try:
-        del model
+        #del model
         # predict on a some trainings-files
         example_batch = 0
         inputs, outputs = batch_generator.__getitem__(example_batch)
         if type(inputs) == list: inputs, outputs = inputs[0], outputs[0]
 
         # load the model, to make sure we use the same as later for the evaluations
-        model = create_RegistrationModel(config)
-        model.load_weights(os.path.join(config['MODEL_PATH'], 'model.h5'))
-        logging.info('loaded model weights as h5 file')
+        #model = create_RegistrationModel(config)
+        #model.load_weights(os.path.join(config['MODEL_PATH'], 'model.h5'))
+        logging.info('reuse model - TESTING purpose')
         
         # create a generator with idemptent behaviour (no shuffle etc.)
         # make sure we save always the same patient
@@ -159,8 +160,6 @@ def train_fold(config):
         pred_config['HIST_MATCHING'] = False
         pred_generator = PhaseWindowGenerator(x_train_sax, x_train_sax, config=pred_config)
 
-        # first_vols shape:
-        # Batch, Z, X, Y, Channels --> three timesteps - t_n-1, t_n, t_n+1
         first_vols, second_vols = pred_generator[0]
         first_vols, second_vols = first_vols[0], second_vols[0]
         first_vols = first_vols[...,1][...,np.newaxis]
@@ -330,7 +329,8 @@ def main(args=None):
         print('init config')
         config = init_config(config=locals(), save=False)
 
-    for f in config.get('FOLDS', [0]):
+    TEST_FOLDS = [0]
+    for f in TEST_FOLDS:
         print('starting fold: {}'.format(f))
         config_ = config.copy()
         config_['FOLD'] = f

@@ -951,8 +951,9 @@ class PhaseWindowGenerator(DataGenerator):
         self.AUGMENT_TEMP_RANGE = config.get('AUGMENT_TEMP_RANGE', (-2, 2))
         self.RESAMPLE_T = config.get('RESAMPLE_T', False)
         self.WINDOW_SIZE = config.get('WINDOW_SIZE', 2)
+        self.IMG_CHANNELS = config.get('IMG_CHANNELS', 1)
 
-        self.X_SHAPE = np.empty((self.BATCHSIZE, self.PHASES, *self.DIM, 3), dtype=np.float32)
+        self.X_SHAPE = np.empty((self.BATCHSIZE, self.PHASES, *self.DIM, self.IMG_CHANNELS), dtype=np.float32)
         self.Y_SHAPE = np.empty((self.BATCHSIZE, self.PHASES, *self.DIM, 1), dtype=np.float32)
 
         self.ISACDC = False
@@ -1090,7 +1091,7 @@ class PhaseWindowGenerator(DataGenerator):
         if self.RESAMPLE:
             if model_inputs[0].GetDimension() in [2, 3]:
 
-                # calculate the new size (after resample with the given spacing) of each 3D volume
+                # calculate the new size of each 3D volume (after resample with the given spacing)
                 # sitk.spacing has the opposite order than np.shape and tf.shape
                 # In the config we use the numpy order z, y, x which needs to be reversed for sitk
                 def calc_resampled_size(sitk_img, target_spacing):
