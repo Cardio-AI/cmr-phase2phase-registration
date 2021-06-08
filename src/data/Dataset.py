@@ -1429,7 +1429,7 @@ def get_phases_as_onehot_acdc(file_path, temporal_sampling_factor, length, weigh
     return onehot
 
 
-def get_n_windows_from_single4D(nda4d, idx, window_size=2):
+def get_n_windows_from_single4D(nda4d, idx, window_size=1):
     """
     Split a 4D volume in two lists of 3D volumes
     With list1[n] - list2[n] two 3D ndas which shows the start and endpoint of a timepoint n
@@ -1454,16 +1454,16 @@ def get_n_windows_from_single4D(nda4d, idx, window_size=2):
     idxs_lower = idx - window_size
     idxs_upper = idx + window_size
 
-    idxs_lower_pre = idxs_lower-1
-    idxs_lower_post = idxs_lower + 1
+    #idxs_lower_pre = idxs_lower-1
+    #idxs_lower_post = idxs_lower + 1
 
     debug('idx: {}'.format(idx))
     # fake ring functionality with mod
     idxs_lower = np.mod(idxs_lower, y_len) # this is faster in the generator, than the tf functions
     idxs_upper = np.mod(idxs_upper, y_len)
 
-    idxs_lower_pre = np.mod(idxs_lower_pre, y_len)
-    idxs_lower_post = np.mod(idxs_lower_post, y_len)
+    #idxs_lower_pre = np.mod(idxs_lower_pre, y_len)
+    #idxs_lower_post = np.mod(idxs_lower_post, y_len)
 
     #idxs_lower = tf.math.mod(idxs_lower, y_len)
     #idxs_upper = tf.math.mod(idxs_upper, y_len)
@@ -1481,15 +1481,15 @@ def get_n_windows_from_single4D(nda4d, idx, window_size=2):
     # and define the number of leading batch dimensions
     #t_lower = tf.gather_nd(nda4d, idxs_lower[..., tf.newaxis], batch_dims=0)
     #t_upper = tf.gather_nd(nda4d, idxs_upper[..., tf.newaxis], batch_dims=0)
-    t_lower_pre = np.squeeze(np.take(nda4d, indices=idxs_lower_pre[..., np.newaxis], axis=0))
-    t_lower_post = np.squeeze(np.take(nda4d, indices=idxs_lower_post[..., np.newaxis], axis=0))
+    #t_lower_pre = np.squeeze(np.take(nda4d, indices=idxs_lower_pre[..., np.newaxis], axis=0))
+    #t_lower_post = np.squeeze(np.take(nda4d, indices=idxs_lower_post[..., np.newaxis], axis=0))
 
-
+    t= np.squeeze(np.take(nda4d, indices=idx[..., np.newaxis], axis=0))
     t_lower = np.squeeze(np.take(nda4d, indices=idxs_lower[..., np.newaxis], axis=0))
     t_upper = np.squeeze(np.take(nda4d, indices=idxs_upper[..., np.newaxis], axis=0))
     logging.debug('first vols shape: {}'.format(t_lower.shape))
     logging.debug('gather nd took: {:0.3f} s'.format(time() - t1))
-    return t_lower, t_upper, t_lower_pre, t_lower_post
+    return [t_lower, t, t_upper]
 
 
 def save_3d(nda, fname):

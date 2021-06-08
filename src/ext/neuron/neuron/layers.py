@@ -292,8 +292,8 @@ class SpatialTransformer(Layer):
         assert len(inputs) == 2, "inputs has to be len 2, found: %d" % len(inputs)
         vol = inputs[0]
         trf = inputs[1]
-        vol = tf.cast(vol, tf.float16)
-        trf = tf.cast(trf, tf.float16)
+        vol = tf.cast(vol, tf.float32)
+        trf = tf.cast(trf, tf.float32)
 
         # necessary for multi_gpu models...
         vol = K.reshape(vol, [-1, *self.inshape[0][1:]])
@@ -301,7 +301,7 @@ class SpatialTransformer(Layer):
 
         # go from affine
         if self.is_affine:
-            trf = tf.map_fn(lambda x: self._single_aff_to_shift(x, vol.shape[1:-1]), trf, dtype=tf.float16)
+            trf = tf.map_fn(lambda x: self._single_aff_to_shift(x, vol.shape[1:-1]), trf, dtype=tf.float32)
 
         # prepare location shift
         if self.indexing == 'xy':  # shift the first two dimensions
@@ -312,17 +312,17 @@ class SpatialTransformer(Layer):
         # map transform across batch
         if self.single_transform:
             fn = lambda x: self._single_transform([x, trf[0,:]])
-            return tf.map_fn(fn, vol, dtype=tf.float16)
+            return tf.map_fn(fn, vol, dtype=tf.float32)
         else:
-            return tf.map_fn(self._single_transform, [vol, trf], dtype=tf.float16)
+            return tf.map_fn(self._single_transform, [vol, trf], dtype=tf.float32)
 
     def _single_aff_to_shift(self, trf, volshape):
         if len(trf.shape) == 1:  # go from vector to matrix
             trf = tf.reshape(trf, [self.ndims, self.ndims + 1])
 
-        # note this is unnecessarily extra graph since at every batch entry we have a tf.eye graph
-        b = tf.eye(self.ndims+1)[:self.ndims,:]  # add identity, only if trf could be non eye, hence affine is a shift from identitiy
         if self.ident:
+            # note this is unnecessarily extra graph since at every batch entry we have a tf.eye graph
+            b = tf.eye(self.ndims + 1)[:self.ndims,:]  # add identity, only if trf could be non eye, hence affine is a shift from identitiy
             trf += b
         return affine_to_shift(trf, volshape, shift_center=True)
 

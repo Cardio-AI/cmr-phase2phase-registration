@@ -194,17 +194,19 @@ def create_RegistrationModel(config):
         T_SHAPE = config.get('T_SHAPE', 5)
         image_loss_weight = config.get('IMAGE_LOSS_WEIGHT', 1)
         reg_loss_weight = config.get('REG_LOSS_WEIGHT', 0.001)
+        learning_rate = config.get('LEARNING_RATE', 0.001)
 
 
-        input_tensor = Input(shape=(T_SHAPE, *input_shape, config.get('IMG_CHANNELS', 3)))
-        input_tensor_empty = Input(shape=(T_SHAPE, *input_shape, 3))
+        input_tensor = Input(shape=(T_SHAPE, *input_shape, config.get('IMG_CHANNELS', 1))) # input vol with timesteps, z, x, y, c -> =number of input timesteps
+        input_tensor_empty = Input(shape=(T_SHAPE, *input_shape, 3)) # empty vector field
         # define standard values according to the convention over configuration paradigm
 
         ndims = len(input_shape)
-        depth = config.get('DEPTH', 4)
         indexing = 'ij'
         interp_method = 'linear'
         Conv = getattr(KL, 'Conv{}D'.format(ndims))
+        take_t_elem = config.get('INPUT_T_ELEM', 0)
+
         # start with very small deformation
         Conv_layer = Conv(ndims, kernel_size=3, padding='same',
                     kernel_initializer=tensorflow.keras.initializers.RandomNormal(mean=0.0, stddev=1e-5), name='unet2flow')
@@ -221,10 +223,10 @@ def create_RegistrationModel(config):
         input_vols_shuffled, indicies = zip(*zipped)
         #input_vols_shuffled = input_vols
         pre_flows = [unet(vol) for vol in input_vols_shuffled]
-        flows= [Conv_layer(vol) for vol in pre_flows]  # m.shape --> batchsize, timesteps, 6
+        flows= [Conv_layer(vol) for vol in pre_flows]
         flows, _ = zip(*sorted(zip(flows, indicies), key=lambda tup: tup[1]))
 
-        transformed = [st_layer([input_vol[...,1][...,tf.newaxis], flow]) for input_vol, flow in zip(input_vols, flows)]
+        transformed = [st_layer([input_vol[...,take_t_elem][...,tf.newaxis], flow]) for input_vol, flow in zip(input_vols, flows)]
         transformed = tf.stack(transformed, axis=1)
         flow = tf.stack(flows, axis=1)
 
@@ -235,9 +237,9 @@ def create_RegistrationModel(config):
         from tensorflow.keras.losses import mse
         from src.utils.Metrics import Grad, MSE_
 
-        losses = [mse, Grad('l2').loss]
+        losses = [MSE_().loss, Grad('l2').loss]
         weights = [image_loss_weight, reg_loss_weight]
-        model.compile(optimizer=tf.keras.optimizers.Adam(), loss=losses, loss_weights=weights)
+        model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=learning_rate), loss=losses, loss_weights=weights)
 
     return model
 

@@ -157,13 +157,14 @@ def train_fold(config):
         pred_config['AUGMENT_TEMP'] = False
         pred_config['BATCHSIZE'] = 2
         pred_config['HIST_MATCHING'] = False
+        INPUT_T_ELEM = config.get('INPUT_T_ELEM', 0)
         pred_generator = PhaseWindowGenerator(x_train_sax, x_train_sax, config=pred_config)
 
         # first_vols shape:
         # Batch, Z, X, Y, Channels --> three timesteps - t_n-1, t_n, t_n+1
         first_vols, second_vols = pred_generator[0]
-        first_vols, second_vols = first_vols[0], second_vols[0]
-        first_vols = first_vols[...,1][...,np.newaxis]
+        first_vols, second_vols = first_vols[0], second_vols[0] # pick batch 0
+        first_vols = first_vols[...,INPUT_T_ELEM][...,np.newaxis] # select the transformed source vol
 
         moved, vects = model.predict(pred_generator, steps=1)
         moved = tf.cast(moved, tf.float32)

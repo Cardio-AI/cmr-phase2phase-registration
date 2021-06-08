@@ -49,9 +49,10 @@ def get_callbacks(config=None, batch_generator=None, validation_generator=None, 
                              ))
         callbacks.append(
             WindowMotionCallback(log_dir=config['TENSORBOARD_PATH'],
-                                    image_freq=config.get('SAVE_LEARNING_PROGRESS_FREQUENCY', 2),
-                                    feed_inputs_4_display=feed_inputs_4_tensorboard(config, batch_generator,
+                                image_freq=config.get('SAVE_LEARNING_PROGRESS_FREQUENCY', 2),
+                                feed_inputs_4_display=feed_inputs_4_tensorboard(config, batch_generator,
                                                                                     validation_generator),
+                                take_t_elem=config.get('INPUT_T_ELEM', 0)
                                     ))
 
     # dont save the test models
@@ -554,7 +555,7 @@ class WindowMotionCallback(Callback):
     # original code from:
     # https://stackoverflow.com/questions/43784921/how-to-display-custom-images-in-tensorboard-using-keras?rq=1
 
-    def __init__(self, log_dir='./logs/tmp/', image_freq=10, feed_inputs_4_display=None, dpi=200,f_size=(5,5), interpol='bilinear', force_plot_first_n_epochs=5):
+    def __init__(self, log_dir='./logs/tmp/', image_freq=10, feed_inputs_4_display=None, dpi=200,f_size=(5,5), interpol='bilinear', force_plot_first_n_epochs=5, take_t_elem=0):
 
         """
         This callback gets a dict with key: x,y entries
@@ -581,6 +582,7 @@ class WindowMotionCallback(Callback):
         self.writer = tensorflow.summary.create_file_writer(log_dir)
         self.xs, self.ys = zip(*self.feed_inputs_4_display.values())
         self.keys = self.feed_inputs_4_display.keys()
+        self.take_t_elem = take_t_elem
 
     def custom_set_feed_input_to_display(self, feed_inputs_display):
 
@@ -651,33 +653,43 @@ class WindowMotionCallback(Callback):
                     for p in range(len(phases)):
                         first_vol, second_vol = x[b][0][p], y[b][0][p]
                         if first_vol.shape[-1] == 3:
-                            first_vol= first_vol[...,1][...,np.newaxis]
+                            first_vol= first_vol[...,self.take_t_elem][...,np.newaxis]
                         moved, vect = movings[b][p], vects[b][p]
                         nrows = 3
-                        ncols = 6
+                        ncols = 7
                         fig, axes = plt.subplots(nrows, ncols)
                         spatial_slices = first_vol.shape[0]
+                        # pick one upper, middle and lower slice as example
                         picks = (np.array([0.7,0.5,0.2]) * spatial_slices).astype(int)
                         y_label = ['Basal', 'Mid', 'Apex']
                         from tensorflow.keras.metrics import mse
                         mse_1 = np.mean((first_vol - second_vol)**2)
                         mse_2 = np.mean((moved - second_vol)**2)
                         col_titles = ['t1', 't2', 't1 moved', 'vect', 't1-t2 \n {:6.4f}'.format(mse_1) ,'moved-t2 \n {:6.4f}'.format(mse_2)]
+                        j = 0
                         for i,z in enumerate(picks):
-                            axes[i,0] = show_slice(first_vol[z], ax=axes[i,0])
-                            #axes[i, 0].set_ylabel(y_label[i], color='r')
-                            axes[i, 1] = show_slice(second_vol[z], ax=axes[i, 1])
-                            axes[i, 2] = show_slice(moved[z], ax=axes[i, 2])
+                            axes[i,j] = show_slice(first_vol[z], ax=axes[i,0]);j=j+1
+                            axes[i, j] = show_slice(second_vol[z], ax=axes[i, 1]);j=j+1
+                            axes[i, j] = show_slice(moved[z], ax=axes[i, 2]);j=j+1
+
                             temp = np.absolute(vect[z])
-                            axes[i, 3].imshow(normalise_image(temp))
-                            axes[i, 3].set_xticks([])
-                            axes[i, 3].set_yticks([])
-                            axes[i, 4].imshow(first_vol[z] - second_vol[z], interpolation='none')
-                            axes[i, 4].set_xticks([])
-                            axes[i, 4].set_yticks([])
-                            axes[i, 5].imshow(moved[z] - second_vol[z], interpolation='none')
-                            axes[i, 5].set_xticks([])
-                            axes[i, 5].set_yticks([])
+                            axes[i, j].imshow(normalise_image(temp))
+                            axes[i, j].set_xticks([])
+                            axes[i, j].set_yticks([]);j=j+1
+
+                            # get the magnitude/vector length
+                            temp = np.sqrt(np.square(vect[z][...,0]) + np.square(vect[z][...,1]) + np.square(vect[z][...,2])  )
+                            axes[i, j].imshow(normalise_image(temp))
+                            axes[i, j].set_xticks([])
+                            axes[i, j].set_yticks([]);j=j+1
+
+                            axes[i, j].imshow(first_vol[z] - second_vol[z], interpolation='none')
+                            axes[i, j].set_xticks([])
+                            axes[i, j].set_yticks([]);j=j+1
+
+                            axes[i, j].imshow(moved[z] - second_vol[z], interpolation='none')
+                            axes[i, j].set_xticks([])
+                            axes[i, j].set_yticks([])
                         # set column names
                         for i in range(ncols):
                             axes[0,i].set_title(col_titles[i])

@@ -131,7 +131,7 @@ def interpn(vol, loc, interp_method='linear', fill_value=None):
 
             #wt = K.expand_dims(wt, -1)
             wt = tf.expand_dims(wt, -1) # added
-            wt = tf.cast(wt, dtype=tf.float16) # added
+            wt = tf.cast(wt, dtype=tf.float32) # added
 
             # compute final weighted value for each cube corner
             interp_vol += wt * vol_val
@@ -149,9 +149,9 @@ def interpn(vol, loc, interp_method='linear', fill_value=None):
         interp_vol = tf.gather(tf.reshape(vol, [-1, vol.shape[-1]]), idx)
 
     if fill_value is not None:
-        fill_value = tf.constant(fill_value, dtype='float16')
-        interp_vol *= tf.cast(tf.logical_not(out_of_bounds), dtype='float16')
-        interp_vol += tf.cast(out_of_bounds, dtype='float16') * fill_value
+        fill_value = tf.constant(fill_value, dtype='float32')
+        interp_vol *= tf.cast(tf.logical_not(out_of_bounds), dtype='float32')
+        interp_vol += tf.cast(out_of_bounds, dtype='float32') * fill_value
 
     return interp_vol
 
@@ -219,8 +219,8 @@ def affine_to_shift(affine_matrix, volshape, shift_center=True, indexing='ij'):
     if isinstance(volshape, (tf.compat.v1.Dimension, tf.TensorShape)):
         volshape = volshape.as_list()
     
-    if affine_matrix.dtype != 'float16':
-        affine_matrix = tf.cast(affine_matrix, 'float16') # changed from 32
+    if affine_matrix.dtype != 'float32':
+        affine_matrix = tf.cast(affine_matrix, 'float32') # changed from 32
 
     nb_dims = len(volshape)
 
@@ -240,14 +240,14 @@ def affine_to_shift(affine_matrix, volshape, shift_center=True, indexing='ij'):
     # list of volume ndgrid
     # N-long list, each entry of shape volshape
     mesh = volshape_to_meshgrid(volshape, indexing=indexing)  
-    mesh = [tf.cast(f, 'float16') for f in mesh] # changed from32
+    mesh = [tf.cast(f, 'float32') for f in mesh] # changed from32
     
     if shift_center:
         mesh = [mesh[f] - (volshape[f]-1)/2 for f in range(len(volshape))]
 
     # add an all-ones entry and transform into a large matrix
     flat_mesh = [flatten(f) for f in mesh]
-    flat_mesh.append(tf.ones(flat_mesh[0].shape, dtype='float16')) # changed from 32
+    flat_mesh.append(tf.ones(flat_mesh[0].shape, dtype='float32')) # changed from 32
     mesh_matrix = tf.transpose(tf.stack(flat_mesh, axis=1))  # 4 x nb_voxels
 
     # compute locations
@@ -291,7 +291,7 @@ def transform(vol, loc_shift, interp_method='linear', indexing='ij', fill_value=
 
     # location should be mesh and delta
     mesh = volshape_to_meshgrid(volshape, indexing=indexing)  # volume mesh
-    loc = [tf.cast(mesh[d], 'float16') + loc_shift[..., d] for d in range(nb_dims)] # changed from 32
+    loc = [tf.cast(mesh[d], 'float32') + loc_shift[..., d] for d in range(nb_dims)] # changed from 32
 
     # test single
     return interpn(vol, loc, interp_method=interp_method, fill_value=fill_value)
