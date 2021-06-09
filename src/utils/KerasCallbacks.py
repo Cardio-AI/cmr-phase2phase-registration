@@ -674,15 +674,15 @@ class WindowMotionCallback(Callback):
                             axes[i, j] = show_slice(moved[z], ax=axes[i, 2]);j=j+1
 
                             temp = np.absolute(vect[z])
-                            axes[i, j].imshow(first_vol[z], 'gray', vmin=0, vmax=.6)
-                            axes[i, j].imshow(normalise_image(temp), alpha=0.6)
+                            axes[i, j].imshow(first_vol[z], 'gray', vmin=0, vmax=0.6)
+                            axes[i, j].imshow(normalise_image(temp), alpha=0.8)
                             axes[i, j].set_xticks([])
                             axes[i, j].set_yticks([]);j=j+1
 
                             # get the magnitude/vector length
                             temp = normalise_image(np.sqrt(np.square(vect[z][...,0]) + np.square(vect[z][...,1]) + np.square(vect[z][...,2])))
                             axes[i, j].imshow(first_vol[z], 'gray', vmin=0, vmax=.6)
-                            axes[i, j].imshow(temp, cmap='seismic', alpha=0.6)
+                            axes[i, j].imshow(temp, cmap='seismic', alpha=0.8)
 
                             axes[i, j].set_xticks([])
                             axes[i, j].set_yticks([]);j=j+1

@@ -16,7 +16,8 @@ import tensorflow.keras
 from scipy.ndimage import gaussian_filter1d
 
 from src.data.Dataset import describe_sitk, split_one_4d_sitk_in_list_of_3d_sitk, get_phases_as_onehot_gcn, \
-    get_phases_as_onehot_acdc, get_n_windows_from_single4D, get_phases_as_idx_gcn, get_phases_as_idx_acdc, match_hist
+    get_phases_as_onehot_acdc, get_n_windows_from_single4D, get_phases_as_idx_gcn, get_phases_as_idx_acdc, match_hist, \
+    get_n_windows_between_phases_from_single4D
 from src.data.Preprocess import resample_3D, clip_quantile, normalise_image, grid_dissortion_2D_or_3D, \
     transform_to_binary_mask, load_masked_img, random_rotate90_2D_or_3D, \
     augmentation_compose_2d_3d_4d, pad_and_crop, resample_t_of_4d
@@ -953,6 +954,8 @@ class PhaseWindowGenerator(DataGenerator):
         self.WINDOW_SIZE = config.get('WINDOW_SIZE', 1)
         self.IMG_CHANNELS = config.get('IMG_CHANNELS', 1)
         self.INPUT_T_ELEM = config.get('INPUT_T_ELEM', 0)
+        self.REPLACE_WILDCARD = ('clean', 'mask')
+        self.BETWEEN_PHASES = config.get('BETWEEN_PHASES', False)
 
         self.X_SHAPE = np.empty((self.BATCHSIZE, self.PHASES, *self.DIM, self.IMG_CHANNELS), dtype=np.float32)
         self.Y_SHAPE = np.empty((self.BATCHSIZE, self.PHASES, *self.DIM, 1), dtype=np.float32)
@@ -1152,6 +1155,8 @@ class PhaseWindowGenerator(DataGenerator):
         # get the volumes of each phase window
         # combined --> t-w, t, t+w, We can use this window in different combinations as input and target
         combined = get_n_windows_from_single4D(model_inputs, idx, window_size=self.WINDOW_SIZE)
+        if self.BETWEEN_PHASES:
+            combined = get_n_windows_between_phases_from_single4D(model_inputs, idx)
 
         logging.debug('windowing slicing took: {:0.3f} s'.format(time() - t1))
         t1 = time()

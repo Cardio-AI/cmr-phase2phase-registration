@@ -1448,7 +1448,7 @@ def get_n_windows_from_single4D(nda4d, idx, window_size=1):
     t1 = time()
     debug('nda4d shape: {}'.format(nda4d.shape))
     debug('idx shape: {}'.format(idx.shape))
-    y_len = nda4d.shape[0]-1
+    y_len = nda4d.shape[0]
 
     # define the motion window --> [t-window,t+window] one of [1,2,3] depending on the temporal resolution/temporal resampling
     idxs_lower = idx - window_size
@@ -1459,6 +1459,70 @@ def get_n_windows_from_single4D(nda4d, idx, window_size=1):
 
     debug('idx: {}'.format(idx))
     # fake ring functionality with mod
+    idxs_lower = np.mod(idxs_lower, y_len) # this is faster in the generator, than the tf functions
+    idxs_upper = np.mod(idxs_upper, y_len)
+
+    #idxs_lower_pre = np.mod(idxs_lower_pre, y_len)
+    #idxs_lower_post = np.mod(idxs_lower_post, y_len)
+
+    #idxs_lower = tf.math.mod(idxs_lower, y_len)
+    #idxs_upper = tf.math.mod(idxs_upper, y_len)
+    debug('idx lower: {}'.format(idxs_lower))
+    debug('idx upper: {}'.format(idxs_upper))
+    logging.debug('mod took: {:0.3f} s'.format(time() - t1))
+    t1 = time()
+
+    # slice the five timesteps from all batches
+    # inputs shape: (8, 36, 8, 64, 64, 1)
+    # Indicies shape: 2 (lower,upper) x (8, 5)
+    # results in: 2 (lower,upper) x (8, 5, 8, 64, 64, 1) volumes
+    # with: (batch,phase,z,x,y,1)
+    # we need to fill the dimensions from behind by [...,tf.newaxis]
+    # and define the number of leading batch dimensions
+    #t_lower = tf.gather_nd(nda4d, idxs_lower[..., tf.newaxis], batch_dims=0)
+    #t_upper = tf.gather_nd(nda4d, idxs_upper[..., tf.newaxis], batch_dims=0)
+    #t_lower_pre = np.squeeze(np.take(nda4d, indices=idxs_lower_pre[..., np.newaxis], axis=0))
+    #t_lower_post = np.squeeze(np.take(nda4d, indices=idxs_lower_post[..., np.newaxis], axis=0))
+
+    t= np.squeeze(np.take(nda4d, indices=idx[..., np.newaxis], axis=0))
+    t_lower = np.squeeze(np.take(nda4d, indices=idxs_lower[..., np.newaxis], axis=0))
+    t_upper = np.squeeze(np.take(nda4d, indices=idxs_upper[..., np.newaxis], axis=0))
+    logging.debug('first vols shape: {}'.format(t_lower.shape))
+    logging.debug('gather nd took: {:0.3f} s'.format(time() - t1))
+    return [t_lower, t, t_upper]
+
+def get_n_windows_between_phases_from_single4D(nda4d, idx):
+    """
+    Split a 4D volume in two lists of 3D volumes
+    With list1[n] - list2[n] two 3D ndas which shows the start and endpoint of a timepoint n
+    given by idx
+    Parameters
+    ----------
+    nda4d : 4D nda
+    idx : np.array of a list of int
+    window_size : define the window size idx[n]-window_size --> idx[n]+window_size
+
+    Returns
+    -------
+
+    """
+
+    t1 = time()
+    debug('nda4d shape: {}'.format(nda4d.shape))
+    debug('idx shape: {}'.format(idx.shape))
+    y_len = nda4d.shape[0]
+
+    # define the motion window --> [t-window,t+window] one of [1,2,3] depending on the temporal resolution/temporal resampling
+    idxs_lower = idx
+    idxs_upper = np.roll(idx, -1) # roll to the left side
+    idx = (idxs_lower + idxs_upper)//2
+
+    #idxs_lower_pre = idxs_lower-1
+    #idxs_lower_post = idxs_lower + 1
+
+    debug('idx: {}'.format(idx))
+    # fake ring functionality with mod
+    idx = np.mod(idx, y_len)
     idxs_lower = np.mod(idxs_lower, y_len) # this is faster in the generator, than the tf functions
     idxs_upper = np.mod(idxs_upper, y_len)
 
