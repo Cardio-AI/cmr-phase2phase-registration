@@ -77,11 +77,18 @@ def train_fold(config):
 
     files_ = x_train_sax + x_val_sax
     info('Check if we find the patient ID and phase mapping for all: {} files.'.format(len(files_)))
+    ISDMD = False
+    if 'dmd' in files_[0]:
+        ISDMD = True
     for x in files_:
         try:
-            patient_str = re.search('-(.{8})_', x).group(1).upper()
-
-            assert (len(patient_str) == 8), 'matched patient ID from the phase sheet has a length of: {}'.format(
+            if ISDMD:
+                patient_str = os.path.basename(x).split('_volume')[0].lower()
+                assert len(
+                    patient_str) > 0, 'empty patient id found, please check the get_patient_id in fn train_fold()'
+            else:
+                patient_str = re.search('-(.{8})_', x).group(1).upper()
+                assert (len(patient_str) == 8), 'matched patient ID from the phase sheet has a length of: {}'.format(
                 len(patient_str))
             # returns the indices in the following order: 'ED#', 'MS#', 'ES#', 'PF#', 'MD#'
             # reduce by one, as the indexes start at 0, the excel-sheet at 1
@@ -237,7 +244,7 @@ def main(args=None):
         if args.data:  # if we specified a different data path (training from workspace or local node disk)
             config['DATA_PATH_SAX'] = os.path.join(args.data, "sax/")
             config['DF_FOLDS'] = os.path.join(args.data, "df_kfold.csv")
-            config['DF_META'] = os.path.join(args.data, "SAx_3D_dicomTags_phase")
+            config['DF_META'] = os.path.join(args.data, "SAx_3D_dicomTags_phase.csv")
         # we dont need to initialise this config, as it should already have the correct format,
         # The fold configs will be saved with each fold run
         # config = init_config(config=config, save=False)
@@ -323,7 +330,7 @@ def main(args=None):
         HIST_MATCHING = args.hmatch
         SCALER = 'MinMax'  # MinMax, Standard or Robust
         # We define 5 target phases and a background phase for the pad/empty volumes
-        PHASES = len(['ED#', 'MS#', 'ES#', 'PF#', 'MD#'])  # skipped 'pad backround manually added', due to repeating
+        PHASES = len(['ED#', 'MS#', 'ES#', 'PF#', 'MD#'])
         TARGET_SMOOTHING = True
         SMOOTHING_WEIGHT_CORRECT = args.gausweight
         GAUS_SIGMA = args.gaussigma

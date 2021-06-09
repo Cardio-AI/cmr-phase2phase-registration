@@ -17,7 +17,7 @@ from scipy.ndimage import gaussian_filter1d
 
 from src.data.Dataset import describe_sitk, split_one_4d_sitk_in_list_of_3d_sitk, get_phases_as_onehot_gcn, \
     get_phases_as_onehot_acdc, get_n_windows_from_single4D, get_phases_as_idx_gcn, get_phases_as_idx_acdc, match_hist, \
-    get_n_windows_between_phases_from_single4D
+    get_n_windows_between_phases_from_single4D, get_phases_as_idx_dmd
 from src.data.Preprocess import resample_3D, clip_quantile, normalise_image, grid_dissortion_2D_or_3D, \
     transform_to_binary_mask, load_masked_img, random_rotate90_2D_or_3D, \
     augmentation_compose_2d_3d_4d, pad_and_crop, resample_t_of_4d
@@ -960,9 +960,13 @@ class PhaseWindowGenerator(DataGenerator):
         self.X_SHAPE = np.empty((self.BATCHSIZE, self.PHASES, *self.DIM, self.IMG_CHANNELS), dtype=np.float32)
         self.Y_SHAPE = np.empty((self.BATCHSIZE, self.PHASES, *self.DIM, 1), dtype=np.float32)
 
+        # this is a hack to figure out which dataset we use, without introducing a new config parameter
         self.ISACDC = False
+        self.ISDMD = False
         if 'acdc' in self.IMAGES[0].lower():
             self.ISACDC = True
+        if 'dmd' in self.IMAGES[0].lower():
+            self.ISDMD = True
 
         # opens a dataframe with cleaned phases per patient
         if not self.ISACDC:
@@ -1092,6 +1096,8 @@ class PhaseWindowGenerator(DataGenerator):
         # Returns the indices in the following order: 'ED#', 'MS#', 'ES#', 'PF#', 'MD#'
         if self.ISACDC:
             idx = get_phases_as_idx_acdc(x, temporal_sampling_factor, len(model_inputs))
+        elif self.ISDMD:
+            idx = get_phases_as_idx_dmd(x, self.DF_METADATA, temporal_sampling_factor, len(model_inputs))
         else:
             idx = get_phases_as_idx_gcn(x, self.DF_METADATA, temporal_sampling_factor, len(model_inputs))
         logging.debug('index loading took: {:0.3f} s'.format(time() - t1))

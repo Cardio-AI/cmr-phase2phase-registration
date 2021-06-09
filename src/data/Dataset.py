@@ -1308,6 +1308,38 @@ def get_phases_as_idx_gcn(file_path, df, temporal_sampling_factor, length):
     indices = np.clip(indices, a_min=0, a_max=length - 1)
     return  indices
 
+def get_phases_as_idx_dmd(file_path, df, temporal_sampling_factor, length):
+    """
+    load the phase info of a gcn data structure
+    and converts it into a onehot vector
+    # order of phase classes, learnt by the phase regression model
+    # ['ED#', 'MS#', 'ES#', 'PF#', 'MD#']]
+    Parameters
+    ----------
+    file_path :
+    df :
+    temporal_sampling_factor :
+    length :
+    weight :
+
+    Returns
+    -------
+
+    """
+    patient_str = os.path.basename(file_path).split('_volume')[0].lower()
+    assert len(patient_str) > 0, 'empty patient id found, please check the get_patient_id lambda in fn get_phases_as_idx_dmd()'
+
+    # Returns the indices in the following order: 'ED#', 'MS#', 'ES#', 'PF#', 'MD#'
+    # Reduce the indices of the excel sheet by one, as the indexes start at 0, the excel-sheet at 1
+    # Transform them into an one-hot representation
+    indices = df[df.patient.str.contains(patient_str)][
+        ['ED#', 'MS#', 'ES#', 'PF#', 'MD#']]
+    indices = indices.values[0].astype(int) - 1 # the excel sheet starts with 1, indices needs to start with 0
+    # scale the idx as we resampled along t (we need to resample the indicies in the same way)
+    indices = np.round(indices * temporal_sampling_factor).astype(int)
+    indices = np.clip(indices, a_min=0, a_max=length - 1)
+    return  indices
+
 def get_phases_as_onehot_gcn(file_path, df, temporal_sampling_factor, length, weight=1):
     """
     load the phase info of a gcn data structure
