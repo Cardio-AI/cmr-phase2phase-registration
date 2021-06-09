@@ -555,7 +555,7 @@ class WindowMotionCallback(Callback):
     # original code from:
     # https://stackoverflow.com/questions/43784921/how-to-display-custom-images-in-tensorboard-using-keras?rq=1
 
-    def __init__(self, log_dir='./logs/tmp/', image_freq=10, feed_inputs_4_display=None, dpi=200,f_size=(5,5), interpol='bilinear', force_plot_first_n_epochs=5, take_t_elem=0):
+    def __init__(self, log_dir='./logs/tmp/', image_freq=10, feed_inputs_4_display=None, dpi=200,f_size=(5,5), interpol='bilinear', force_plot_first_n_epochs=20, take_t_elem=0):
 
         """
         This callback gets a dict with key: x,y entries
@@ -665,21 +665,25 @@ class WindowMotionCallback(Callback):
                         from tensorflow.keras.metrics import mse
                         mse_1 = np.mean((first_vol - second_vol)**2)
                         mse_2 = np.mean((moved - second_vol)**2)
-                        col_titles = ['t1', 't2', 't1 moved', 'vect', 't1-t2 \n {:6.4f}'.format(mse_1) ,'moved-t2 \n {:6.4f}'.format(mse_2)]
-                        j = 0
+                        col_titles = ['t1', 't2', 't1 moved', 'vect', 'magn', 't1-t2 \n {:6.4f}'.format(mse_1) ,'moved-t2 \n {:6.4f}'.format(mse_2)]
+
                         for i,z in enumerate(picks):
+                            j = 0
                             axes[i,j] = show_slice(first_vol[z], ax=axes[i,0]);j=j+1
                             axes[i, j] = show_slice(second_vol[z], ax=axes[i, 1]);j=j+1
                             axes[i, j] = show_slice(moved[z], ax=axes[i, 2]);j=j+1
 
                             temp = np.absolute(vect[z])
-                            axes[i, j].imshow(normalise_image(temp))
+                            axes[i, j].imshow(first_vol[z], 'gray', vmin=0, vmax=.6)
+                            axes[i, j].imshow(normalise_image(temp), alpha=0.6)
                             axes[i, j].set_xticks([])
                             axes[i, j].set_yticks([]);j=j+1
 
                             # get the magnitude/vector length
-                            temp = np.sqrt(np.square(vect[z][...,0]) + np.square(vect[z][...,1]) + np.square(vect[z][...,2])  )
-                            axes[i, j].imshow(normalise_image(temp))
+                            temp = normalise_image(np.sqrt(np.square(vect[z][...,0]) + np.square(vect[z][...,1]) + np.square(vect[z][...,2])))
+                            axes[i, j].imshow(first_vol[z], 'gray', vmin=0, vmax=.6)
+                            axes[i, j].imshow(temp, cmap='seismic', alpha=0.6)
+
                             axes[i, j].set_xticks([])
                             axes[i, j].set_yticks([]);j=j+1
 
