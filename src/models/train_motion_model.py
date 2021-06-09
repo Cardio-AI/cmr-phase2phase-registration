@@ -102,9 +102,9 @@ def train_fold(config):
     info('Done!')
 
     # instantiate the batch generators
-    """n = 10
+    n = 10
     x_train_sax = x_train_sax[:n]
-    x_val_sax = x_val_sax[:n]"""
+    x_val_sax = x_val_sax[:n]
     batch_generator = PhaseWindowGenerator(x_train_sax, x_train_sax, config=config)
     val_config = config.copy()
     val_config['AUGMENT'] = False
@@ -134,6 +134,7 @@ def train_fold(config):
     initial_epoch = 0
     cb = get_callbacks(config, batch_generator, validation_generator)
     print('start training')
+    EPOCHS = 1
     model.fit(
         x=batch_generator,
         validation_data=validation_generator,
@@ -162,12 +163,29 @@ def train_fold(config):
         pred_config['AUGMENT'] = False
         pred_config['AUGMENT_PHASES'] = False
         pred_config['AUGMENT_TEMP'] = False
-        pred_config['BATCHSIZE'] = 2
+        pred_config['BATCHSIZE'] = 1
         pred_config['HIST_MATCHING'] = False
         INPUT_T_ELEM = config.get('INPUT_T_ELEM', 0)
         pred_generator = PhaseWindowGenerator(x_train_sax, x_train_sax, config=pred_config)
 
-        # first_vols shape:
+        for f, b in zip(x_train_sax, pred_generator):
+            # first_vols shape:
+            # Batch, Z, X, Y, Channels --> three timesteps - t_n-1, t_n, t_n+1
+            first_vols, second_vols = b
+            first_vols, second_vols = first_vols[0], second_vols[0]  # pick batch 0
+            first_vols = first_vols[..., INPUT_T_ELEM][..., np.newaxis]  # select the transformed source vol
+
+            moved, vects = model.predict_on_batch(b)
+            moved = tf.cast(moved, tf.float32)
+
+            # TODO: refactor?
+            from src.data.Dataset import save_all_3d_vols
+            pred_path = os.path.join(config.get('EXP_PATH'), 'pred')
+            p = os.path.basename(f).split('_volume')[0].lower()
+            ensure_dir(pred_path)
+            save_all_3d_vols(first_vols[0], second_vols[0], moved[0], vects[0], pred_path, p)
+
+        """# first_vols shape:
         # Batch, Z, X, Y, Channels --> three timesteps - t_n-1, t_n, t_n+1
         first_vols, second_vols = pred_generator[0]
         first_vols, second_vols = first_vols[0], second_vols[0] # pick batch 0
@@ -182,8 +200,11 @@ def train_fold(config):
 
         # TODO: refactor, this could be any number of examples
         from src.data.Dataset import save_all_3d_vols
-        save_all_3d_vols(first_vols[0], second_vols[0], moved[0], vects[0], config.get('EXP_PATH'), 'example_flow_0')
-        save_all_3d_vols(first_vols[1], second_vols[1], moved[0], vects[1], config.get('EXP_PATH'), 'example_flow_1')
+        pred_path = os.path.join(config.get('EXP_PATH'), 'pred')
+        p = os.path.basename(f).split('_volume')[0].lower()
+        ensure_dir(pred_path)
+        save_all_3d_vols(first_vols[0], second_vols[0], moved[0], vects[0], pred_path, p)
+        #save_all_3d_vols(first_vols[1], second_vols[1], moved[0], vects[1], config.get('EXP_PATH'), 'example_flow_1')"""
     except Exception as e:
         logging.error(e)
         logging.error(first_vols.shape)
