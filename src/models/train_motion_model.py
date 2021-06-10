@@ -102,9 +102,9 @@ def train_fold(config):
     info('Done!')
 
     # instantiate the batch generators
-    n = 10
+    """n = 10
     x_train_sax = x_train_sax[:n]
-    x_val_sax = x_val_sax[:n]
+    x_val_sax = x_val_sax[:n]"""
     batch_generator = PhaseWindowGenerator(x_train_sax, x_train_sax, config=config)
     val_config = config.copy()
     val_config['AUGMENT'] = False
@@ -134,7 +134,7 @@ def train_fold(config):
     initial_epoch = 0
     cb = get_callbacks(config, batch_generator, validation_generator)
     print('start training')
-    EPOCHS = 1
+    #EPOCHS = 1
     model.fit(
         x=batch_generator,
         validation_data=validation_generator,
@@ -167,13 +167,16 @@ def train_fold(config):
         pred_config['HIST_MATCHING'] = False
         INPUT_T_ELEM = config.get('INPUT_T_ELEM', 0)
         pred_generator = PhaseWindowGenerator(x_train_sax, x_train_sax, config=pred_config)
+        x_train_sax_masks = [f.replace('clean', 'mask') for f in x_train_sax]
+        pred_mask_generator = PhaseWindowGenerator(x_train_sax_masks, x_train_sax_masks, config=pred_config, yield_masks=True)
 
-        for f, b in zip(x_train_sax, pred_generator):
+        for f, b, mask_b in zip(x_train_sax, pred_generator, pred_mask_generator):
             # first_vols shape:
             # Batch, Z, X, Y, Channels --> three timesteps - t_n-1, t_n, t_n+1
             first_vols, second_vols = b
             first_vols, second_vols = first_vols[0], second_vols[0]  # pick batch 0
-            first_vols = first_vols[..., INPUT_T_ELEM][..., np.newaxis]  # select the transformed source vol
+            first_mask, second_mask = mask_b
+            first_mask, second_mask = first_mask[0], second_mask[0]  # pick batch 0
 
             moved, vects = model.predict_on_batch(b)
             moved = tf.cast(moved, tf.float32)
@@ -183,7 +186,7 @@ def train_fold(config):
             pred_path = os.path.join(config.get('EXP_PATH'), 'pred')
             p = os.path.basename(f).split('_volume')[0].lower()
             ensure_dir(pred_path)
-            save_all_3d_vols(first_vols[0], second_vols[0], moved[0], vects[0], pred_path, p)
+            save_all_3d_vols(first_vols[0], second_vols[0], moved[0], vects[0], first_mask[0], second_mask[0],EXP_PATH=pred_path, exp=p)
 
         """# first_vols shape:
         # Batch, Z, X, Y, Channels --> three timesteps - t_n-1, t_n, t_n+1

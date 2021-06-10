@@ -936,7 +936,7 @@ class PhaseWindowGenerator(DataGenerator):
     yields n input volumes and n output volumes
     """
 
-    def __init__(self, x=None, y=None, config=None):
+    def __init__(self, x=None, y=None, config=None, yield_masks=False):
 
         if config is None:
             config = {}
@@ -956,9 +956,16 @@ class PhaseWindowGenerator(DataGenerator):
         self.INPUT_T_ELEM = config.get('INPUT_T_ELEM', 0)
         self.REPLACE_WILDCARD = ('clean', 'mask')
         self.BETWEEN_PHASES = config.get('BETWEEN_PHASES', False)
+        self.yield_masks = yield_masks
+        self.TARGET_CHANNELS = 1
 
+        if self.yield_masks: # this is just for the case that we want to yield masks with the same pre-processing as applied to the images
+            self.IMG_CHANNELS = 1
+            self.MASKING_IMAGE = False # we cant mask the masks, turn it off, to make sure
+            self.IMG_INTERPOLATION = sitk.sitkNearestNeighbor
+            self.TARGET_CHANNELS = 1
         self.X_SHAPE = np.empty((self.BATCHSIZE, self.PHASES, *self.DIM, self.IMG_CHANNELS), dtype=np.float32)
-        self.Y_SHAPE = np.empty((self.BATCHSIZE, self.PHASES, *self.DIM, 1), dtype=np.float32)
+        self.Y_SHAPE = np.empty((self.BATCHSIZE, self.PHASES, *self.DIM, self.TARGET_CHANNELS), dtype=np.float32)
 
         # this is a hack to figure out which dataset we use, without introducing a new config parameter
         self.ISACDC = False
@@ -1136,7 +1143,7 @@ class PhaseWindowGenerator(DataGenerator):
                                     resample_3D(sitk_img=x[0],
                                                 size=x[1],
                                                 spacing=target_spacing,
-                                                interpolate=sitk.sitkLinear),
+                                                interpolate=self.IMG_INTERPOLATION), # sitk.sitkLinear
                                     zip(model_inputs, new_size_inputs)))
 
         logging.debug('Spacing after resample: {}'.format(model_inputs[0].GetSpacing()))
@@ -1160,9 +1167,11 @@ class PhaseWindowGenerator(DataGenerator):
         # --------------- SLICE PAIRS OF INPUT AND TARGET VOLUMES ACCORDING TO CARDIAC PHASE IDX -------------
         # get the volumes of each phase window
         # combined --> t-w, t, t+w, We can use this window in different combinations as input and target
-        combined = get_n_windows_from_single4D(model_inputs, idx, window_size=self.WINDOW_SIZE)
+
         if self.BETWEEN_PHASES:
             combined = get_n_windows_between_phases_from_single4D(model_inputs, idx)
+        else:
+            combined = get_n_windows_from_single4D(model_inputs, idx, window_size=self.WINDOW_SIZE)
 
         logging.debug('windowing slicing took: {:0.3f} s'.format(time() - t1))
         t1 = time()
@@ -1183,12 +1192,17 @@ class PhaseWindowGenerator(DataGenerator):
             model_inputs = combined[self.INPUT_T_ELEM][..., np.newaxis]
             model_targets = combined[-1][..., np.newaxis]
 
-        elif self.IMG_CHANNELS == 3:
+        elif self.IMG_CHANNELS == 3 and not self.yield_masks:
             model_inputs = np.stack(combined, axis=-1)
             model_targets = combined[-1][..., np.newaxis]
+        elif self.yield_masks:
+            model_inputs = combined[0]
+            model_targets = combined[2]
+            #model_inputs = transform_to_binary_mask(model_inputs, self.MASK_VALUES)
+            #model_targets = transform_to_binary_mask(model_targets, self.MASK_VALUES)
 
         model_inputs = pad_and_crop(model_inputs, target_shape=(self.PHASES,*self.DIM, self.IMG_CHANNELS))
-        model_targets = pad_and_crop(model_targets, target_shape=(self.PHASES, *self.DIM, 1))
+        model_targets = pad_and_crop(model_targets, target_shape=(self.PHASES, *self.DIM, self.TARGET_CHANNELS))
         logging.debug('pad/crop took: {:0.3f} s'.format(time() - t1))
         t1 = time()
 
@@ -1196,18 +1210,19 @@ class PhaseWindowGenerator(DataGenerator):
         # We repeat/tile the 3D volume at this time, to avoid resampling/augmenting the same slices multiple times
         # Ideally this saves computation time and memory
 
-        model_inputs = clip_quantile(model_inputs, .9999)
-        model_targets = clip_quantile(model_targets, .9999)
-        logging.debug('quantile clipping took: {:0.3f} s'.format(time() - t1))
-        t1 = time()
+        if not self.yield_masks:
+            model_inputs = clip_quantile(model_inputs, .9999)
+            model_targets = clip_quantile(model_targets, .9999)
+            logging.debug('quantile clipping took: {:0.3f} s'.format(time() - t1))
+            t1 = time()
 
-        model_inputs = normalise_image(model_inputs, normaliser=self.SCALER)  # normalise per 4D
-        model_targets = normalise_image(model_targets, normaliser=self.SCALER)  # normalise per 4D
-        logging.debug('normalisation took: {:0.3f} s'.format(time() - t1))
-        t1 = time()
+            model_inputs = normalise_image(model_inputs, normaliser=self.SCALER)  # normalise per 4D
+            model_targets = normalise_image(model_targets, normaliser=self.SCALER)  # normalise per 4D
+            logging.debug('normalisation took: {:0.3f} s'.format(time() - t1))
+            t1 = time()
 
-        self.__plot_state_if_debug__(img=model_inputs[len(model_inputs) // 2], start_time=t1,
-                                     step='clipped cropped and pad')
+            self.__plot_state_if_debug__(img=model_inputs[len(model_inputs) // 2], start_time=t1,
+                                         step='clipped cropped and pad')
 
         assert not np.any(np.isnan(model_inputs))
         assert not np.any(np.isnan(model_targets))
