@@ -102,9 +102,9 @@ def train_fold(config):
     info('Done!')
 
     # instantiate the batch generators
-    """n = 10
+    n = 10
     x_train_sax = x_train_sax[:n]
-    x_val_sax = x_val_sax[:n]"""
+    x_val_sax = x_val_sax[:n]
     batch_generator = PhaseWindowGenerator(x_train_sax, x_train_sax, config=config)
     val_config = config.copy()
     val_config['AUGMENT'] = False

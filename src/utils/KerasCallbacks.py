@@ -657,7 +657,7 @@ class WindowMotionCallback(Callback):
                         moved, vect = movings[b][p], vects[b][p]
                         nrows = 3
                         ncols = 7
-                        fig, axes = plt.subplots(nrows, ncols)
+                        fig, axes = plt.subplots(nrows, ncols, figsize=(14,7))
                         spatial_slices = first_vol.shape[0]
                         # pick one upper, middle and lower slice as example
                         picks = (np.array([0.7,0.5,0.2]) * spatial_slices).astype(int)
@@ -669,9 +669,25 @@ class WindowMotionCallback(Callback):
 
                         for i,z in enumerate(picks):
                             j = 0
-                            axes[i,j] = show_slice(first_vol[z], ax=axes[i,0]);j=j+1
-                            axes[i, j] = show_slice(second_vol[z], ax=axes[i, 1]);j=j+1
-                            axes[i, j] = show_slice(moved[z], ax=axes[i, 2]);j=j+1
+
+                            """axes[i,j] = show_slice(first_vol[z], ax=axes[i,0])
+                            axes[i, j].set_ylabel(y_label[i], rotation=90, size='medium');j=j+1
+                            axes[i, j] = show_slice(second_vol[z], ax=axes[i, j]);j=j+1
+                            axes[i, j] = show_slice(moved[z], ax=axes[i, j]);j=j+1"""
+
+                            axes[i, j].imshow(first_vol[z], 'gray', vmin=0, vmax=.6)
+                            axes[i, j].set_ylabel(y_label[i], rotation=90, size='medium')
+                            axes[i, j].set_xticks([])
+                            axes[i, j].set_yticks([])
+                            j = j + 1
+                            axes[i, j].imshow(second_vol[z], 'gray', vmin=0, vmax=.6)
+                            axes[i, j].set_xticks([])
+                            axes[i, j].set_yticks([])
+                            j = j + 1
+                            axes[i, j].imshow(moved[z], 'gray', vmin=0, vmax=.6)
+                            axes[i, j].set_xticks([])
+                            axes[i, j].set_yticks([])
+                            j = j + 1
 
                             temp = np.absolute(vect[z])
                             axes[i, j].imshow(first_vol[z], 'gray', vmin=0, vmax=0.6)
@@ -698,27 +714,14 @@ class WindowMotionCallback(Callback):
                         for i in range(ncols):
                             axes[0,i].set_title(col_titles[i])
                         # set row names
-                        for j in range(nrows):
-                            axes[j,0].set_ylabel(y_label[j], rotation=0, size='large')
+#                        for j in range(nrows):
+#                            axes[j,0].set_ylabel(y_label[j], rotation=90, size='medium')
 
                         fig.subplots_adjust(wspace=0.0, hspace=0.0)
-                        fig.tight_layout()
+                        #fig.tight_layout()
                         tensorflow.summary.image(name='plot/{}/batch_{}/{}/summary'.format(key, b, phases[p]),
                                                  data=self.make_image(fig),
                                                  step=epoch)
-
-                    """tensorflow.summary.image(name='plot/{}/{}/{}/first'.format(key, b, p),
-                                                 data=self.make_image(show_2D_or_3D(first_vol)),
-                                                 step=epoch)
-                    tensorflow.summary.image(name='plot/{}/{}/{}/second'.format(key, b, p),
-                                             data=self.make_image(show_2D_or_3D(second_vol)),
-                                             step=epoch)
-                    tensorflow.summary.image(name='plot/{}/{}/{}/moved'.format(key, b, p),
-                                             data=self.make_image(show_2D_or_3D(moved)),
-                                             step=epoch)
-                    tensorflow.summary.image(name='plot/{}/{}/{}/vect'.format(key, b, p),
-                                             data=self.make_image(show_2D_or_3D(vect)),
-                                             step=epoch)"""
 
 
 
