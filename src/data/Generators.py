@@ -972,7 +972,7 @@ class PhaseWindowGenerator(DataGenerator):
         self.ISDMD = False
         if 'acdc' in self.IMAGES[0].lower():
             self.ISACDC = True
-        if 'dmd' in self.IMAGES[0].lower():
+        if config.get('ISDMD', False):
             self.ISDMD = True
 
         # opens a dataframe with cleaned phases per patient
