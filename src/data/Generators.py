@@ -970,14 +970,15 @@ class PhaseWindowGenerator(DataGenerator):
         # this is a hack to figure out which dataset we use, without introducing a new config parameter
         self.ISACDC = False
         self.ISDMD = False
-        if 'acdc' in self.IMAGES[0].lower():
-            self.ISACDC = True
-        if config.get('ISDMD', False):
+        if config.get('ISDMDDATA', False):
             self.ISDMD = True
+        elif 'acdc' in self.IMAGES[0].lower():
+            self.ISACDC = True
+
 
         # opens a dataframe with cleaned phases per patient
         if not self.ISACDC:
-            self.METADATA_FILE = config.get('DF_META', '/mnt/ssd/data/gcn/02_imported_4D_unfiltered/SAx_3D_dicomTags_phase')
+            self.METADATA_FILE = config.get('DF_META', '/mnt/ssd/data/gcn/02_imported_4D_unfiltered/SAx_3D_dicomTags_phase.csv')
             df = pd.read_csv(self.METADATA_FILE)
             self.DF_METADATA = df[['patient', 'ED#', 'MS#', 'ES#', 'PF#', 'MD#']]
 
