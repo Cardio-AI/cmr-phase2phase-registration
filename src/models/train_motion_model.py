@@ -177,6 +177,7 @@ def train_fold(config):
             first_vols, second_vols = first_vols[0], second_vols[0]  # pick batch 0
             first_mask, second_mask = mask_b
             first_mask, second_mask = first_mask[0], second_mask[0]  # pick batch 0
+            first_vols = first_vols[..., INPUT_T_ELEM][..., np.newaxis]  # select the transformed source vol
 
             moved, vects = model.predict_on_batch(b)
             moved = tf.cast(moved, tf.float32)

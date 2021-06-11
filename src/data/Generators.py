@@ -1072,7 +1072,7 @@ class PhaseWindowGenerator(DataGenerator):
         # --------------- LOAD THE MODEL INPUT--------------
         # use the load_masked_img wrapper to enable masking of the images, currently not necessary, but nice to have
         model_inputs = load_masked_img(sitk_img_f=x, mask=self.MASKING_IMAGE,
-                                       masking_values=self.MASKING_VALUES, replace=self.REPLACE_WILDCARD)
+                                       masking_values=self.MASKING_VALUES, replace=self.REPLACE_WILDCARD, maskAll=False)
         logging.debug('load and masking took: {:0.3f} s'.format(time() - t1))
         t1 = time()
 

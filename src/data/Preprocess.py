@@ -18,7 +18,7 @@ from src.data.Dataset import copy_meta
 from albumentations.augmentations.transforms import PadIfNeeded, GaussNoise, RandomGamma
 
 
-def load_masked_img(sitk_img_f, mask=False, masking_values = [1,2,3], replace=('img','msk'), mask_labels=[0,1,2,3]):
+def load_masked_img(sitk_img_f, mask=False, masking_values = [1,2,3], replace=('img','msk'), mask_labels=[0,1,2,3], maskAll=True):
 
     """
     Wrapper for opening a dicom image, this wrapper could also load the corresponding segmentation map and mask the loaded image on the fly
@@ -33,6 +33,7 @@ def load_masked_img(sitk_img_f, mask=False, masking_values = [1,2,3], replace=('
     masking_values : list of int, defines the area/labels which should be cropped from the original CMR
     replace : tuple of replacement string to get from the image filename to the mask filename
     mask_labels : list of int
+    maskAll: bool, mask timesteps without a mask, otherwise return the raw CMR
     """
 
     assert os.path.isfile(sitk_img_f), 'no valid image: {}'.format(sitk_img_f)
@@ -47,10 +48,18 @@ def load_masked_img(sitk_img_f, mask=False, masking_values = [1,2,3], replace=('
                     
         # mask by different labels, sum up all masked channels
         temp = np.zeros(img_nda.shape)
-        for c in masking_values:
-            # mask by different labels, sum up all masked channels
-            temp += img_nda * msk_nda[..., c].astype(np.bool)
-        sitk_img = sitk.GetImageFromArray(temp)
+        if maskAll:
+            for c in masking_values:
+                # mask by different labels, sum up all masked channels
+                temp += img_nda * msk_nda[..., c].astype(np.bool)
+            sitk_img = sitk.GetImageFromArray(temp)
+        else:
+            for t in range(img_nda.shape[0]):
+                if msk_nda[t].sum() > 0: # mas only timesteps with a given mask
+                    for c in masking_values:
+                        # mask by different labels, sum up all masked channels
+                        temp[t] += img_nda[t] * msk_nda[t][..., c].astype(np.bool)
+            sitk_img = sitk.GetImageFromArray(temp)
 
         # copy metadata
         for tag in img_original.GetMetaDataKeys():
