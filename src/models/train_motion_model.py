@@ -77,7 +77,9 @@ def train_fold(config):
 
     files_ = x_train_sax + x_val_sax
     info('Check if we find the patient ID and phase mapping for all: {} files.'.format(len(files_)))
-    ISDMD = config.get('ISDMD', False)
+
+    ISDMD = config.get('ISDMDDATA')
+    info('ISDMD: {}'.format(ISDMD))
     for x in files_:
         try:
             if ISDMD:
