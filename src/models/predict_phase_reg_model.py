@@ -26,7 +26,7 @@ def predict(cfg_file, data_root, c2l=False):
     if c2l:
         config['DATA_PATH_SAX'] = os.path.join(data_root, 'sax')
         config['DF_FOLDS'] = os.path.join(data_root, 'df_kfold.csv')
-        config['DF_META'] = os.path.join(data_root, 'SAx_3D_dicomTags_phase')
+        config['DF_META'] = os.path.join(data_root, 'SAx_3D_dicomTags_phase.csv')
     x_train_sax, y_train_sax, x_val_sax, y_val_sax = get_trainings_files(data_path=config['DATA_PATH_SAX'],
                                                                          path_to_folds_df=config['DF_FOLDS'],
                                                                          fold=config['FOLD'])
