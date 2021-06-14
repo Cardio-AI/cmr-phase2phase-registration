@@ -102,9 +102,9 @@ def train_fold(config):
     info('Done!')
 
     # instantiate the batch generators
-    """n = 10
+    n = 10
     x_train_sax = x_train_sax[:n]
-    x_val_sax = x_val_sax[:n]"""
+    x_val_sax = x_val_sax[:n]
     batch_generator = PhaseWindowGenerator(x_train_sax, x_train_sax, config=config)
     val_config = config.copy()
     val_config['AUGMENT'] = False
@@ -134,7 +134,7 @@ def train_fold(config):
     initial_epoch = 0
     cb = get_callbacks(config, batch_generator, validation_generator)
     print('start training')
-    #EPOCHS = 1
+    EPOCHS = 1
     model.fit(
         x=batch_generator,
         validation_data=validation_generator,
@@ -144,9 +144,14 @@ def train_fold(config):
         max_queue_size=config.get('QUEUE_SIZE',12),
         verbose=1)
 
+
     try:
         del model
-        # predict on a some trainings-files
+        from src.models.predict_motion_model import pred_fold
+        pred_fold(config)
+
+
+        """# predict on a some trainings-files
         example_batch = 0
         inputs, outputs = batch_generator.__getitem__(example_batch)
         if type(inputs) == list: inputs, outputs = inputs[0], outputs[0]
@@ -188,7 +193,7 @@ def train_fold(config):
             p = os.path.basename(f).split('_volume')[0].lower()
             ensure_dir(pred_path)
             save_all_3d_vols(first_vols[0], second_vols[0], moved[0], vects[0], first_mask[0], second_mask[0],EXP_PATH=pred_path, exp=p)
-
+        """
         """# first_vols shape:
         # Batch, Z, X, Y, Channels --> three timesteps - t_n-1, t_n, t_n+1
         first_vols, second_vols = pred_generator[0]
@@ -211,9 +216,6 @@ def train_fold(config):
         #save_all_3d_vols(first_vols[1], second_vols[1], moved[0], vects[1], config.get('EXP_PATH'), 'example_flow_1')"""
     except Exception as e:
         logging.error(e)
-        logging.error(first_vols.shape)
-        logging.error(second_vols.shape)
-        logging.error(vects.shape)
 
     # free as much memory as possible
     del batch_generator

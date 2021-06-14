@@ -1058,9 +1058,9 @@ class PhaseWindowGenerator(DataGenerator):
 
         # --------------- HIST MATCHING REFERENCE VOL--------------
         ref = None
-        apply_hist_matchinng=False
+        apply_hist_matching=False
         if self.HIST_MATCHING and random.random() <= self.AUGMENT_PROB:
-            apply_hist_matchinng = True
+            apply_hist_matching = True
             ignore_z = 1
             # use a random image, given to this generator, as histogram template for histogram matching augmentation
             ref = sitk.GetArrayFromImage(sitk.ReadImage((choice(self.IMAGES))))
@@ -1077,7 +1077,7 @@ class PhaseWindowGenerator(DataGenerator):
         logging.debug('load and masking took: {:0.3f} s'.format(time() - t1))
         t1 = time()
 
-        # --------------- TEMPORAL RESAMPLING AND AUGMENTATION--------------
+        # --------------- TEMPORAL RESAMPLING AND Temp-AUGMENTATION--------------
         # resample the temporal resolution
         # if AUGMENT_TEMP --> add an temporal augmentation factor within the range given by: AUGMENT_TEMP_RANGE
         t_spacing = self.T_SPACING
@@ -1160,7 +1160,7 @@ class PhaseWindowGenerator(DataGenerator):
         self.__plot_state_if_debug__(img=model_inputs[len(model_inputs) // 2], start_time=t1, step='resampled')
 
         # --------------- HIST MATCHING--------------
-        if apply_hist_matchinng:
+        if apply_hist_matching:
             model_inputs = match_hist(model_inputs, ref)
             logging.debug('hist matching took: {:0.3f} s'.format(time() - t1))
             t1 = time()
@@ -1177,9 +1177,11 @@ class PhaseWindowGenerator(DataGenerator):
         logging.debug('windowing slicing took: {:0.3f} s'.format(time() - t1))
         t1 = time()
 
+        # --------------- Image Augmentation, this is done in 2D -------------
         if self.AUGMENT and random.random() <= self.AUGMENT_PROB:
             # use albumentation to apply random rotation scaling and shifts
             # we need to make sure to apply the same augmentation on the input and target data
+            # Albumentation uses the Interpolation enum from opencv which is different to the SimpleITK enum
             combined = np.concatenate(combined, axis=0)
             logging.debug('shape combined: {}'.format(combined.shape))
             combined = augmentation_compose_2d_3d_4d(img=combined, mask=None, config=self.config)
