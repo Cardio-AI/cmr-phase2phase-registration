@@ -660,7 +660,7 @@ class WindowMotionCallback(Callback):
                         fig, axes = plt.subplots(nrows, ncols, figsize=(14,7))
                         spatial_slices = first_vol.shape[0]
                         # pick one upper, middle and lower slice as example
-                        picks = (np.array([0.7,0.5,0.2]) * spatial_slices).astype(int)
+                        picks = (np.array([0.6,0.4,0.2]) * spatial_slices).astype(int)
                         y_label = ['Basal', 'Mid', 'Apex']
                         from tensorflow.keras.metrics import mse
                         mse_1 = np.mean((first_vol - second_vol)**2)
@@ -669,45 +669,41 @@ class WindowMotionCallback(Callback):
 
                         for i,z in enumerate(picks):
                             j = 0
-
-                            """axes[i,j] = show_slice(first_vol[z], ax=axes[i,0])
-                            axes[i, j].set_ylabel(y_label[i], rotation=90, size='medium');j=j+1
-                            axes[i, j] = show_slice(second_vol[z], ax=axes[i, j]);j=j+1
-                            axes[i, j] = show_slice(moved[z], ax=axes[i, j]);j=j+1"""
-
-                            axes[i, j].imshow(first_vol[z], 'gray', vmin=0, vmax=.6)
+                            axes[i, j].imshow(first_vol[z], 'gray', vmin=0, vmax=.8)
                             axes[i, j].set_ylabel(y_label[i], rotation=90, size='medium')
                             axes[i, j].set_xticks([])
                             axes[i, j].set_yticks([])
                             j = j + 1
-                            axes[i, j].imshow(second_vol[z], 'gray', vmin=0, vmax=.6)
+                            axes[i, j].imshow(second_vol[z], 'gray', vmin=0, vmax=.8)
                             axes[i, j].set_xticks([])
                             axes[i, j].set_yticks([])
                             j = j + 1
-                            axes[i, j].imshow(moved[z], 'gray', vmin=0, vmax=.6)
+                            axes[i, j].imshow(moved[z], 'gray', vmin=0, vmax=.8)
                             axes[i, j].set_xticks([])
                             axes[i, j].set_yticks([])
                             j = j + 1
 
                             temp = np.absolute(vect[z])
-                            axes[i, j].imshow(first_vol[z], 'gray', vmin=0, vmax=0.6)
+                            axes[i, j].imshow(first_vol[z], 'gray', vmin=0, vmax=0.8)
                             axes[i, j].imshow(normalise_image(temp), alpha=0.8)
                             axes[i, j].set_xticks([])
                             axes[i, j].set_yticks([]);j=j+1
 
                             # get the magnitude/vector length
                             temp = normalise_image(np.sqrt(np.square(vect[z][...,0]) + np.square(vect[z][...,1]) + np.square(vect[z][...,2])))
-                            axes[i, j].imshow(first_vol[z], 'gray', vmin=0, vmax=.6)
+                            axes[i, j].imshow(first_vol[z], 'gray', vmin=0, vmax=.8)
                             axes[i, j].imshow(temp, cmap='seismic', alpha=0.8)
 
                             axes[i, j].set_xticks([])
                             axes[i, j].set_yticks([]);j=j+1
 
-                            axes[i, j].imshow(first_vol[z] - second_vol[z], interpolation='none')
+                            axes[i, j].imshow(first_vol[z], 'gray', vmin=0, vmax=.8)
+                            axes[i, j].imshow(first_vol[z] - second_vol[z],cmap='seismic', interpolation='none')
                             axes[i, j].set_xticks([])
                             axes[i, j].set_yticks([]);j=j+1
 
-                            axes[i, j].imshow(moved[z] - second_vol[z], interpolation='none')
+                            axes[i, j].imshow(first_vol[z], 'gray', vmin=0, vmax=.8)
+                            axes[i, j].imshow(moved[z] - second_vol[z],cmap='seismic', interpolation='none')
                             axes[i, j].set_xticks([])
                             axes[i, j].set_yticks([])
                         # set column names
