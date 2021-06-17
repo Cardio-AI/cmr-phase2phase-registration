@@ -74,47 +74,78 @@ def pred_fold(config):
         pred_config['HIST_MATCHING'] = False
         INPUT_T_ELEM = config.get('INPUT_T_ELEM', 0)
         pred_generator = PhaseWindowGenerator(x_train_sax, x_train_sax, config=pred_config)
+        full_pred_config = pred_config.copy()
+        full_pred_config['MASKING_IMAGE'] = False
+        full_image_generator = PhaseWindowGenerator(x_train_sax, x_train_sax, config=full_pred_config)
         x_train_sax_masks = [f.replace('clean', 'mask') for f in x_train_sax]
-        pred_mask_generator = PhaseWindowGenerator(x_train_sax_masks, x_train_sax_masks, config=pred_config,
-                                                   yield_masks=True)
+        '''pred_mask_generator = PhaseWindowGenerator(x_train_sax_masks, x_train_sax_masks, config=pred_config,
+                                                   yield_masks=True)'''
+        pred_mask_config = pred_config.copy()
+        pred_mask_config['MASKING_VALUES']=[2]
+        pred_mask_config['MASKING_IMAGE']=True
+        pred_myo_mask_generator = PhaseWindowGenerator(x_train_sax_masks, x_train_sax_masks, config=pred_mask_config,
+                                                   yield_masks=False)
+        pred_mask_config['MASKING_VALUES'] = [3]
+        pred_lv_mask_generator = PhaseWindowGenerator(x_train_sax_masks, x_train_sax_masks, config=pred_mask_config,
+                                                   yield_masks=False)
 
-        for f, b, mask_b in zip(x_train_sax, pred_generator, pred_mask_generator):
+        for filename, pred_batch, myo_mask_b, lv_mask_b, full_cmr in zip(x_train_sax, pred_generator, pred_myo_mask_generator, pred_lv_mask_generator, full_image_generator):
 
             # first_vols shape:
             # Batch, Z, X, Y, Channels --> three timesteps - t_n-1, t_n, t_n+1
-            first_vols, second_vols = b
-            first_vols, second_vols = first_vols[0], second_vols[0]  # pick batch 0
-            first_mask, second_mask = mask_b
-            first_mask, second_mask = first_mask[0], second_mask[0]  # pick batch 0
-            first_vols = first_vols[..., INPUT_T_ELEM][..., np.newaxis]  # select the transformed source vol
+            first_vols, second_vols = pred_batch
+            first_mask, second_mask = myo_mask_b
+            first_lvmask, second_lvmask = lv_mask_b
+            first_vols_full, second_vols_full= full_cmr
 
-            moved, vects = model.predict_on_batch(b)
+            first_vols, second_vols = first_vols[0], second_vols[0]  # pick batch 0
+            first_mask, second_mask = first_mask[0], second_mask[0]  # pick batch 0
+            first_lvmask, second_lvmask = first_lvmask[0], second_lvmask[0]
+            first_mask, second_mask = (first_mask>=0.5).astype(np.uint8), (second_mask>0.5).astype(np.uint8)
+            first_lvmask, second_lvmask = (first_lvmask >= 0.5).astype(np.uint8), (second_lvmask > 0.5).astype(np.uint8)
+            first_vols_full, second_vols_full = first_vols_full[0], second_vols_full[0]  # pick batch 0
+
+            first_vols = first_vols[..., INPUT_T_ELEM][..., np.newaxis]  # select the transformed source vol
+            first_vols_full = first_vols_full[..., INPUT_T_ELEM][..., np.newaxis]  # select the transformed source vol
+            first_mask = first_mask[..., INPUT_T_ELEM][..., np.newaxis]
+            first_lvmask = first_lvmask[..., INPUT_T_ELEM][..., np.newaxis]
+
+            moved, vects = model.predict_on_batch(pred_batch)
             moved = tf.cast(moved, tf.float32)
 
             # mask the vetorfield
-            first_binary = first_mask==2
-            second_binary = second_mask==2
+            #first_binary = first_mask==2
+            second_binary = second_mask==1
             from scipy import ndimage
-            combined_mask = second_binary
+            #combined_mask = second_binary
             #combined_mask = first_binary + second_binary
             kernel = np.ones((1,1,5,5,5,1))
             kernel_small = np.ones((1, 1, 3, 3, 3, 1))
 
-            #combined_mask = ndimage.binary_closing(combined_mask, structure=kernel,iterations=5)
+            second_binary = ndimage.binary_closing(second_binary, structure=kernel,iterations=1)
             #combined_mask = combined_mask.astype(np.float32)
-            combined_mask = ndimage.convolve(combined_mask, weights=kernel_small)
-            combined_mask = combined_mask>=0.2
-            second_mask = tf.cast(combined_mask, tf.uint8)
-            combined_mask = combined_mask[...,0]
+            #second_binary = ndimage.convolve(second_binary, weights=kernel_small)
+            #second_binary = second_binary>=0.2
+            second_mask = tf.cast(second_binary, tf.uint8)
+            second_binary = second_binary[...,0]
             for dim in range(vects.shape[-1]):
-                vects[...,dim][~combined_mask] = 0
+                vects[...,dim][~second_binary] = 0
 
             # TODO: refactor?
             from src.data.Dataset import save_all_3d_vols
             pred_path = os.path.join(config.get('EXP_PATH'), 'pred')
-            p = os.path.basename(f).split('_volume')[0].lower()
+            p = os.path.basename(filename).split('_volume')[0].lower()
             ensure_dir(pred_path)
-            save_all_3d_vols(first_vols[0], second_vols[0], moved[0], vects[0], first_mask[0], second_mask[0],
+            save_all_3d_vols(first_vols[0],
+                             second_vols[0],
+                             moved[0],
+                             vects[0],
+                             first_mask[0],
+                             second_mask[0],
+                             first_lvmask[0],
+                             second_lvmask[0],
+                             first_vols_full[0],
+                             second_vols[0],
                              EXP_PATH=pred_path, exp=p)
 
 

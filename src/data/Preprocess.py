@@ -33,7 +33,8 @@ def load_masked_img(sitk_img_f, mask=False, masking_values = [1,2,3], replace=('
     masking_values : list of int, defines the area/labels which should be cropped from the original CMR
     replace : tuple of replacement string to get from the image filename to the mask filename
     mask_labels : list of int
-    maskAll: bool, mask timesteps without a mask, otherwise return the raw CMR
+    maskAll: bool,  true: mask all timesteps of the CMR by the mask,
+                    false: return the raw CMR for timesteps without a mask
     """
 
     assert os.path.isfile(sitk_img_f), 'no valid image: {}'.format(sitk_img_f)
@@ -48,14 +49,14 @@ def load_masked_img(sitk_img_f, mask=False, masking_values = [1,2,3], replace=('
                     
         # mask by different labels, sum up all masked channels
         temp = np.zeros(img_nda.shape)
-        if maskAll:
+        if maskAll: # mask all timesteps
             for c in masking_values:
                 # mask by different labels, sum up all masked channels
                 temp += img_nda * msk_nda[..., c].astype(np.bool)
             sitk_img = sitk.GetImageFromArray(temp)
         else:
             for t in range(img_nda.shape[0]):
-                if msk_nda[t].sum() > 0: # mas only timesteps with a given mask
+                if msk_nda[t].sum() > 0: # mask only timesteps with a given mask
                     for c in masking_values:
                         # mask by different labels, sum up all masked channels
                         temp[t] += img_nda[t] * msk_nda[t][..., c].astype(np.bool)

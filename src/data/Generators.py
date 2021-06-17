@@ -981,12 +981,12 @@ class PhaseWindowGenerator(DataGenerator):
             self.METADATA_FILE = config.get('DF_META', '/mnt/ssd/data/gcn/02_imported_4D_unfiltered/SAx_3D_dicomTags_phase.csv')
             df = pd.read_csv(self.METADATA_FILE)
             self.DF_METADATA = df[['patient', 'ED#', 'MS#', 'ES#', 'PF#', 'MD#']]
-
-        self.MASKS = None  # need to check if this is still necessary!
+        #TODO: need to check if this is still necessary!
+        self.MASKS = None
 
         # define a random seed for albumentations
         random.seed(config.get('SEED', 42))
-        logging.info('params of generator:')
+        logging.info('params of generator:') # print the parameters of this generator
         logging.info(list((k, v) for k, v in vars(self).items() if
                           type(v) in [int, str, list, bool] and str(k) not in ['IMAGES', 'LABELS']))
 

@@ -1594,17 +1594,21 @@ def save_3d(nda, fname, isVector=False):
     sitk.WriteImage(sitk_img, fname)
 
 
-def save_all_3d_vols(inputs, outputs, moved, flow, inputs_mask, outputs_mask, EXP_PATH, exp='example_flows', save2dplus_t=False):
+def save_all_3d_vols(inputs, outputs, moved, flow, inputs_mask, outputs_mask, inputs_lvmask, outputs_lvmask, inputs_full, outputs_full, EXP_PATH, exp='example_flows', save2dplus_t=False):
     from logging import info
     experiment_ = '{}/{}'.format(EXP_PATH, exp)
     info(experiment_)
     ensure_dir(experiment_)
     maskname = os.path.join(experiment_, '_mask.nii')
+    lvmaskname = os.path.join(experiment_, '_lvmask.nii')
     flowname = os.path.join(experiment_, '_flow.nii')
     firstfilename = os.path.join(experiment_, '_cmr.nii')
     secondfilename = os.path.join(experiment_, '_targetcmr.nii')
     secondmaskname = os.path.join(experiment_, '_targetmask.nii')
+    lvsecondmaskname = os.path.join(experiment_, '_lvtargetmask.nii')
     movedfilename = os.path.join(experiment_, '_movedcmr.nii')
+    firstfilename_full = os.path.join(experiment_, '_cmr_full.nii')
+    secondfilename_full = os.path.join(experiment_, '_targetcmr_full.nii')
 
     # invert the axis
     flow = np.einsum('tzyxc->cxyzt', flow)
@@ -1613,6 +1617,10 @@ def save_all_3d_vols(inputs, outputs, moved, flow, inputs_mask, outputs_mask, EX
     moved = np.einsum('tzyxc->cxyzt', moved)
     inputs_mask = np.einsum('tzyxc->cxyzt', inputs_mask)
     outputs_mask = np.einsum('tzyxc->cxyzt', outputs_mask)
+    inputs_lvmask = np.einsum('tzyxc->cxyzt', inputs_lvmask)
+    outputs_lvmask = np.einsum('tzyxc->cxyzt', outputs_lvmask)
+    inputs_full = np.einsum('tzyxc->cxyzt', inputs_full)
+    outputs_full = np.einsum('tzyxc->cxyzt', outputs_full)
 
     _ = [save_3d(flow[..., t], flowname.replace('.nii', '_{}_.nii'.format(t))) for t in range(flow.shape[-1])]
     _ = [save_3d(inputs[..., t], firstfilename.replace('.nii', '_{}_.nii'.format(t))) for t in range(inputs.shape[-1])]
@@ -1620,12 +1628,17 @@ def save_all_3d_vols(inputs, outputs, moved, flow, inputs_mask, outputs_mask, EX
          range(outputs.shape[-1])]
     _ = [save_3d(moved[..., t], movedfilename.replace('.nii', '_{}_.nii'.format(t))) for t in
          range(moved.shape[-1])]
-
-    # different axis order for the masks
     _ = [save_3d(inputs_mask[...,t], maskname.replace('.nii', '_{}_.nii'.format(t))) for t in
          range(inputs_mask.shape[-1])]
     _ = [save_3d(outputs_mask[...,t], secondmaskname.replace('.nii', '_{}_.nii'.format(t))) for t in
          range(outputs_mask.shape[-1])]
+    _ = [save_3d(inputs_lvmask[...,t], lvmaskname.replace('.nii', '_{}_.nii'.format(t))) for t in
+         range(inputs_lvmask.shape[-1])]
+    _ = [save_3d(outputs_lvmask[...,t], lvsecondmaskname.replace('.nii', '_{}_.nii'.format(t))) for t in
+         range(outputs_lvmask.shape[-1])]
+    _ = [save_3d(inputs_full[..., t], firstfilename_full.replace('.nii', '_{}_.nii'.format(t))) for t in range(inputs_full.shape[-1])]
+    _ = [save_3d(outputs_full[..., t], secondfilename_full.replace('.nii', '_{}_.nii'.format(t))) for t in
+         range(outputs_full.shape[-1])]
 
 
 
