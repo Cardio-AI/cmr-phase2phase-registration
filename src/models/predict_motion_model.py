@@ -93,12 +93,18 @@ def pred_fold(config):
 
             # mask the vetorfield
             first_binary = first_mask==2
-            second_bnary = second_mask==2
+            second_binary = second_mask==2
             from scipy import ndimage
-            combined_mask = first_binary + second_bnary
-            kernel = np.ones((1,1,3,3,3,1))
-            combined_mask = ndimage.binary_closing(combined_mask, structure=kernel)
-            #second_mask = tf.cast(combined_mask, tf.uint8)
+            combined_mask = second_binary
+            #combined_mask = first_binary + second_binary
+            kernel = np.ones((1,1,5,5,5,1))
+            kernel_small = np.ones((1, 1, 3, 3, 3, 1))
+
+            #combined_mask = ndimage.binary_closing(combined_mask, structure=kernel,iterations=5)
+            #combined_mask = combined_mask.astype(np.float32)
+            combined_mask = ndimage.convolve(combined_mask, weights=kernel_small)
+            combined_mask = combined_mask>=0.2
+            second_mask = tf.cast(combined_mask, tf.uint8)
             combined_mask = combined_mask[...,0]
             for dim in range(vects.shape[-1]):
                 vects[...,dim][~combined_mask] = 0

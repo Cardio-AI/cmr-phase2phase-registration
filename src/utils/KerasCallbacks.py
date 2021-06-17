@@ -618,6 +618,10 @@ class WindowMotionCallback(Callback):
         image = tensorflow.expand_dims(image, 0)
         return image
 
+    def on_train_begin(self, logs=None):
+        # Call the image writer callback once before training
+        self.on_epoch_end(epoch=0, logs=logs)
+
     def on_epoch_end(self, epoch, logs=None):
 
         """
@@ -666,19 +670,19 @@ class WindowMotionCallback(Callback):
                         mse_1 = np.mean((first_vol - second_vol)**2)
                         mse_2 = np.mean((moved - second_vol)**2)
                         col_titles = ['t1', 't2', 't1 moved', 'vect', 'magn', 't1-t2 \n {:6.4f}'.format(mse_1) ,'moved-t2 \n {:6.4f}'.format(mse_2)]
-
+                        vmax = 1
                         for i,z in enumerate(picks):
                             j = 0
-                            axes[i, j].imshow(first_vol[z], 'gray', vmin=0, vmax=.8)
+                            axes[i, j].imshow(first_vol[z], 'gray')
                             axes[i, j].set_ylabel(y_label[i], rotation=90, size='medium')
                             axes[i, j].set_xticks([])
                             axes[i, j].set_yticks([])
                             j = j + 1
-                            axes[i, j].imshow(second_vol[z], 'gray', vmin=0, vmax=.8)
+                            axes[i, j].imshow(second_vol[z], 'gray')
                             axes[i, j].set_xticks([])
                             axes[i, j].set_yticks([])
                             j = j + 1
-                            axes[i, j].imshow(moved[z], 'gray', vmin=0, vmax=.8)
+                            axes[i, j].imshow(moved[z], 'gray')
                             axes[i, j].set_xticks([])
                             axes[i, j].set_yticks([])
                             j = j + 1
