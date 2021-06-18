@@ -936,7 +936,7 @@ class PhaseWindowGenerator(DataGenerator):
     yields n input volumes and n output volumes
     """
 
-    def __init__(self, x=None, y=None, config=None, yield_masks=False):
+    def __init__(self, x=None, y=None, config=None, yield_masks=False, in_memory=False):
 
         if config is None:
             config = {}
@@ -958,6 +958,7 @@ class PhaseWindowGenerator(DataGenerator):
         self.BETWEEN_PHASES = config.get('BETWEEN_PHASES', False)
         self.yield_masks = yield_masks
         self.TARGET_CHANNELS = 1
+        self.IN_MEMORY = in_memory
 
         if self.yield_masks: # this is just for the case that we want to yield masks with the same pre-processing as applied to the images
             self.IMG_CHANNELS = 1
@@ -983,6 +984,11 @@ class PhaseWindowGenerator(DataGenerator):
             self.DF_METADATA = df[['patient', 'ED#', 'MS#', 'ES#', 'PF#', 'MD#']]
         #TODO: need to check if this is still necessary!
         self.MASKS = None
+
+        # in memory training for the cluster
+        if self.IN_MEMORY:
+            self.IMAGES_SITK= [load_masked_img(sitk_img_f=x, mask=self.MASKING_IMAGE,
+                                       masking_values=self.MASKING_VALUES, replace=self.REPLACE_WILDCARD, maskAll=False) for x in self.IMAGES]
 
         # define a random seed for albumentations
         random.seed(config.get('SEED', 42))
@@ -1071,9 +1077,12 @@ class PhaseWindowGenerator(DataGenerator):
         x = self.IMAGES[ID]
 
         # --------------- LOAD THE MODEL INPUT--------------
-        # use the load_masked_img wrapper to enable masking of the images, currently not necessary, but nice to have
-        model_inputs = load_masked_img(sitk_img_f=x, mask=self.MASKING_IMAGE,
-                                       masking_values=self.MASKING_VALUES, replace=self.REPLACE_WILDCARD, maskAll=False)
+        if self.IN_MEMORY:
+            model_inputs = self.IMAGES_SITK[ID]
+        else:
+            # use the load_masked_img wrapper to enable masking of the images, currently not necessary, but nice to have
+            model_inputs = load_masked_img(sitk_img_f=x, mask=self.MASKING_IMAGE,
+                                           masking_values=self.MASKING_VALUES, replace=self.REPLACE_WILDCARD, maskAll=False)
         logging.debug('load and masking took: {:0.3f} s'.format(time() - t1))
         t1 = time()
 

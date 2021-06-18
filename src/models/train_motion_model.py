@@ -105,7 +105,7 @@ def train_fold(config):
     """n = 10
     x_train_sax = x_train_sax[:n]
     x_val_sax = x_val_sax[:n]"""
-    batch_generator = PhaseWindowGenerator(x_train_sax, x_train_sax, config=config)
+    batch_generator = PhaseWindowGenerator(x_train_sax, x_train_sax, config=config, in_memory=True)
     val_config = config.copy()
     val_config['AUGMENT'] = False
     val_config['HIST_MATCHING'] = False
