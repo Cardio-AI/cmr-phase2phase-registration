@@ -1070,11 +1070,12 @@ class PhaseWindowGenerator(DataGenerator):
             ignore_z = 1
             # use a random image, given to this generator, as histogram template for histogram matching augmentation
             ref = sitk.GetArrayFromImage(sitk.ReadImage((choice(self.IMAGES))))
-            ref = ref[choice(list(range(ref.shape[0]-1))), choice(list(range(ref.shape[1]-1))[ignore_z:-ignore_z])]
+            ref = ref[choice(list(range(ref.shape[0] - 1))), choice(list(range(ref.shape[1] - 1))[ignore_z:-ignore_z])]
         t0 = time()
         t1 = time()
 
         x = self.IMAGES[ID]
+
 
         # --------------- LOAD THE MODEL INPUT--------------
         if self.IN_MEMORY:

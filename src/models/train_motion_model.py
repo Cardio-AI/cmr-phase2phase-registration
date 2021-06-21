@@ -105,13 +105,13 @@ def train_fold(config):
     '''n = 10
     x_train_sax = x_train_sax[:n]
     x_val_sax = x_val_sax[:n]'''
-    batch_generator = PhaseWindowGenerator(x_train_sax, x_train_sax, config=config, in_memory=False)
+    batch_generator = PhaseWindowGenerator(x_train_sax, x_train_sax, config=config, in_memory=True)
     val_config = config.copy()
     val_config['AUGMENT'] = False
     val_config['HIST_MATCHING'] = False
     val_config['AUGMENT_TEMP'] = False
     # val_config['RESAMPLE_T'] = False # this could yield phases which does not fit into the given dim
-    validation_generator = PhaseWindowGenerator(x_val_sax, x_val_sax, config=val_config, in_memory=False)
+    validation_generator = PhaseWindowGenerator(x_val_sax, x_val_sax, config=val_config, in_memory=True)
 
     # get model
     model = create_RegistrationModel(config)
