@@ -1,7 +1,10 @@
 import numpy as np
 
+from src.data.Dataset import save_gt_and_pred
+from src.models.Models import create_affine_transformer_fixed
 
-def pred_fold(config):
+
+def pred_fold(config, debug=False):
     # make sure all neccessary params in config are set
     # if not set them with default values
     from src.utils.Tensorflow_helper import choose_gpu_by_id
@@ -63,6 +66,8 @@ def pred_fold(config):
         model.load_weights(os.path.join(config['MODEL_PATH'], 'model.h5'))
         logging.info('loaded model weights as h5 file')
 
+        fixed_transformer = create_affine_transformer_fixed(config=config,networkname='fixed_transformer', fill_value=0, interp_method='linear')
+
         # create a generator with idemptent behaviour (no shuffle etc.)
         # make sure we save always the same patient
         pred_config = config.copy()
@@ -89,6 +94,14 @@ def pred_fold(config):
         pred_lv_mask_generator = PhaseWindowGenerator(x_train_sax_masks, x_train_sax_masks, config=pred_mask_config,
                                                    yield_masks=False)
 
+        # mask the vetorfield
+        from scipy import ndimage
+        # combined_mask = second_binary
+        # combined_mask = first_binary + second_binary
+        kernel = np.ones((1, 1, 5, 5, 5, 1))
+        kernel_ = np.ones((1, 5, 5, 5, 1))
+        kernel_small = np.ones((1, 3, 3, 3, 1))
+
         for filename, pred_batch, myo_mask_b, lv_mask_b, full_cmr in zip(x_train_sax, pred_generator, pred_myo_mask_generator, pred_lv_mask_generator, full_image_generator):
 
             # first_vols shape:
@@ -112,15 +125,16 @@ def pred_fold(config):
 
             moved, vects = model.predict_on_batch(pred_batch)
             moved = tf.cast(moved, tf.float32)
+            # do
+            moved_m, _ = fixed_transformer.predict(x=[first_mask, vects])
+            moved_m = tf.cast(moved_m > 0.9, tf.uint8)
+            moved_m = ndimage.binary_closing(moved_m, structure=kernel_, iterations=1)
+            moved_m = ndimage.binary_opening(moved_m, structure=kernel_small, iterations=1)
 
-            # mask the vetorfield
-            #first_binary = first_mask==2
-            second_binary = second_mask==1
-            from scipy import ndimage
-            #combined_mask = second_binary
-            #combined_mask = first_binary + second_binary
-            kernel = np.ones((1,1,5,5,5,1))
-            kernel_small = np.ones((1, 1, 3, 3, 3, 1))
+            moved_m = tf.cast(moved_m,tf.uint8)
+
+            # first_binary = first_mask==2
+            second_binary = second_mask == 1
 
             second_binary = ndimage.binary_closing(second_binary, structure=kernel,iterations=1)
             #combined_mask = combined_mask.astype(np.float32)
@@ -136,18 +150,21 @@ def pred_fold(config):
             pred_path = os.path.join(config.get('EXP_PATH'), 'pred')
             p = os.path.basename(filename).split('_volume')[0].lower()
             ensure_dir(pred_path)
-            save_all_3d_vols(first_vols[0],
-                             second_vols[0],
-                             moved[0],
-                             vects[0],
-                             first_mask[0],
-                             second_mask[0],
-                             first_lvmask[0],
-                             second_lvmask[0],
-                             first_vols_full[0],
-                             second_vols[0],
-                             EXP_PATH=pred_path, exp=p)
+            if debug:
+                save_all_3d_vols(first_vols[0],
+                                 second_vols[0],
+                                 moved[0],
+                                 moved_m,
+                                 vects[0],
+                                 first_mask[0],
+                                 second_mask[0],
+                                 first_lvmask[0],
+                                 second_lvmask[0],
+                                 first_vols_full[0],
+                                 second_vols[0],
+                                 EXP_PATH=pred_path, exp=p)
 
+            save_gt_and_pred(gt=second_mask[0], pred=first_mask[0], exp_path=config.get('EXP_PATH'), patient=p)
 
     except Exception as e:
         logging.error(e)

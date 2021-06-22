@@ -102,9 +102,9 @@ def train_fold(config):
     info('Done!')
 
     # instantiate the batch generators
-    '''n = 10
+    n = 10
     x_train_sax = x_train_sax[:n]
-    x_val_sax = x_val_sax[:n]'''
+    x_val_sax = x_val_sax[:n]
     batch_generator = PhaseWindowGenerator(x_train_sax, x_train_sax, config=config, in_memory=False)
     val_config = config.copy()
     val_config['AUGMENT'] = False
@@ -134,7 +134,7 @@ def train_fold(config):
     initial_epoch = 0
     cb = get_callbacks(config, batch_generator, validation_generator)
     print('start training')
-    #EPOCHS = 1
+    EPOCHS = 1
     model.fit(
         x=batch_generator,
         validation_data=validation_generator,

@@ -1593,8 +1593,38 @@ def save_3d(nda, fname, isVector=False):
     sitk_img = sitk.GetImageFromArray(nda, isVector=isVector)
     sitk.WriteImage(sitk_img, fname)
 
+def save_gt_and_pred(gt, pred, exp_path, patient):
+    """
+    Save the ground truth mask and the deformed mask for a given patient and phase
+    Parameters
+    ----------
+    gt :
+    pred :
+    exp_path :
+    patient :
 
-def save_all_3d_vols(inputs, outputs, moved, flow, inputs_mask, outputs_mask, inputs_lvmask, outputs_lvmask, inputs_full, outputs_full, EXP_PATH, exp='example_flows', save2dplus_t=False):
+    Returns
+    -------
+
+    """
+    cardiac_phases = ['ED', 'MS', 'ES', 'PF', 'MD']
+
+    gt_path = os.path.join(exp_path, 'gt_m')
+    pred_path = os.path.join(exp_path, 'first_m')
+    ensure_dir(gt_path)
+    ensure_dir(pred_path)
+
+    gt = np.einsum('tzyxc->cxyzt', gt)
+    pred = np.einsum('tzyxc->cxyzt', pred)
+
+    for t, phase in enumerate(cardiac_phases):
+        gt_file_name = os.path.join(gt_path, "{}_{}.nii".format(patient, phase))
+        pred_file_name = os.path.join(pred_path, "{}_{}.nii".format(patient, phase))
+        save_3d(gt[..., t], gt_file_name)
+        save_3d(pred[..., t], pred_file_name)
+
+
+def save_all_3d_vols(inputs, outputs, moved, moved_mask, flow, inputs_mask, outputs_mask, inputs_lvmask, outputs_lvmask, inputs_full, outputs_full, EXP_PATH, exp='example_flows', save2dplus_t=False):
     from logging import info
     experiment_ = '{}/{}'.format(EXP_PATH, exp)
     info(experiment_)
@@ -1607,6 +1637,7 @@ def save_all_3d_vols(inputs, outputs, moved, flow, inputs_mask, outputs_mask, in
     secondmaskname = os.path.join(experiment_, '_targetmask.nii')
     lvsecondmaskname = os.path.join(experiment_, '_lvtargetmask.nii')
     movedfilename = os.path.join(experiment_, '_movedcmr.nii')
+    movedmaskfilename = os.path.join(experiment_, '_movedmask.nii')
     firstfilename_full = os.path.join(experiment_, '_cmr_full.nii')
     secondfilename_full = os.path.join(experiment_, '_targetcmr_full.nii')
 
@@ -1615,6 +1646,7 @@ def save_all_3d_vols(inputs, outputs, moved, flow, inputs_mask, outputs_mask, in
     inputs = np.einsum('tzyxc->cxyzt', inputs)
     outputs = np.einsum('tzyxc->cxyzt', outputs)
     moved = np.einsum('tzyxc->cxyzt', moved)
+    moved_mask = np.einsum('tzyxc->cxyzt', moved_mask)
     inputs_mask = np.einsum('tzyxc->cxyzt', inputs_mask)
     outputs_mask = np.einsum('tzyxc->cxyzt', outputs_mask)
     inputs_lvmask = np.einsum('tzyxc->cxyzt', inputs_lvmask)
@@ -1628,6 +1660,8 @@ def save_all_3d_vols(inputs, outputs, moved, flow, inputs_mask, outputs_mask, in
          range(outputs.shape[-1])]
     _ = [save_3d(moved[..., t], movedfilename.replace('.nii', '_{}_.nii'.format(t))) for t in
          range(moved.shape[-1])]
+    _ = [save_3d(moved_mask[..., t], movedmaskfilename.replace('.nii', '_{}_.nii'.format(t))) for t in
+         range(moved_mask.shape[-1])]
     _ = [save_3d(inputs_mask[...,t], maskname.replace('.nii', '_{}_.nii'.format(t))) for t in
          range(inputs_mask.shape[-1])]
     _ = [save_3d(outputs_mask[...,t], secondmaskname.replace('.nii', '_{}_.nii'.format(t))) for t in

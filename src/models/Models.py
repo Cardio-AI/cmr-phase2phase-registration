@@ -243,6 +243,36 @@ def create_RegistrationModel(config):
 
     return model
 
+# ST to apply m to an volume
+def create_affine_transformer_fixed(config, networkname='affine_transformer_fixed', fill_value=0,
+                                    interp_method='linear'):
+    """
+    Apply a learned transformation matrix to an input image, no training possible
+    :param config:  Key value pairs for image size and other network parameters
+    :param networkname: string, name of this model scope
+    :param fill_value:
+    :return: compiled tf.keras model
+    """
+    if tf.distribute.has_strategy():
+        strategy = tf.distribute.get_strategy()
+    else:
+        # distribute the training with the mirrored data paradigm across multiple gpus if available, if not use gpu 0
+        strategy = tf.distribute.MirroredStrategy(devices=config.get('GPUS', ["/gpu:0"]))
+
+    with strategy.scope():
+
+        inputs = Input((*config.get('DIM', [10, 224, 224]), 1))
+        input_displacement = Input((*config.get('DIM', [10, 224, 224]), 3))
+        indexing = config.get('INDEXING', 'ij')
+
+        # warp the source with the flow
+        y = nrn_layers.SpatialTransformer(interp_method=interp_method, indexing=indexing, ident=False,
+                                          fill_value=fill_value)([inputs, input_displacement])
+
+        model = Model(inputs=[inputs, input_displacement], outputs=[y, input_displacement], name=networkname)
+
+        return model
+
 
 
 
