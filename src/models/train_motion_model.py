@@ -4,7 +4,7 @@ from src.data.Generators import PhaseMaskWindowGenerator
 from src.models.Models import create_RegistrationModel_inkl_mask
 
 
-def train_fold(config):
+def train_fold(config, in_memory=False):
     # make sure all neccessary params in config are set
     # if not set them with default values
     from src.utils.Tensorflow_helper import choose_gpu_by_id
@@ -108,13 +108,13 @@ def train_fold(config):
     """n = 10
     x_train_sax = x_train_sax[:n]
     x_val_sax = x_val_sax[:n]"""
-    batch_generator = PhaseMaskWindowGenerator(x_train_sax, x_train_sax, config=config, in_memory=False)
+    batch_generator = PhaseMaskWindowGenerator(x_train_sax, x_train_sax, config=config, in_memory=in_memory)
     val_config = config.copy()
     val_config['AUGMENT'] = False
     val_config['HIST_MATCHING'] = False
     val_config['AUGMENT_TEMP'] = False
     # val_config['RESAMPLE_T'] = False # this could yield phases which does not fit into the given dim
-    validation_generator = PhaseMaskWindowGenerator(x_val_sax, x_val_sax, config=val_config, in_memory=False)
+    validation_generator = PhaseMaskWindowGenerator(x_val_sax, x_val_sax, config=val_config, in_memory=in_memory)
 
     # get model
     model = create_RegistrationModel_inkl_mask(config)
@@ -318,6 +318,7 @@ if __name__ == "__main__":
     # usually these two parameters should encapsulate all experiment parameters
     parser.add_argument('-cfg', action='store', default=None)
     parser.add_argument('-data', action='store', default=None)
+    parser.add_argument('-inmemory', action='store', default=None)
 
     #
     parser.add_argument('-sax', action='store', default='/mnt/ssd/data/gcn/02_imported_4D_unfiltered/sax/')
