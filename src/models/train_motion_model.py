@@ -1,7 +1,6 @@
 import numpy as np
 
-from src.data.Generators import PhaseMaskWindowGenerator
-from src.models.Models import create_RegistrationModel_inkl_mask
+
 
 
 def train_fold(config, in_memory=False):
@@ -26,6 +25,8 @@ def train_fold(config, in_memory=False):
     from src.data.Dataset import get_trainings_files
     from src.data.Generators import PhaseWindowGenerator
     from src.models.Models import create_RegistrationModel
+    from src.data.Generators import PhaseMaskWindowGenerator
+    from src.models.Models import create_RegistrationModel_inkl_mask
 
     # import external libs
     import pandas as pd

@@ -1,8 +1,4 @@
-import numpy as np
 
-from src.data.Dataset import save_gt_and_pred
-from src.data.Generators import PhaseMaskWindowGenerator
-from src.models.Models import create_affine_transformer_fixed, create_RegistrationModel_inkl_mask
 
 
 def pred_fold(config, debug=True):
@@ -27,6 +23,11 @@ def pred_fold(config, debug=True):
     from src.data.Dataset import get_trainings_files
     from src.data.Generators import PhaseWindowGenerator
     from src.models.Models import create_RegistrationModel
+    import numpy as np
+
+    from src.data.Dataset import save_gt_and_pred
+    from src.data.Generators import PhaseMaskWindowGenerator
+    from src.models.Models import create_affine_transformer_fixed, create_RegistrationModel_inkl_mask
 
     # import external libs
     import pandas as pd
