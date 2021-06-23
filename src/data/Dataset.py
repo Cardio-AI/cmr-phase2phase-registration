@@ -1610,7 +1610,7 @@ def save_gt_and_pred(gt, pred, exp_path, patient):
     cardiac_phases = ['ED', 'MS', 'ES', 'PF', 'MD']
 
     gt_path = os.path.join(exp_path, 'gt_m')
-    pred_path = os.path.join(exp_path, 'first_m')
+    pred_path = os.path.join(exp_path, 'pred_m')
     ensure_dir(gt_path)
     ensure_dir(pred_path)
 

@@ -1,5 +1,8 @@
 import numpy as np
 
+from src.data.Generators import PhaseMaskWindowGenerator
+from src.models.Models import create_RegistrationModel_inkl_mask
+
 
 def train_fold(config):
     # make sure all neccessary params in config are set
@@ -102,19 +105,19 @@ def train_fold(config):
     info('Done!')
 
     # instantiate the batch generators
-    n = 10
+    """n = 10
     x_train_sax = x_train_sax[:n]
-    x_val_sax = x_val_sax[:n]
-    batch_generator = PhaseWindowGenerator(x_train_sax, x_train_sax, config=config, in_memory=False)
+    x_val_sax = x_val_sax[:n]"""
+    batch_generator = PhaseMaskWindowGenerator(x_train_sax, x_train_sax, config=config, in_memory=False)
     val_config = config.copy()
     val_config['AUGMENT'] = False
     val_config['HIST_MATCHING'] = False
     val_config['AUGMENT_TEMP'] = False
     # val_config['RESAMPLE_T'] = False # this could yield phases which does not fit into the given dim
-    validation_generator = PhaseWindowGenerator(x_val_sax, x_val_sax, config=val_config, in_memory=False)
+    validation_generator = PhaseMaskWindowGenerator(x_val_sax, x_val_sax, config=val_config, in_memory=False)
 
     # get model
-    model = create_RegistrationModel(config)
+    model = create_RegistrationModel_inkl_mask(config)
 
     # write the model summary to a txt file
     with open(os.path.join(EXP_PATH, 'model_summary.txt'), 'w') as fh:
@@ -134,7 +137,7 @@ def train_fold(config):
     initial_epoch = 0
     cb = get_callbacks(config, batch_generator, validation_generator)
     print('start training')
-    EPOCHS = 1
+    #EPOCHS = 1
     model.fit(
         x=batch_generator,
         validation_data=validation_generator,

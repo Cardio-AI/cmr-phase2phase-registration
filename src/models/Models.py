@@ -243,6 +243,81 @@ def create_RegistrationModel(config):
 
     return model
 
+def create_RegistrationModel_inkl_mask(config):
+    """
+    A registration wrapper for 3D image2image registration
+    """
+    import random
+    if tf.distribute.has_strategy():
+        strategy = tf.distribute.get_strategy()
+    else:
+        # distribute the training with the "mirrored data"-paradigm across multiple gpus if available, if not use gpu 0
+        strategy = tf.distribute.MirroredStrategy(devices=config.get('GPUS', ["/gpu:0"]))
+    with strategy.scope():
+        if config is None:
+            config = {}
+        input_shape = config.get('DIM', [10, 224, 224])
+        T_SHAPE = config.get('T_SHAPE', 5)
+        image_loss_weight = config.get('IMAGE_LOSS_WEIGHT', 1)
+        reg_loss_weight = config.get('REG_LOSS_WEIGHT', 0.001)
+        learning_rate = config.get('LEARNING_RATE', 0.001)
+
+
+        input_tensor = Input(shape=(T_SHAPE, *input_shape, config.get('IMG_CHANNELS', 1))) # input vol with timesteps, z, x, y, c -> =number of input timesteps
+        input_mask_tensor = Input(shape=(T_SHAPE, *input_shape, config.get('IMG_CHANNELS', 1)))
+        input_tensor_empty = Input(shape=(T_SHAPE, *input_shape, 3)) # empty vector field
+        # define standard values according to the convention over configuration paradigm
+
+        ndims = len(input_shape)
+        indexing = 'ij'
+        interp_method = 'linear'
+        Conv = getattr(KL, 'Conv{}D'.format(ndims))
+        take_t_elem = config.get('INPUT_T_ELEM', 0)
+
+        # start with very small deformation
+        Conv_layer = Conv(ndims, kernel_size=3, padding='same',
+                    kernel_initializer=tensorflow.keras.initializers.RandomNormal(mean=0.0, stddev=1e-5), name='unet2flow')
+        st_layer = nrn_layers.SpatialTransformer(interp_method=interp_method, indexing=indexing, ident=True, name='deformable_layer')
+        st_mask_layer = nrn_layers.SpatialTransformer(interp_method=interp_method, indexing=indexing, ident=True,
+                                                 name='deformable_mask_layer')
+
+        unet = create_unet(config, single_model=False)
+
+        input_vols = tf.unstack(input_tensor, axis=1)
+        input_mask_vols = tf.unstack(input_mask_tensor, axis=1)
+        print(input_vols[0].shape)
+
+        indicies = list(tf.range(len(input_vols)))
+        zipped = list(zip(input_vols, indicies))
+        random.shuffle(zipped)
+        input_vols_shuffled, indicies = zip(*zipped)
+        pre_flows = [unet(vol) for vol in input_vols_shuffled]
+        flows= [Conv_layer(vol) for vol in pre_flows]
+        flows, _ = zip(*sorted(zip(flows, indicies), key=lambda tup: tup[1]))
+
+        # transform only one timestep, mostly the first one
+        transformed = [st_layer([input_vol[...,take_t_elem][...,tf.newaxis], flow]) for input_vol, flow in zip(input_vols, flows)]
+        transformed = tf.stack(transformed, axis=1)
+        transformed_mask = [st_layer([input_vol[..., take_t_elem][..., tf.newaxis], flow]) for input_vol, flow in
+                       zip(input_mask_vols, flows)]
+        transformed_mask = tf.stack(transformed_mask, axis=1)
+
+        flow = tf.stack(flows, axis=1)
+
+        outputs = [transformed, transformed_mask, flow]
+
+        model = Model(name='simpleregister', inputs=[input_tensor, input_mask_tensor, input_tensor_empty], outputs=outputs)
+
+        from tensorflow.keras.losses import mse
+        from src.utils.Metrics import Grad, MSE_
+        from src.utils.Metrics import dice_coef_loss
+
+        losses = [MSE_().loss, dice_coef_loss, Grad('l2').loss]
+        weights = [image_loss_weight, image_loss_weight, reg_loss_weight]
+        model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=learning_rate), loss=losses, loss_weights=weights)
+
+    return model
+
 # ST to apply m to an volume
 def create_affine_transformer_fixed(config, networkname='affine_transformer_fixed', fill_value=0,
                                     interp_method='linear'):

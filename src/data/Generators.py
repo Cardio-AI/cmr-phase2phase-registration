@@ -960,11 +960,11 @@ class PhaseWindowGenerator(DataGenerator):
         self.TARGET_CHANNELS = 1
         self.IN_MEMORY = in_memory
 
-        if self.yield_masks: # this is just for the case that we want to yield masks with the same pre-processing as applied to the images
+        """if self.yield_masks: # this is just for the case that we want to yield masks with the same pre-processing as applied to the images
             self.IMG_CHANNELS = 1
             self.MASKING_IMAGE = False # we cant mask the masks, turn it off, to make sure
             self.IMG_INTERPOLATION = sitk.sitkNearestNeighbor
-            self.TARGET_CHANNELS = 1
+            self.TARGET_CHANNELS = 1"""
         self.X_SHAPE = np.empty((self.BATCHSIZE, self.PHASES, *self.DIM, self.IMG_CHANNELS), dtype=np.float32)
         self.Y_SHAPE = np.empty((self.BATCHSIZE, self.PHASES, *self.DIM, self.TARGET_CHANNELS), dtype=np.float32)
 
@@ -1205,12 +1205,10 @@ class PhaseWindowGenerator(DataGenerator):
             model_inputs = combined[self.INPUT_T_ELEM][..., np.newaxis]
             model_targets = combined[-1][..., np.newaxis]
 
-        elif self.IMG_CHANNELS == 3 and not self.yield_masks:
+        elif self.IMG_CHANNELS == 3:
             model_inputs = np.stack(combined, axis=-1)
             model_targets = combined[-1][..., np.newaxis]
-        elif self.yield_masks:
-            model_inputs = combined[0]
-            model_targets = combined[2]
+
             #model_inputs = transform_to_binary_mask(model_inputs, self.MASK_VALUES)
             #model_targets = transform_to_binary_mask(model_targets, self.MASK_VALUES)
 
@@ -1241,6 +1239,350 @@ class PhaseWindowGenerator(DataGenerator):
         assert not np.any(np.isnan(model_targets))
 
         return model_inputs, model_targets, i, ID, time() - t0
+
+
+class PhaseMaskWindowGenerator(DataGenerator):
+    """
+    yields n input volumes and n output volumes
+    """
+
+    def __init__(self, x=None, y=None, config=None, yield_masks=False, in_memory=False):
+
+        if config is None:
+            config = {}
+        super().__init__(x=x, y=y, config=config)
+
+        self.config=config
+        self.T_SPACING = config.get('T_SPACING', 10)
+        self.PHASES = config.get('PHASES', 5)
+        self.HIST_MATCHING = config.get('HIST_MATCHING', False)
+        self.IMG_INTERPOLATION = config.get('IMG_INTERPOLATION', sitk.sitkLinear)
+        self.MSK_INTERPOLATION = config.get('MSK_INTERPOLATION', sitk.sitkNearestNeighbor)
+        self.AUGMENT_TEMP = config.get('AUGMENT_TEMP', False)
+        self.AUGMENT_TEMP_RANGE = config.get('AUGMENT_TEMP_RANGE', (-2, 2))
+        self.RESAMPLE_T = config.get('RESAMPLE_T', False)
+        self.WINDOW_SIZE = config.get('WINDOW_SIZE', 1)
+        self.IMG_CHANNELS = config.get('IMG_CHANNELS', 1)
+        self.INPUT_T_ELEM = config.get('INPUT_T_ELEM', 0)
+        self.REPLACE_WILDCARD = ('clean', 'mask')
+        self.BETWEEN_PHASES = config.get('BETWEEN_PHASES', False)
+        self.yield_masks = yield_masks
+        self.TARGET_CHANNELS = 1
+        self.IN_MEMORY = in_memory
+
+        """if self.yield_masks: # this is just for the case that we want to yield masks with the same pre-processing as applied to the images
+            self.IMG_CHANNELS = 1
+            self.MASKING_IMAGE = False # we cant mask the masks, turn it off, to make sure
+            self.IMG_INTERPOLATION = sitk.sitkNearestNeighbor
+            self.TARGET_CHANNELS = 1"""
+        self.X_SHAPE = np.empty((self.BATCHSIZE, self.PHASES, *self.DIM, self.IMG_CHANNELS), dtype=np.float32)
+        self.X2_SHAPE = np.empty((self.BATCHSIZE, self.PHASES, *self.DIM, self.IMG_CHANNELS), dtype=np.float32)
+        self.Y_SHAPE = np.empty((self.BATCHSIZE, self.PHASES, *self.DIM, self.TARGET_CHANNELS), dtype=np.float32)
+
+        # this is a hack to figure out which dataset we use, without introducing a new config parameter
+        self.ISACDC = False
+        self.ISDMD = False
+        if config.get('ISDMDDATA', False):
+            self.ISDMD = True
+        elif 'acdc' in self.IMAGES[0].lower():
+            self.ISACDC = True
+
+
+        # opens a dataframe with cleaned phases per patient
+        if not self.ISACDC:
+            self.METADATA_FILE = config.get('DF_META', '/mnt/ssd/data/gcn/02_imported_4D_unfiltered/SAx_3D_dicomTags_phase.csv')
+            df = pd.read_csv(self.METADATA_FILE)
+            self.DF_METADATA = df[['patient', 'ED#', 'MS#', 'ES#', 'PF#', 'MD#']]
+        #TODO: need to check if this is still necessary!
+        self.MASKS = None
+
+        # in memory training for the cluster
+        if self.IN_MEMORY:
+            self.IMAGES_SITK= [load_masked_img(sitk_img_f=x, mask=self.MASKING_IMAGE,
+                                       masking_values=self.MASKING_VALUES, replace=self.REPLACE_WILDCARD, maskAll=False) for x in self.IMAGES]
+            self.MASKS_SITK = [load_masked_img(sitk_img_f=x.replace('clean', 'mask'), mask=True,
+                                                masking_values=[2], replace=self.REPLACE_WILDCARD,
+                                                maskAll=False) for x in self.IMAGES]
+
+        # define a random seed for albumentations
+        random.seed(config.get('SEED', 42))
+        logging.info('params of generator:') # print the parameters of this generator
+        logging.info(list((k, v) for k, v in vars(self).items() if
+                          type(v) in [int, str, list, bool] and str(k) not in ['IMAGES', 'LABELS']))
+
+    def on_batch_end(self):
+        """
+        Use this callback for methods that should be executed after each new batch generation
+        """
+        pass
+
+    def __data_generation__(self, list_IDs_temp):
+
+        """
+        Loads and pre-process one batch
+
+        :param list_IDs_temp:
+        :return: X : (batchsize, *dim, n_channels), Y : (batchsize, self.T_SHAPE, number_of_classes)
+        """
+        # use this for batch wise histogram-reference selection
+        self.on_batch_end()
+
+        # Initialization
+        x = np.empty_like(self.X_SHAPE)  # model input
+        x2 = np.empty_like(self.X_SHAPE)  # model input
+        y = np.empty_like(self.Y_SHAPE)  # model output
+        y2 = np.empty_like(self.Y_SHAPE)  # model output
+
+        futures = set()
+
+        # spawn one thread per worker
+        with concurrent.futures.ThreadPoolExecutor(max_workers=self.MAX_WORKERS) as executor:
+            t0 = time()
+            ID = ''
+            # Generate data
+            for i, ID in enumerate(list_IDs_temp):
+
+                try:
+                    # remember the ordering of the shuffled indexes,
+                    # otherwise files, that take longer are always at the batch end
+                    futures.add(executor.submit(self.__preprocess_one_image__, i, ID))
+
+                except Exception as e:
+                    PrintException()
+                    print(e)
+                    logging.error(
+                        'Exception {} in datagenerator with: image: {} or mask: {}'.format(str(e), self.IMAGES[ID],
+                                                                                           self.LABELS[ID]))
+
+        for i, future in enumerate(as_completed(futures)):
+            # use the indexes to order the batch
+            # otherwise slower images will always be at the end of the batch
+            try:
+                x_, x2_, y_, y2_, i, ID, needed_time = future.result()
+                x[i,], y[i,] = x_, y_
+                x2[i,], y2[i,] = x2_, y2_
+                logging.debug('img finished after {:0.3f} sec.'.format(needed_time))
+            except Exception as e:
+                # write these files into a dedicated error log
+                PrintException()
+                print(e)
+                logging.error(
+                    'Exception {} in datagenerator with:\n'
+                    'image:\n'
+                    '{}\n'
+                    'mask:\n'
+                    '{}'.format(str(e), self.IMAGES[ID], self.LABELS[ID]))
+
+        logging.debug('Batchsize: {} preprocessing took: {:0.3f} sec'.format(self.BATCHSIZE, time() - t0))
+        zeros = np.zeros((*x.shape[:-1], 3), dtype=np.float32)
+        return tuple([[x, x2, zeros], [y, y2, zeros]])
+
+    def __preprocess_one_image__(self, i, ID):
+
+        # --------------- HIST MATCHING REFERENCE VOL--------------
+        ref = None
+        apply_hist_matching=False
+        if self.HIST_MATCHING and random.random() <= self.AUGMENT_PROB:
+            apply_hist_matching = True
+            ignore_z = 1
+            # use a random image, given to this generator, as histogram template for histogram matching augmentation
+            ref = sitk.GetArrayFromImage(sitk.ReadImage((choice(self.IMAGES))))
+            ref = ref[choice(list(range(ref.shape[0] - 1))), choice(list(range(ref.shape[1] - 1))[ignore_z:-ignore_z])]
+        t0 = time()
+        t1 = time()
+
+        x = self.IMAGES[ID]
+
+
+        # --------------- LOAD THE MODEL INPUT--------------
+        if self.IN_MEMORY:
+            model_inputs = self.IMAGES_SITK[ID]
+            model_m_inputs = self.MASKS_SITK[ID]
+        else:
+            # use the load_masked_img wrapper to enable masking of the images, currently not necessary, but nice to have
+            model_inputs = load_masked_img(sitk_img_f=x, mask=self.MASKING_IMAGE,
+                                           masking_values=self.MASKING_VALUES, replace=self.REPLACE_WILDCARD, maskAll=False)
+            model_m_inputs = load_masked_img(sitk_img_f=x, mask=True,
+                                           masking_values=[2], replace=self.REPLACE_WILDCARD,
+                                           maskAll=False)
+        logging.debug('load and masking took: {:0.3f} s'.format(time() - t1))
+        t1 = time()
+
+        # --------------- TEMPORAL RESAMPLING AND Temp-AUGMENTATION--------------
+        # resample the temporal resolution
+        # if AUGMENT_TEMP --> add an temporal augmentation factor within the range given by: AUGMENT_TEMP_RANGE
+        t_spacing = self.T_SPACING
+        if self.AUGMENT_TEMP: t_spacing = t_spacing + random.randint(self.AUGMENT_TEMP_RANGE[0],
+                                                                     self.AUGMENT_TEMP_RANGE[1])
+        logging.debug('t-spacing: {}'.format(t_spacing))
+        if self.RESAMPLE_T:
+            temporal_sampling_factor = model_inputs.GetSpacing()[-1] / t_spacing
+            model_inputs = resample_t_of_4d(model_inputs, t_spacing=t_spacing, interpolation=self.IMG_INTERPOLATION,
+                                            ismask=False)
+            model_m_inputs = resample_t_of_4d(model_m_inputs, t_spacing=t_spacing, interpolation=self.IMG_INTERPOLATION,
+                                            ismask=False)
+        else:
+            temporal_sampling_factor = 1  # dont scale the indices if we dont resample T
+        logging.debug('temp resampling took: {:0.3f} s'.format(time() - t1))
+        t1 = time()
+
+        # --------------- SPLIT IN 3D SITK IMAGES-------------
+        # Create a list of 3D volumes for volume resampling
+        # apply histogram matching if given by config
+        model_inputs = split_one_4d_sitk_in_list_of_3d_sitk(model_inputs, axis=0, prob=self.AUGMENT_PROB)
+        model_m_inputs = split_one_4d_sitk_in_list_of_3d_sitk(model_m_inputs, axis=0, prob=self.AUGMENT_PROB)
+        logging.debug('split in t x 3D took: {:0.3f} s'.format(time() - t1))
+        t1 = time()
+
+        # --------------- LOAD INDICES FOR CARDIAC PHASES--------------
+        # Returns the indices in the following order: 'ED#', 'MS#', 'ES#', 'PF#', 'MD#'
+        if self.ISACDC:
+            idx = get_phases_as_idx_acdc(x, temporal_sampling_factor, len(model_inputs))
+        elif self.ISDMD:
+            idx = get_phases_as_idx_dmd(x, self.DF_METADATA, temporal_sampling_factor, len(model_inputs))
+        else:
+            idx = get_phases_as_idx_gcn(x, self.DF_METADATA, temporal_sampling_factor, len(model_inputs))
+        logging.debug('index loading took: {:0.3f} s'.format(time() - t1))
+        # logging.debug('transposed: \n{}'.format(onehot))
+        self.__plot_state_if_debug__(img=model_inputs[len(model_inputs) // 2], start_time=t0, step='raw')
+        t1 = time()
+
+        # --------------- SPATIAL RESAMPLING-------------
+        if self.RESAMPLE:
+            if model_inputs[0].GetDimension() in [2, 3]:
+
+                # calculate the new size of each 3D volume (after resample with the given spacing)
+                # sitk.spacing has the opposite order than np.shape and tf.shape
+                # In the config we use the numpy order z, y, x which needs to be reversed for sitk
+                def calc_resampled_size(sitk_img, target_spacing):
+                    if type(target_spacing) in [list, tuple]:
+                        target_spacing = np.array(target_spacing)
+                    old_size = np.array(sitk_img.GetSize())
+                    old_spacing = np.array(sitk_img.GetSpacing())
+                    logging.debug('old size: {}, old spacing: {}, target spacing: {}'.format(old_size, old_spacing,
+                                                                                             target_spacing))
+                    new_size = (old_size * old_spacing) / target_spacing
+                    return list(np.around(new_size).astype(np.int))
+
+                # transform the spacing from numpy representation towards the sitk representation
+                target_spacing = list(reversed(self.SPACING))
+                new_size_inputs = list(map(lambda elem: calc_resampled_size(elem, target_spacing), model_inputs))
+
+            else:
+                raise NotImplementedError('dimension not supported: {}'.format(model_inputs[0].GetDimension()))
+
+            logging.debug('dimension: {}'.format(model_inputs[0].GetDimension()))
+            logging.debug('Size before resample: {}'.format(model_inputs[0].GetSize()))
+
+            model_inputs = list(map(lambda x:
+                                    resample_3D(sitk_img=x[0],
+                                                size=x[1],
+                                                spacing=target_spacing,
+                                                interpolate=self.IMG_INTERPOLATION), # sitk.sitkLinear
+                                    zip(model_inputs, new_size_inputs)))
+
+            model_m_inputs = list(map(lambda x:
+                                    resample_3D(sitk_img=x[0],
+                                                size=x[1],
+                                                spacing=target_spacing,
+                                                interpolate=self.MSK_INTERPOLATION),  # sitk.sitkLinear
+                                    zip(model_m_inputs, new_size_inputs)))
+
+        logging.debug('Spacing after resample: {}'.format(model_inputs[0].GetSpacing()))
+        logging.debug('Size after resample: {}'.format(model_inputs[0].GetSize()))
+        logging.debug('spatial resampling took: {:0.3f} s'.format(time() - t1))
+        t1 = time()
+
+        # --------------- CONTINUE WITH ND-ARRAYS --------------
+        # transform to nda for further processing
+        model_inputs = np.stack(list(map(lambda x: sitk.GetArrayFromImage(x), model_inputs)), axis=0)
+        model_m_inputs = np.stack(list(map(lambda x: sitk.GetArrayFromImage(x), model_m_inputs)), axis=0)
+        logging.debug('transform to nda took: {:0.3f} s'.format(time() - t1))
+        t1 = time()
+        self.__plot_state_if_debug__(img=model_inputs[len(model_inputs) // 2], start_time=t1, step='resampled')
+
+        # --------------- HIST MATCHING--------------
+        if apply_hist_matching:
+            model_inputs = match_hist(model_inputs, ref)
+            logging.debug('hist matching took: {:0.3f} s'.format(time() - t1))
+            t1 = time()
+
+        # --------------- SLICE PAIRS OF INPUT AND TARGET VOLUMES ACCORDING TO CARDIAC PHASE IDX -------------
+        # get the volumes of each phase window
+        # combined --> t-w, t, t+w, We can use this window in different combinations as input and target
+
+        if self.BETWEEN_PHASES:
+            combined = get_n_windows_between_phases_from_single4D(model_inputs, idx)
+            combined_m = get_n_windows_between_phases_from_single4D(model_m_inputs, idx)
+        else:
+            combined = get_n_windows_from_single4D(model_inputs, idx, window_size=self.WINDOW_SIZE)
+
+        logging.debug('windowing slicing took: {:0.3f} s'.format(time() - t1))
+        t1 = time()
+
+        # --------------- Image Augmentation, this is done in 2D -------------
+        if self.AUGMENT and random.random() <= self.AUGMENT_PROB:
+            assert False, 'augmentation is not implemented for mask and image generator.'
+            # use albumentation to apply random rotation scaling and shifts
+            # we need to make sure to apply the same augmentation on the input and target data
+            # Albumentation uses the Interpolation enum from opencv which is different to the SimpleITK enum
+            combined = np.concatenate(combined, axis=0)
+            logging.debug('shape combined: {}'.format(combined.shape))
+            combined = augmentation_compose_2d_3d_4d(img=combined, mask=None, config=self.config)
+            logging.debug('shape combined: {}'.format(combined.shape))
+            # split into input and target
+            combined = np.split(combined, indices_or_sections=3, axis=0)
+            self.__plot_state_if_debug__(img=combined[self.INPUT_T_ELEM][0], start_time=t1, step='augmented')
+            logging.debug('augmentation took: {:0.3f} s'.format(time() - t1))
+            t1 = time()
+        if self.IMG_CHANNELS == 1:
+            model_inputs = combined[self.INPUT_T_ELEM][..., np.newaxis]
+            model_targets = combined[-1][..., np.newaxis]
+            model_m_inputs = combined_m[self.INPUT_T_ELEM][..., np.newaxis]
+            model_m_targets = combined_m[-1][..., np.newaxis]
+
+        elif self.IMG_CHANNELS == 3:
+            model_inputs = np.stack(combined, axis=-1)
+            model_targets = combined[-1][..., np.newaxis]
+            model_m_inputs = np.stack(combined_m, axis=-1)
+            model_m_targets = combined_m[-1][..., np.newaxis]
+
+            #model_inputs = transform_to_binary_mask(model_inputs, self.MASK_VALUES)
+            #model_targets = transform_to_binary_mask(model_targets, self.MASK_VALUES)
+
+        model_inputs = pad_and_crop(model_inputs, target_shape=(self.PHASES,*self.DIM, self.IMG_CHANNELS))
+        model_targets = pad_and_crop(model_targets, target_shape=(self.PHASES, *self.DIM, self.TARGET_CHANNELS))
+
+        model_m_inputs = pad_and_crop(model_m_inputs, target_shape=(self.PHASES,*self.DIM, self.IMG_CHANNELS))
+        model_m_targets = pad_and_crop(model_m_targets, target_shape=(self.PHASES, *self.DIM, self.TARGET_CHANNELS))
+
+        model_m_inputs = (model_m_inputs>0.9).astype(np.float32)
+        model_m_targets = (model_m_targets > 0.9).astype(np.float32)
+        logging.debug('pad/crop took: {:0.3f} s'.format(time() - t1))
+        t1 = time()
+
+        # clip, pad/crop and normalise & extend last axis
+        # We repeat/tile the 3D volume at this time, to avoid resampling/augmenting the same slices multiple times
+        # Ideally this saves computation time and memory
+
+        if not self.yield_masks:
+            model_inputs = clip_quantile(model_inputs, .9999)
+            model_targets = clip_quantile(model_targets, .9999)
+            logging.debug('quantile clipping took: {:0.3f} s'.format(time() - t1))
+            t1 = time()
+
+            model_inputs = normalise_image(model_inputs, normaliser=self.SCALER)  # normalise per 4D
+            model_targets = normalise_image(model_targets, normaliser=self.SCALER)  # normalise per 4D
+            logging.debug('normalisation took: {:0.3f} s'.format(time() - t1))
+            t1 = time()
+
+            self.__plot_state_if_debug__(img=model_inputs[len(model_inputs) // 2], start_time=t1,
+                                         step='clipped cropped and pad')
+
+        assert not np.any(np.isnan(model_inputs))
+        assert not np.any(np.isnan(model_targets))
+
+        return model_inputs, model_m_inputs, model_targets, model_m_targets, i, ID, time() - t0
 
 
 import linecache

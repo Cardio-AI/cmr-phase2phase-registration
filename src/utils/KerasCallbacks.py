@@ -14,7 +14,7 @@ from src.visualization.Visualize import plot_3d_vol, plot_4d_vol
 from src.visualization.Visualize import show_slice_transparent as show_slice
 from src.utils.Utils_io import ensure_dir
 
-from src.data.Preprocess import normalise_image
+from src.data.Preprocess import normalise_image, transform_to_binary_mask
 from src.visualization.Visualize import show_2D_or_3D
 
 
@@ -646,7 +646,11 @@ class WindowMotionCallback(Callback):
 
                 for key, x, y in zip(self.keys, self.xs, self.ys):
 
-                    movings, vects = self.model.predict(x)
+                    pred_ = self.model.predict(x)
+                    if len(pred_) == 2:
+                        movings, vects = pred_
+                    else:
+                        movings, moving_m, vects = pred_
                     #logging.info(predictions.shape)
                     # xs and ys have the shape n, x, y, 1, they are grouped by the key
                     # count the samples provided by each key to sort them
@@ -656,9 +660,12 @@ class WindowMotionCallback(Callback):
                     # one plot per phase
                     for p in range(len(phases)):
                         first_vol, second_vol = x[b][0][p], y[b][0][p]
+                        first_m, second_m = x[1][0][p], y[1][0][p]
                         if first_vol.shape[-1] == 3:
                             first_vol= first_vol[...,self.take_t_elem][...,np.newaxis]
-                        moved, vect = movings[b][p], vects[b][p]
+                        if first_m.shape[-1] == 3:
+                            first_m = first_m[..., self.take_t_elem]
+                        moved, moved_m, vect = movings[b][p], moving_m[b][p], vects[b][p]
                         nrows = 3
                         ncols = 7
                         fig, axes = plt.subplots(nrows, ncols, figsize=(14,7))
@@ -673,39 +680,45 @@ class WindowMotionCallback(Callback):
                         vmax = 1
                         for i,z in enumerate(picks):
                             j = 0
+                            # t0
                             axes[i, j].imshow(first_vol[z], 'gray')
+                            axes[i, j].imshow(first_m[z],alpha=0.6)
                             axes[i, j].set_ylabel(y_label[i], rotation=90, size='medium')
                             axes[i, j].set_xticks([])
                             axes[i, j].set_yticks([])
                             j = j + 1
+                            #t1
                             axes[i, j].imshow(second_vol[z], 'gray')
+                            axes[i, j].imshow(second_m[z], alpha=0.6)
                             axes[i, j].set_xticks([])
                             axes[i, j].set_yticks([])
                             j = j + 1
+                            # moved t0
                             axes[i, j].imshow(moved[z], 'gray')
+                            axes[i, j].imshow(moved_m[z], alpha=0.6)
                             axes[i, j].set_xticks([])
                             axes[i, j].set_yticks([])
                             j = j + 1
-
+                            # vect
                             temp = np.absolute(vect[z])
                             axes[i, j].imshow(first_vol[z], 'gray', vmin=0, vmax=0.8)
                             axes[i, j].imshow(normalise_image(temp), alpha=0.8)
                             axes[i, j].set_xticks([])
                             axes[i, j].set_yticks([]);j=j+1
 
-                            # get the magnitude/vector length
+                            # magnitude
                             temp = normalise_image(np.sqrt(np.square(vect[z][...,0]) + np.square(vect[z][...,1]) + np.square(vect[z][...,2])))
                             axes[i, j].imshow(first_vol[z], 'gray', vmin=0, vmax=.8)
                             axes[i, j].imshow(temp, cmap='seismic', alpha=0.8)
 
                             axes[i, j].set_xticks([])
                             axes[i, j].set_yticks([]);j=j+1
-
+                            # diff t0 - t1
                             axes[i, j].imshow(first_vol[z], 'gray', vmin=0, vmax=.8)
                             axes[i, j].imshow(first_vol[z] - second_vol[z],cmap='seismic', interpolation='none')
                             axes[i, j].set_xticks([])
                             axes[i, j].set_yticks([]);j=j+1
-
+                            # diff moved - t1
                             axes[i, j].imshow(first_vol[z], 'gray', vmin=0, vmax=.8)
                             axes[i, j].imshow(moved[z] - second_vol[z],cmap='seismic', interpolation='none')
                             axes[i, j].set_xticks([])

@@ -1,10 +1,11 @@
 import numpy as np
 
 from src.data.Dataset import save_gt_and_pred
-from src.models.Models import create_affine_transformer_fixed
+from src.data.Generators import PhaseMaskWindowGenerator
+from src.models.Models import create_affine_transformer_fixed, create_RegistrationModel_inkl_mask
 
 
-def pred_fold(config, debug=False):
+def pred_fold(config, debug=True):
     # make sure all neccessary params in config are set
     # if not set them with default values
     from src.utils.Tensorflow_helper import choose_gpu_by_id
@@ -62,7 +63,7 @@ def pred_fold(config, debug=False):
     try:
 
         # load the model, to make sure we use the same as later for the evaluations
-        model = create_RegistrationModel(config)
+        model = create_RegistrationModel_inkl_mask(config)
         model.load_weights(os.path.join(config['MODEL_PATH'], 'model.h5'))
         logging.info('loaded model weights as h5 file')
 
@@ -78,7 +79,7 @@ def pred_fold(config, debug=False):
         pred_config['BATCHSIZE'] = 1
         pred_config['HIST_MATCHING'] = False
         INPUT_T_ELEM = config.get('INPUT_T_ELEM', 0)
-        pred_generator = PhaseWindowGenerator(x_train_sax, x_train_sax, config=pred_config)
+        pred_generator = PhaseMaskWindowGenerator(x_train_sax, x_train_sax, config=pred_config)
         full_pred_config = pred_config.copy()
         full_pred_config['MASKING_IMAGE'] = False
         full_image_generator = PhaseWindowGenerator(x_train_sax, x_train_sax, config=full_pred_config)
@@ -89,10 +90,10 @@ def pred_fold(config, debug=False):
         pred_mask_config['MASKING_VALUES']=[2]
         pred_mask_config['MASKING_IMAGE']=True
         pred_myo_mask_generator = PhaseWindowGenerator(x_train_sax_masks, x_train_sax_masks, config=pred_mask_config,
-                                                   yield_masks=False)
+                                                   yield_masks=True)
         pred_mask_config['MASKING_VALUES'] = [3]
         pred_lv_mask_generator = PhaseWindowGenerator(x_train_sax_masks, x_train_sax_masks, config=pred_mask_config,
-                                                   yield_masks=False)
+                                                   yield_masks=True)
 
         # mask the vetorfield
         from scipy import ndimage
@@ -106,6 +107,7 @@ def pred_fold(config, debug=False):
 
             # first_vols shape:
             # Batch, Z, X, Y, Channels --> three timesteps - t_n-1, t_n, t_n+1
+
             first_vols, second_vols = pred_batch
             first_mask, second_mask = myo_mask_b
             first_lvmask, second_lvmask = lv_mask_b
@@ -123,15 +125,22 @@ def pred_fold(config, debug=False):
             first_mask = first_mask[..., INPUT_T_ELEM][..., np.newaxis]
             first_lvmask = first_lvmask[..., INPUT_T_ELEM][..., np.newaxis]
 
-            moved, vects = model.predict_on_batch(pred_batch)
+            preds = model.predict_on_batch(pred_batch)
+            if len(preds) == 2:
+                moved, vects = preds
+                # if our model does not transform the mask, do it separately
+                moved_m, _ = fixed_transformer.predict(x=[first_mask, vects])
+            else:
+                moved, moved_m, vects = preds
             moved = tf.cast(moved, tf.float32)
             # do
-            moved_m, _ = fixed_transformer.predict(x=[first_mask, vects])
-            moved_m = tf.cast(moved_m > 0.9, tf.uint8)
-            moved_m = ndimage.binary_closing(moved_m, structure=kernel_, iterations=1)
-            moved_m = ndimage.binary_opening(moved_m, structure=kernel_small, iterations=1)
 
-            moved_m = tf.cast(moved_m,tf.uint8)
+
+            moved_m = tf.cast(moved_m > 0.5, tf.uint8)
+            #moved_m = ndimage.binary_closing(moved_m, structure=kernel_, iterations=1)
+            #moved_m = ndimage.binary_opening(moved_m, structure=kernel_small, iterations=1)
+
+            #moved_m = tf.cast(moved_m,tf.uint8)
 
             # first_binary = first_mask==2
             second_binary = second_mask == 1
@@ -154,7 +163,7 @@ def pred_fold(config, debug=False):
                 save_all_3d_vols(first_vols[0],
                                  second_vols[0],
                                  moved[0],
-                                 moved_m,
+                                 moved_m[0],
                                  vects[0],
                                  first_mask[0],
                                  second_mask[0],
@@ -164,7 +173,7 @@ def pred_fold(config, debug=False):
                                  second_vols[0],
                                  EXP_PATH=pred_path, exp=p)
 
-            save_gt_and_pred(gt=second_mask[0], pred=first_mask[0], exp_path=config.get('EXP_PATH'), patient=p)
+            save_gt_and_pred(gt=second_mask[0], pred=moved_m[0], exp_path=config.get('EXP_PATH'), patient=p)
 
     except Exception as e:
         logging.error(e)
