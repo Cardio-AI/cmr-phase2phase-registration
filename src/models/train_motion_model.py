@@ -3,7 +3,7 @@ import numpy as np
 
 
 
-def train_fold(config, in_memory=False):
+def train_fold(config, in_memory=True):
     # make sure all neccessary params in config are set
     # if not set them with default values
     from src.utils.Tensorflow_helper import choose_gpu_by_id
