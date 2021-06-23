@@ -278,7 +278,7 @@ def create_RegistrationModel_inkl_mask(config):
         Conv_layer = Conv(ndims, kernel_size=3, padding='same',
                     kernel_initializer=tensorflow.keras.initializers.RandomNormal(mean=0.0, stddev=1e-5), name='unet2flow')
         st_layer = nrn_layers.SpatialTransformer(interp_method=interp_method, indexing=indexing, ident=True, name='deformable_layer')
-        st_mask_layer = nrn_layers.SpatialTransformer(interp_method=interp_method, indexing=indexing, ident=True,
+        st_mask_layer = nrn_layers.SpatialTransformer(interp_method='nearest', indexing=indexing, ident=True,
                                                  name='deformable_mask_layer')
 
         unet = create_unet(config, single_model=False)
@@ -298,7 +298,7 @@ def create_RegistrationModel_inkl_mask(config):
         # transform only one timestep, mostly the first one
         transformed = [st_layer([input_vol[...,take_t_elem][...,tf.newaxis], flow]) for input_vol, flow in zip(input_vols, flows)]
         transformed = tf.stack(transformed, axis=1)
-        transformed_mask = [st_layer([input_vol[..., take_t_elem][..., tf.newaxis], flow]) for input_vol, flow in
+        transformed_mask = [st_mask_layer([input_vol[..., take_t_elem][..., tf.newaxis], flow]) for input_vol, flow in
                        zip(input_mask_vols, flows)]
         transformed_mask = tf.stack(transformed_mask, axis=1)
 
