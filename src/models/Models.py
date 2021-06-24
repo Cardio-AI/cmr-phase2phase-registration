@@ -278,7 +278,7 @@ def create_RegistrationModel_inkl_mask(config):
         Conv_layer = Conv(ndims, kernel_size=3, padding='same',
                     kernel_initializer=tensorflow.keras.initializers.RandomNormal(mean=0.0, stddev=1e-5), name='unet2flow')
         st_layer = nrn_layers.SpatialTransformer(interp_method=interp_method, indexing=indexing, ident=True, name='deformable_layer')
-        st_mask_layer = nrn_layers.SpatialTransformer(interp_method='nearest', indexing=indexing, ident=True,
+        st_mask_layer = nrn_layers.SpatialTransformer(interp_method='linear', indexing=indexing, ident=True,
                                                  name='deformable_mask_layer')
 
         unet = create_unet(config, single_model=False)

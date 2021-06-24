@@ -102,20 +102,20 @@ def pred_fold(config, debug=True):
         # combined_mask = first_binary + second_binary
         kernel = np.ones((1, 1, 5, 5, 5, 1))
         kernel_ = np.ones((1, 5, 5, 5, 1))
-        kernel_small = np.ones((1, 3, 3, 3, 1))
+        kernel_small = np.ones((1, 1,3, 3, 3, 1))
 
         for filename, pred_batch, myo_mask_b, lv_mask_b, full_cmr in zip(x_train_sax, pred_generator, pred_myo_mask_generator, pred_lv_mask_generator, full_image_generator):
 
             # first_vols shape:
             # Batch, Z, X, Y, Channels --> three timesteps - t_n-1, t_n, t_n+1
 
-            first_vols, second_vols = pred_batch
+            first_vols_, second_vols_ = pred_batch
             first_mask, second_mask = myo_mask_b
             first_lvmask, second_lvmask = lv_mask_b
             first_vols_full, second_vols_full= full_cmr
 
-            first_vols, second_vols = first_vols[0], second_vols[0]  # pick batch 0
-            first_mask, second_mask = first_mask[0], second_mask[0]  # pick batch 0
+            first_vols, second_vols = first_vols_[0], second_vols_[0]  # pick batch 0
+            first_mask, second_mask = first_vols_[1], second_vols_[1]  # pick batch 0
             first_lvmask, second_lvmask = first_lvmask[0], second_lvmask[0]
             first_mask, second_mask = (first_mask>=0.5).astype(np.uint8), (second_mask>0.5).astype(np.uint8)
             first_lvmask, second_lvmask = (first_lvmask >= 0.5).astype(np.uint8), (second_lvmask > 0.5).astype(np.uint8)
@@ -138,17 +138,17 @@ def pred_fold(config, debug=True):
 
 
             moved_m = tf.cast(moved_m > 0.5, tf.uint8)
-            #moved_m = ndimage.binary_closing(moved_m, structure=kernel_, iterations=1)
+            #moved_m = ndimage.binary_closing(moved_m, structure=kernel, iterations=2)
             #moved_m = ndimage.binary_opening(moved_m, structure=kernel_small, iterations=1)
 
             #moved_m = tf.cast(moved_m,tf.uint8)
 
             # first_binary = first_mask==2
-            second_binary = second_mask == 1
+            second_binary = second_mask > 0.5
 
-            second_binary = ndimage.binary_closing(second_binary, structure=kernel,iterations=1)
+            #second_binary = ndimage.binary_closing(second_binary, structure=kernel,iterations=1)
             #combined_mask = combined_mask.astype(np.float32)
-            #second_binary = ndimage.convolve(second_binary, weights=kernel_small)
+            #second_binary = ndimage.convolve(second_binary, weights=kernel)
             #second_binary = second_binary>=0.2
             second_mask = tf.cast(second_binary, tf.uint8)
             second_binary = second_binary[...,0]
@@ -179,6 +179,7 @@ def pred_fold(config, debug=True):
     except Exception as e:
         logging.error(e)
         logging.error(first_vols.shape)
+        logging.error(moved_m.shape)
         logging.error(second_vols.shape)
         logging.error(vects.shape)
 

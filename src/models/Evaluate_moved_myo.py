@@ -36,7 +36,7 @@ def calc_dice(gt_path, pred_path, export_path):
 
 if __name__ == "__main__":
     import os
-    exp_path = '/mnt/ssd/git/dynamic-cmr-models/exp/temp/phase2phase/v2/64_128_128_spacing_3/window1/reg0_001/dmd/NOmask_f0/2021-06-23_11_58/'
+    exp_path = '/mnt/ssd/git/dynamic-cmr-models/exp/temp/phase2phase/v2/64_128_128_spacing_3/window1/reg0_001/dmd/NOmask_f0/2021-06-24_14_24/'
     gt_path = os.path.join(exp_path, 'gt_m')
     pred_path = os.path.join(exp_path, 'pred_m')
     export_path = exp_path

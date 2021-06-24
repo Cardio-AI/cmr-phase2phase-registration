@@ -715,12 +715,12 @@ class WindowMotionCallback(Callback):
                             axes[i, j].set_yticks([]);j=j+1
                             # diff t0 - t1
                             axes[i, j].imshow(first_vol[z], 'gray', vmin=0, vmax=.8)
-                            axes[i, j].imshow(first_vol[z] - second_vol[z],cmap='seismic', interpolation='none')
+                            axes[i, j].imshow(np.abs(first_vol[z] - second_vol[z]),cmap='seismic', interpolation='none')
                             axes[i, j].set_xticks([])
                             axes[i, j].set_yticks([]);j=j+1
                             # diff moved - t1
                             axes[i, j].imshow(first_vol[z], 'gray', vmin=0, vmax=.8)
-                            axes[i, j].imshow(moved[z] - second_vol[z],cmap='seismic', interpolation='none')
+                            axes[i, j].imshow(np.abs(moved[z] - second_vol[z]),cmap='seismic', interpolation='none')
                             axes[i, j].set_xticks([])
                             axes[i, j].set_yticks([])
                         # set column names
