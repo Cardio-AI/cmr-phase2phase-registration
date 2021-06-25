@@ -1428,7 +1428,6 @@ class PhaseMaskWindowGenerator(DataGenerator):
 
         # --------------- SPLIT IN 3D SITK IMAGES-------------
         # Create a list of 3D volumes for volume resampling
-        # apply histogram matching if given by config
         model_inputs = split_one_4d_sitk_in_list_of_3d_sitk(model_inputs, axis=0, prob=self.AUGMENT_PROB)
         model_m_inputs = split_one_4d_sitk_in_list_of_3d_sitk(model_m_inputs, axis=0, prob=self.AUGMENT_PROB)
         logging.debug('split in t x 3D took: {:0.3f} s'.format(time() - t1))
