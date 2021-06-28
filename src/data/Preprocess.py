@@ -18,7 +18,7 @@ from src.data.Dataset import copy_meta
 from albumentations.augmentations.transforms import PadIfNeeded, GaussNoise, RandomGamma
 
 
-def load_masked_img(sitk_img_f, mask=False, masking_values = [1,2,3], replace=('img','msk'), mask_labels=[0,1,2,3], maskAll=True):
+def load_masked_img(sitk_img_f, mask=False, masking_values = [1,2,3], replace=('img','msk'), mask_labels=[0,1,2,3], maskAll=True, is_mask=False):
 
     """
     Wrapper for opening a dicom image, this wrapper could also load the corresponding segmentation map and mask the loaded image on the fly
@@ -72,6 +72,24 @@ def load_masked_img(sitk_img_f, mask=False, masking_values = [1,2,3], replace=('
         img_original = sitk_img
                 
     return img_original
+
+def load_msk(f_name, valid_labels=None):
+
+    if valid_labels is None:
+        valid_labels = [0, 1, 2, 3]
+    msk_sitk = sitk.ReadImage(f_name)
+    msk_nda = sitk.GetArrayFromImage(msk_sitk)
+    msk_binary = np.squeeze(transform_to_binary_mask(msk_nda, mask_values=valid_labels))
+
+    msk_b_sitk = sitk.GetImageFromArray(msk_binary.astype(np.float32))
+
+    # copy metadata
+    for tag in msk_sitk.GetMetaDataKeys():
+        value = get_metadata_maybe(msk_sitk, tag)
+        msk_b_sitk.SetMetaData(tag, value)
+    msk_b_sitk.SetSpacing(msk_sitk.GetSpacing())
+    msk_b_sitk.SetOrigin(msk_sitk.GetOrigin())
+    return msk_b_sitk
 
 
 def filter_small_vectors_batch(flowfield_3d, normalize=True, thresh_z=(-0.5, 0.5), thresh_x=(-2.5, 1.5),
@@ -1172,7 +1190,7 @@ def pad_and_crop(ndarray, target_shape=(10, 10, 10)):
     -------
 
     """
-    cropped = np.zeros(target_shape)
+    cropped = np.zeros(target_shape, dtype=np.float32)
     target_shape = np.array(target_shape)
     logging.debug('input shape, crop_and_pad: {}'.format(ndarray.shape))
     logging.debug('target shape, crop_and_pad: {}'.format(target_shape))

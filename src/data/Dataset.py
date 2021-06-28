@@ -1516,6 +1516,7 @@ def get_n_windows_from_single4D(nda4d, idx, window_size=1):
     #t_lower_pre = np.squeeze(np.take(nda4d, indices=idxs_lower_pre[..., np.newaxis], axis=0))
     #t_lower_post = np.squeeze(np.take(nda4d, indices=idxs_lower_post[..., np.newaxis], axis=0))
 
+
     t= np.squeeze(np.take(nda4d, indices=idx[..., np.newaxis], axis=0))
     t_lower = np.squeeze(np.take(nda4d, indices=idxs_lower[..., np.newaxis], axis=0))
     t_upper = np.squeeze(np.take(nda4d, indices=idxs_upper[..., np.newaxis], axis=0))
@@ -1538,6 +1539,11 @@ def get_n_windows_between_phases_from_single4D(nda4d, idx):
     -------
 
     """
+    return_sitk = False
+    if type(nda4d) == type(sitk.Image):
+        sitk_save = nda4d
+        return_sitk = True
+        nda4d = sitk.GetArrayFromImage(nda4d)
 
     t1 = time()
     debug('nda4d shape: {}'.format(nda4d.shape))
@@ -1585,7 +1591,16 @@ def get_n_windows_between_phases_from_single4D(nda4d, idx):
     t_upper = np.squeeze(np.take(nda4d, indices=idxs_upper[..., np.newaxis], axis=0))
     logging.debug('first vols shape: {}'.format(t_lower.shape))
     logging.debug('gather nd took: {:0.3f} s'.format(time() - t1))
-    return [t_lower, t, t_upper]
+    if return_sitk: # return sitk images
+        t_lower, t, t_upper = sitk.GetImageFromArray(t_lower), sitk.GetImageFromArray(t), sitk.GetImageFromArray(t_upper)
+        return list(map(lambda x: copy_meta_and_save(new_image=x,
+                                                       reference_sitk_img=sitk_save,
+                                                       full_filename = None,
+                                                       overwrite_spacing = None,
+                                                       copy_direction = True),[t_lower, t, t_upper]))
+
+    else:
+        return [t_lower, t, t_upper]
 
 
 def save_3d(nda, fname, isVector=False):

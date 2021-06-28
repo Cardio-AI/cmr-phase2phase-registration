@@ -102,7 +102,7 @@ def pred_fold(config, debug=True):
         # combined_mask = first_binary + second_binary
         kernel = np.ones((1, 1, 5, 5, 5, 1))
         kernel_ = np.ones((1, 5, 5, 5, 1))
-        kernel_small = np.ones((1, 1,3, 3, 3, 1))
+        kernel_small = np.ones((1, 1, 3, 3, 3, 1))
 
         for filename, pred_batch, myo_mask_b, lv_mask_b, full_cmr in zip(x_train_sax, pred_generator, pred_myo_mask_generator, pred_lv_mask_generator, full_image_generator):
 
@@ -138,19 +138,22 @@ def pred_fold(config, debug=True):
 
 
             moved_m = tf.cast(moved_m > 0.5, tf.uint8)
-            #moved_m = ndimage.binary_closing(moved_m, structure=kernel, iterations=2)
+            moved_m = ndimage.binary_closing(moved_m, structure=kernel, iterations=1)
             #moved_m = ndimage.binary_opening(moved_m, structure=kernel_small, iterations=1)
 
-            #moved_m = tf.cast(moved_m,tf.uint8)
+            moved_m = tf.cast(moved_m,tf.uint8)
 
-            # first_binary = first_mask==2
+            first_binary = first_mask>0.5
             second_binary = second_mask > 0.5
 
-            #second_binary = ndimage.binary_closing(second_binary, structure=kernel,iterations=1)
+            second_binary = ndimage.binary_closing(second_binary, structure=kernel,iterations=1)
+            first_binary = ndimage.binary_closing(first_binary, structure=kernel, iterations=1)
+            #first_binary = ndimage.median_filter(first_mask, size=3, mode='nearest')
             #combined_mask = combined_mask.astype(np.float32)
             #second_binary = ndimage.convolve(second_binary, weights=kernel)
             #second_binary = second_binary>=0.2
             second_mask = tf.cast(second_binary, tf.uint8)
+            first_mask = tf.cast(first_binary, tf.uint8)
             second_binary = second_binary[...,0]
             for dim in range(vects.shape[-1]):
                 vects[...,dim][~second_binary] = 0

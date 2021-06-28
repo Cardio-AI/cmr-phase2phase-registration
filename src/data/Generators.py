@@ -20,7 +20,7 @@ from src.data.Dataset import describe_sitk, split_one_4d_sitk_in_list_of_3d_sitk
     get_n_windows_between_phases_from_single4D, get_phases_as_idx_dmd
 from src.data.Preprocess import resample_3D, clip_quantile, normalise_image, grid_dissortion_2D_or_3D, \
     transform_to_binary_mask, load_masked_img, random_rotate90_2D_or_3D, \
-    augmentation_compose_2d_3d_4d, pad_and_crop, resample_t_of_4d
+    augmentation_compose_2d_3d_4d, pad_and_crop, resample_t_of_4d, load_msk
 from src.visualization.Visualize import show_2D_or_3D
 
 
@@ -1306,9 +1306,9 @@ class PhaseMaskWindowGenerator(DataGenerator):
 
         # define a random seed for albumentations
         random.seed(config.get('SEED', 42))
-        logging.info('params of generator:') # print the parameters of this generator
+        logging.info('params of generator:') # print the parameters of this generator, exclude in memory sitk files of file names
         logging.info(list((k, v) for k, v in vars(self).items() if
-                          type(v) in [int, str, list, bool] and str(k) not in ['IMAGES', 'LABELS']))
+                          type(v) in [int, str, list, bool] and str(k) not in ['IMAGES', 'LABELS', 'IMAGES_SITK', 'MASKS_SITK']))
 
     def on_batch_end(self):
         """
@@ -1357,11 +1357,14 @@ class PhaseMaskWindowGenerator(DataGenerator):
         for i, future in enumerate(as_completed(futures)):
             # use the indexes to order the batch
             # otherwise slower images will always be at the end of the batch
+
+            x_, x2_, y_, y2_, i, ID, needed_time = future.result()
+            #print(x_.shape, x2_.shape, y_.shape,y2_.shape)
+            x[i,], y[i,] = x_, y_
+            x2[i,], y2[i,] = x2_, y2_
+            logging.debug('img finished after {:0.3f} sec.'.format(needed_time))
             try:
-                x_, x2_, y_, y2_, i, ID, needed_time = future.result()
-                x[i,], y[i,] = x_, y_
-                x2[i,], y2[i,] = x2_, y2_
-                logging.debug('img finished after {:0.3f} sec.'.format(needed_time))
+                pass
             except Exception as e:
                 # write these files into a dedicated error log
                 PrintException()
@@ -1402,9 +1405,7 @@ class PhaseMaskWindowGenerator(DataGenerator):
             # use the load_masked_img wrapper to enable masking of the images, currently not necessary, but nice to have
             model_inputs = load_masked_img(sitk_img_f=x, mask=self.MASKING_IMAGE,
                                            masking_values=self.MASKING_VALUES, replace=self.REPLACE_WILDCARD, maskAll=False)
-            model_m_inputs = load_masked_img(sitk_img_f=x, mask=True,
-                                           masking_values=[2], replace=self.REPLACE_WILDCARD,
-                                           maskAll=False)
+            model_m_inputs = load_msk(f_name=x.replace(self.REPLACE_WILDCARD[0], self.REPLACE_WILDCARD[1]), valid_labels=[2])
         logging.debug('load and masking took: {:0.3f} s'.format(time() - t1))
         t1 = time()
 
@@ -1443,7 +1444,7 @@ class PhaseMaskWindowGenerator(DataGenerator):
             idx = get_phases_as_idx_gcn(x, self.DF_METADATA, temporal_sampling_factor, len(model_inputs))
         logging.debug('index loading took: {:0.3f} s'.format(time() - t1))
         # logging.debug('transposed: \n{}'.format(onehot))
-        self.__plot_state_if_debug__(img=model_inputs[len(model_inputs) // 2], start_time=t0, step='raw')
+        #self.__plot_state_if_debug__(img=model_inputs[len(model_inputs) // 2], start_time=t0, step='raw')
         t1 = time()
 
         # --------------- SPATIAL RESAMPLING-------------
@@ -1484,7 +1485,7 @@ class PhaseMaskWindowGenerator(DataGenerator):
                                     resample_3D(sitk_img=x[0],
                                                 size=x[1],
                                                 spacing=target_spacing,
-                                                interpolate=self.MSK_INTERPOLATION),  # sitk.sitkLinear
+                                                interpolate=self.MSK_INTERPOLATION),  # sitk.nearest
                                     zip(model_m_inputs, new_size_inputs)))
 
         logging.debug('Spacing after resample: {}'.format(model_inputs[0].GetSpacing()))
@@ -1494,11 +1495,23 @@ class PhaseMaskWindowGenerator(DataGenerator):
 
         # --------------- CONTINUE WITH ND-ARRAYS --------------
         # transform to nda for further processing
-        model_inputs = np.stack(list(map(lambda x: sitk.GetArrayFromImage(x), model_inputs)), axis=0)
-        model_m_inputs = np.stack(list(map(lambda x: sitk.GetArrayFromImage(x), model_m_inputs)), axis=0)
+        """shape_ = (len(model_inputs), *list(reversed(model_inputs[0].GetSize())))
+        shape_m_ = (len(model_inputs), *list(reversed(model_m_inputs[0].GetSize())))
+        model_inputs_ = np.zeros(shape_, dtype=np.float32)
+        model_m_inputs_ = np.zeros(shape_m_, dtype=np.float32)
+        for s, elem in enumerate(model_inputs):
+            model_inputs_[s]=sitk.GetArrayFromImage(elem)
+        model_inputs = model_inputs_"""
+        #model_inputs = np.stack([sitk.GetArrayViewFromImage(elem) for elem in model_inputs], axis=0)
+        model_inputs = np.stack(list(map(lambda x: sitk.GetArrayViewFromImage(x), model_inputs)), axis=0)
+        """for s, elem in enumerate(model_m_inputs):
+            model_m_inputs_[s]=sitk.GetArrayFromImage(elem)
+        model_m_inputs = model_m_inputs_"""
+        #model_m_inputs = np.stack([sitk.GetArrayViewFromImage(elem) for elem in model_m_inputs], axis=0)
+        model_m_inputs = np.stack(list(map(lambda x: sitk.GetArrayViewFromImage(x), model_m_inputs)), axis=0)
         logging.debug('transform to nda took: {:0.3f} s'.format(time() - t1))
         t1 = time()
-        self.__plot_state_if_debug__(img=model_inputs[len(model_inputs) // 2], start_time=t1, step='resampled')
+        #self.__plot_state_if_debug__(img=model_inputs[len(model_inputs) // 2], start_time=t1, step='resampled')
 
         # --------------- HIST MATCHING--------------
         if apply_hist_matching:
@@ -1509,6 +1522,11 @@ class PhaseMaskWindowGenerator(DataGenerator):
         # --------------- SLICE PAIRS OF INPUT AND TARGET VOLUMES ACCORDING TO CARDIAC PHASE IDX -------------
         # get the volumes of each phase window
         # combined --> t-w, t, t+w, We can use this window in different combinations as input and target
+
+        model_inputs = pad_and_crop(model_inputs, target_shape=(model_inputs.shape[0], *self.DIM))
+        model_m_inputs = pad_and_crop(model_m_inputs, target_shape=(model_m_inputs.shape[0], *self.DIM))
+        logging.debug('pad/crop took: {:0.3f} s'.format(time() - t1))
+        t1 = time()
 
         if self.BETWEEN_PHASES:
             combined = get_n_windows_between_phases_from_single4D(model_inputs, idx)
@@ -1531,52 +1549,45 @@ class PhaseMaskWindowGenerator(DataGenerator):
             logging.debug('shape combined: {}'.format(combined.shape))
             # split into input and target
             combined = np.split(combined, indices_or_sections=3, axis=0)
-            self.__plot_state_if_debug__(img=combined[self.INPUT_T_ELEM][0], start_time=t1, step='augmented')
+            #self.__plot_state_if_debug__(img=combined[self.INPUT_T_ELEM][0], start_time=t1, step='augmented')
             logging.debug('augmentation took: {:0.3f} s'.format(time() - t1))
             t1 = time()
-        if self.IMG_CHANNELS == 1:
-            model_inputs = combined[self.INPUT_T_ELEM][..., np.newaxis]
-            model_targets = combined[-1][..., np.newaxis]
-            model_m_inputs = combined_m[self.INPUT_T_ELEM][..., np.newaxis]
-            model_m_targets = combined_m[-1][..., np.newaxis]
 
-        elif self.IMG_CHANNELS == 3:
-            model_inputs = np.stack(combined, axis=-1)
-            model_targets = combined[-1][..., np.newaxis]
-            model_m_inputs = np.stack(combined_m, axis=-1)
-            model_m_targets = combined_m[-1][..., np.newaxis]
-
-            #model_inputs = transform_to_binary_mask(model_inputs, self.MASK_VALUES)
-            #model_targets = transform_to_binary_mask(model_targets, self.MASK_VALUES)
-
-        model_inputs = pad_and_crop(model_inputs, target_shape=(self.PHASES,*self.DIM, self.IMG_CHANNELS))
-        model_targets = pad_and_crop(model_targets, target_shape=(self.PHASES, *self.DIM, self.TARGET_CHANNELS))
-
-        model_m_inputs = pad_and_crop(model_m_inputs, target_shape=(self.PHASES,*self.DIM, self.IMG_CHANNELS))
-        model_m_targets = pad_and_crop(model_m_targets, target_shape=(self.PHASES, *self.DIM, self.TARGET_CHANNELS))
-
-        model_m_inputs = (model_m_inputs>0.9).astype(np.float32)
-        model_m_targets = (model_m_targets > 0.9).astype(np.float32)
-        logging.debug('pad/crop took: {:0.3f} s'.format(time() - t1))
+        # clip, pad/crop and normalise
+        combined = np.stack(combined, axis=-1)
+        combined_m = np.stack(combined_m, axis=-1)
+        logging.debug('stacking took: {:0.3f} s'.format(time() - t1))
         t1 = time()
 
-        # clip, pad/crop and normalise & extend last axis
-        # We repeat/tile the 3D volume at this time, to avoid resampling/augmenting the same slices multiple times
-        # Ideally this saves computation time and memory
+        """combined = pad_and_crop(combined, target_shape=(self.PHASES, *self.DIM, self.IMG_CHANNELS))
+        combined_m = pad_and_crop(combined_m, target_shape=(self.PHASES, *self.DIM, self.IMG_CHANNELS))
+        logging.debug('pad/crop took: {:0.3f} s'.format(time() - t1))
+        t1 = time()"""
 
-        if not self.yield_masks:
-            model_inputs = clip_quantile(model_inputs, .9999)
-            model_targets = clip_quantile(model_targets, .9999)
+        if not self.yield_masks: # clip and normalisation is faster on cropped nda
+            combined = clip_quantile(combined, .9999)
             logging.debug('quantile clipping took: {:0.3f} s'.format(time() - t1))
             t1 = time()
 
-            model_inputs = normalise_image(model_inputs, normaliser=self.SCALER)  # normalise per 4D
-            model_targets = normalise_image(model_targets, normaliser=self.SCALER)  # normalise per 4D
+            combined = normalise_image(combined, normaliser=self.SCALER)  # normalise per 4D
             logging.debug('normalisation took: {:0.3f} s'.format(time() - t1))
             t1 = time()
 
-            self.__plot_state_if_debug__(img=model_inputs[len(model_inputs) // 2], start_time=t1,
-                                         step='clipped cropped and pad')
+
+        if self.IMG_CHANNELS == 1:
+            model_inputs = combined[...,self.INPUT_T_ELEM]
+            model_targets = combined[...,-1][..., np.newaxis]
+            model_m_inputs = combined_m[...,self.INPUT_T_ELEM]
+            model_m_targets = combined_m[-1][..., np.newaxis]
+
+        elif self.IMG_CHANNELS == 3:
+            model_inputs = combined
+            model_targets = combined[...,-1][..., np.newaxis]
+            model_m_inputs = combined_m
+            model_m_targets = combined_m[...,-1][..., np.newaxis]
+
+            #self.__plot_state_if_debug__(img=model_inputs[len(model_inputs) // 2], start_time=t1,
+            #                             step='clipped cropped and pad')
 
         assert not np.any(np.isnan(model_inputs))
         assert not np.any(np.isnan(model_targets))
