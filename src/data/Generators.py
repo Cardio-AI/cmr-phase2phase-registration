@@ -1269,6 +1269,7 @@ class PhaseMaskWindowGenerator(DataGenerator):
         self.yield_masks = yield_masks
         self.TARGET_CHANNELS = 1
         self.IN_MEMORY = in_memory
+        self.THREAD_POOL = concurrent.futures.ThreadPoolExecutor(max_workers=12)
 
         """if self.yield_masks: # this is just for the case that we want to yield masks with the same pre-processing as applied to the images
             self.IMG_CHANNELS = 1
@@ -1298,11 +1299,8 @@ class PhaseMaskWindowGenerator(DataGenerator):
 
         # in memory training for the cluster
         if self.IN_MEMORY:
-            self.IMAGES_SITK= [load_masked_img(sitk_img_f=x, mask=self.MASKING_IMAGE,
-                                       masking_values=self.MASKING_VALUES, replace=self.REPLACE_WILDCARD, maskAll=False) for x in self.IMAGES]
-            self.MASKS_SITK = [load_masked_img(sitk_img_f=x.replace('clean', 'mask'), mask=True,
-                                                masking_values=[2], replace=self.REPLACE_WILDCARD,
-                                                maskAll=False) for x in self.IMAGES]
+            zipped = [self.__pre_load_one_image__(i, i) for i in range(len(self.IMAGES))]
+            self.IMAGES_SITK, self.MASKS_SITK, _ = list(map(list, zip(*zipped)))
 
         # define a random seed for albumentations
         random.seed(config.get('SEED', 42))
@@ -1325,7 +1323,7 @@ class PhaseMaskWindowGenerator(DataGenerator):
         :return: X : (batchsize, *dim, n_channels), Y : (batchsize, self.T_SHAPE, number_of_classes)
         """
         # use this for batch wise histogram-reference selection
-        self.on_batch_end()
+        #self.on_batch_end()
 
         # Initialization
         x = np.empty_like(self.X_SHAPE)  # model input
@@ -1336,23 +1334,23 @@ class PhaseMaskWindowGenerator(DataGenerator):
         futures = set()
 
         # spawn one thread per worker
-        with concurrent.futures.ThreadPoolExecutor(max_workers=self.MAX_WORKERS) as executor:
-            t0 = time()
-            ID = ''
-            # Generate data
-            for i, ID in enumerate(list_IDs_temp):
+        #with self.THREAD_POOL as executor:
+        t0 = time()
+        ID = ''
+        # Generate data
+        for i, ID in enumerate(list_IDs_temp):
 
-                try:
-                    # remember the ordering of the shuffled indexes,
-                    # otherwise files, that take longer are always at the batch end
-                    futures.add(executor.submit(self.__preprocess_one_image__, i, ID))
+            try:
+                # remember the ordering of the shuffled indexes,
+                # otherwise files, that take longer are always at the batch end
+                futures.add(self.THREAD_POOL.submit(self.__preprocess_one_image__, i, ID))
 
-                except Exception as e:
-                    PrintException()
-                    print(e)
-                    logging.error(
-                        'Exception {} in datagenerator with: image: {} or mask: {}'.format(str(e), self.IMAGES[ID],
-                                                                                           self.LABELS[ID]))
+            except Exception as e:
+                PrintException()
+                print(e)
+                logging.error(
+                    'Exception {} in datagenerator with: image: {} or mask: {}'.format(str(e), self.IMAGES[ID],
+                                                                                       self.LABELS[ID]))
 
         for i, future in enumerate(as_completed(futures)):
             # use the indexes to order the batch
@@ -1380,7 +1378,7 @@ class PhaseMaskWindowGenerator(DataGenerator):
         zeros = np.zeros((*x.shape[:-1], 3), dtype=np.float32)
         return tuple([[x, x2, zeros], [y, y2, zeros]])
 
-    def __preprocess_one_image__(self, i, ID):
+    def __pre_load_one_image__(self, i, ID):
 
         # --------------- HIST MATCHING REFERENCE VOL--------------
         ref = None
@@ -1396,16 +1394,11 @@ class PhaseMaskWindowGenerator(DataGenerator):
 
         x = self.IMAGES[ID]
 
-
-        # --------------- LOAD THE MODEL INPUT--------------
-        if self.IN_MEMORY:
-            model_inputs = self.IMAGES_SITK[ID]
-            model_m_inputs = self.MASKS_SITK[ID]
-        else:
-            # use the load_masked_img wrapper to enable masking of the images, currently not necessary, but nice to have
-            model_inputs = load_masked_img(sitk_img_f=x, mask=self.MASKING_IMAGE,
-                                           masking_values=self.MASKING_VALUES, replace=self.REPLACE_WILDCARD, maskAll=False)
-            model_m_inputs = load_msk(f_name=x.replace(self.REPLACE_WILDCARD[0], self.REPLACE_WILDCARD[1]), valid_labels=[2])
+        # use the load_masked_img wrapper to enable masking of the images, currently not necessary, but nice to have
+        model_inputs = load_masked_img(sitk_img_f=x, mask=self.MASKING_IMAGE,
+                                       masking_values=self.MASKING_VALUES, replace=self.REPLACE_WILDCARD, maskAll=False)
+        model_m_inputs = load_msk(f_name=x.replace(self.REPLACE_WILDCARD[0], self.REPLACE_WILDCARD[1]),
+                                  valid_labels=[2])
         logging.debug('load and masking took: {:0.3f} s'.format(time() - t1))
         t1 = time()
 
@@ -1421,7 +1414,7 @@ class PhaseMaskWindowGenerator(DataGenerator):
             model_inputs = resample_t_of_4d(model_inputs, t_spacing=t_spacing, interpolation=self.IMG_INTERPOLATION,
                                             ismask=False)
             model_m_inputs = resample_t_of_4d(model_m_inputs, t_spacing=t_spacing, interpolation=self.IMG_INTERPOLATION,
-                                            ismask=False)
+                                              ismask=False)
         else:
             temporal_sampling_factor = 1  # dont scale the indices if we dont resample T
         logging.debug('temp resampling took: {:0.3f} s'.format(time() - t1))
@@ -1444,7 +1437,7 @@ class PhaseMaskWindowGenerator(DataGenerator):
             idx = get_phases_as_idx_gcn(x, self.DF_METADATA, temporal_sampling_factor, len(model_inputs))
         logging.debug('index loading took: {:0.3f} s'.format(time() - t1))
         # logging.debug('transposed: \n{}'.format(onehot))
-        #self.__plot_state_if_debug__(img=model_inputs[len(model_inputs) // 2], start_time=t0, step='raw')
+        # self.__plot_state_if_debug__(img=model_inputs[len(model_inputs) // 2], start_time=t0, step='raw')
         t1 = time()
 
         # --------------- SPATIAL RESAMPLING-------------
@@ -1478,15 +1471,15 @@ class PhaseMaskWindowGenerator(DataGenerator):
                                     resample_3D(sitk_img=x[0],
                                                 size=x[1],
                                                 spacing=target_spacing,
-                                                interpolate=self.IMG_INTERPOLATION), # sitk.sitkLinear
+                                                interpolate=self.IMG_INTERPOLATION),  # sitk.sitkLinear
                                     zip(model_inputs, new_size_inputs)))
 
             model_m_inputs = list(map(lambda x:
-                                    resample_3D(sitk_img=x[0],
-                                                size=x[1],
-                                                spacing=target_spacing,
-                                                interpolate=self.MSK_INTERPOLATION),  # sitk.nearest
-                                    zip(model_m_inputs, new_size_inputs)))
+                                      resample_3D(sitk_img=x[0],
+                                                  size=x[1],
+                                                  spacing=target_spacing,
+                                                  interpolate=self.MSK_INTERPOLATION),  # sitk.nearest
+                                      zip(model_m_inputs, new_size_inputs)))
 
         logging.debug('Spacing after resample: {}'.format(model_inputs[0].GetSpacing()))
         logging.debug('Size after resample: {}'.format(model_inputs[0].GetSize()))
@@ -1495,23 +1488,11 @@ class PhaseMaskWindowGenerator(DataGenerator):
 
         # --------------- CONTINUE WITH ND-ARRAYS --------------
         # transform to nda for further processing
-        """shape_ = (len(model_inputs), *list(reversed(model_inputs[0].GetSize())))
-        shape_m_ = (len(model_inputs), *list(reversed(model_m_inputs[0].GetSize())))
-        model_inputs_ = np.zeros(shape_, dtype=np.float32)
-        model_m_inputs_ = np.zeros(shape_m_, dtype=np.float32)
-        for s, elem in enumerate(model_inputs):
-            model_inputs_[s]=sitk.GetArrayFromImage(elem)
-        model_inputs = model_inputs_"""
-        #model_inputs = np.stack([sitk.GetArrayViewFromImage(elem) for elem in model_inputs], axis=0)
         model_inputs = np.stack(list(map(lambda x: sitk.GetArrayViewFromImage(x), model_inputs)), axis=0)
-        """for s, elem in enumerate(model_m_inputs):
-            model_m_inputs_[s]=sitk.GetArrayFromImage(elem)
-        model_m_inputs = model_m_inputs_"""
-        #model_m_inputs = np.stack([sitk.GetArrayViewFromImage(elem) for elem in model_m_inputs], axis=0)
         model_m_inputs = np.stack(list(map(lambda x: sitk.GetArrayViewFromImage(x), model_m_inputs)), axis=0)
         logging.debug('transform to nda took: {:0.3f} s'.format(time() - t1))
         t1 = time()
-        #self.__plot_state_if_debug__(img=model_inputs[len(model_inputs) // 2], start_time=t1, step='resampled')
+        # self.__plot_state_if_debug__(img=model_inputs[len(model_inputs) // 2], start_time=t1, step='resampled')
 
         # --------------- HIST MATCHING--------------
         if apply_hist_matching:
@@ -1537,6 +1518,24 @@ class PhaseMaskWindowGenerator(DataGenerator):
         logging.debug('windowing slicing took: {:0.3f} s'.format(time() - t1))
         t1 = time()
 
+        # clip, pad/crop and normalise
+        combined = np.stack(combined, axis=-1)
+        combined_m = np.stack(combined_m, axis=-1)
+        logging.debug('stacking took: {:0.3f} s'.format(time() - t1))
+        t1 = time()
+        return combined, combined_m, i
+
+    def __preprocess_one_image__(self, i, ID):
+        t0 = time()
+        t1 = time()
+        # --------------- LOAD THE MODEL INPUT--------------
+        if self.IN_MEMORY:
+            combined, combined_m = self.IMAGES_SITK[ID], self.MASKS_SITK[ID]
+        else:
+            combined, combined_m, i = self.__pre_load_one_image__(i,ID)
+
+        # continue with live data modifications, such as augmentation/normalisation and standardisation
+
         # --------------- Image Augmentation, this is done in 2D -------------
         if self.AUGMENT and random.random() <= self.AUGMENT_PROB:
             assert False, 'augmentation is not implemented for mask and image generator.'
@@ -1552,17 +1551,6 @@ class PhaseMaskWindowGenerator(DataGenerator):
             #self.__plot_state_if_debug__(img=combined[self.INPUT_T_ELEM][0], start_time=t1, step='augmented')
             logging.debug('augmentation took: {:0.3f} s'.format(time() - t1))
             t1 = time()
-
-        # clip, pad/crop and normalise
-        combined = np.stack(combined, axis=-1)
-        combined_m = np.stack(combined_m, axis=-1)
-        logging.debug('stacking took: {:0.3f} s'.format(time() - t1))
-        t1 = time()
-
-        """combined = pad_and_crop(combined, target_shape=(self.PHASES, *self.DIM, self.IMG_CHANNELS))
-        combined_m = pad_and_crop(combined_m, target_shape=(self.PHASES, *self.DIM, self.IMG_CHANNELS))
-        logging.debug('pad/crop took: {:0.3f} s'.format(time() - t1))
-        t1 = time()"""
 
         if not self.yield_masks: # clip and normalisation is faster on cropped nda
             combined = clip_quantile(combined, .9999)

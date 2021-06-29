@@ -3,7 +3,7 @@ import numpy as np
 
 
 
-def train_fold(config, in_memory=False):
+def train_fold(config, in_memory=True):
     # make sure all neccessary params in config are set
     # if not set them with default values
     from src.utils.Tensorflow_helper import choose_gpu_by_id
@@ -106,9 +106,9 @@ def train_fold(config, in_memory=False):
     info('Done!')
 
     # instantiate the batch generators
-    """n = 10
+    '''n = 10
     x_train_sax = x_train_sax[:n]
-    x_val_sax = x_val_sax[:n]"""
+    x_val_sax = x_val_sax[:n]'''
     #config['BATCHSIZE'] = 1
     batch_generator = PhaseMaskWindowGenerator(x_train_sax, x_train_sax, config=config, in_memory=in_memory)
     val_config = config.copy()
