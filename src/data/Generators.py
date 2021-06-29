@@ -988,7 +988,7 @@ class PhaseWindowGenerator(DataGenerator):
         # in memory training for the cluster
         if self.IN_MEMORY:
             self.IMAGES_SITK= [load_masked_img(sitk_img_f=x, mask=self.MASKING_IMAGE,
-                                       masking_values=self.MASKING_VALUES, replace=self.REPLACE_WILDCARD, maskAll=False) for x in self.IMAGES]
+                                               masking_values=self.MASKING_VALUES, replace=self.REPLACE_WILDCARD, maskAll=False) for x in self.IMAGES]
 
         # define a random seed for albumentations
         random.seed(config.get('SEED', 42))
@@ -1523,6 +1523,16 @@ class PhaseMaskWindowGenerator(DataGenerator):
         combined_m = np.stack(combined_m, axis=-1)
         logging.debug('stacking took: {:0.3f} s'.format(time() - t1))
         t1 = time()
+
+        if not self.yield_masks: # clip and normalisation is faster on cropped nda
+            combined = clip_quantile(combined, .9999)
+            logging.debug('quantile clipping took: {:0.3f} s'.format(time() - t1))
+            t1 = time()
+
+            combined = normalise_image(combined, normaliser=self.SCALER)  # normalise per 4D
+            logging.debug('normalisation took: {:0.3f} s'.format(time() - t1))
+            t1 = time()
+
         return combined, combined_m, i
 
     def __preprocess_one_image__(self, i, ID):
@@ -1552,14 +1562,7 @@ class PhaseMaskWindowGenerator(DataGenerator):
             logging.debug('augmentation took: {:0.3f} s'.format(time() - t1))
             t1 = time()
 
-        if not self.yield_masks: # clip and normalisation is faster on cropped nda
-            combined = clip_quantile(combined, .9999)
-            logging.debug('quantile clipping took: {:0.3f} s'.format(time() - t1))
-            t1 = time()
 
-            combined = normalise_image(combined, normaliser=self.SCALER)  # normalise per 4D
-            logging.debug('normalisation took: {:0.3f} s'.format(time() - t1))
-            t1 = time()
 
 
         if self.IMG_CHANNELS == 1:
