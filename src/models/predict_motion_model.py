@@ -1,4 +1,4 @@
-
+from src.data.Dataset import save_all_3d_vols_new
 
 
 def pred_fold(config, debug=True):
@@ -154,6 +154,7 @@ def pred_fold(config, debug=True):
             #second_binary = second_binary>=0.2
             second_mask = tf.cast(second_binary, tf.uint8)
             first_mask = tf.cast(first_binary, tf.uint8)
+            vects_full = np.copy(vects)
             second_binary = second_binary[...,0]
             for dim in range(vects.shape[-1]):
                 vects[...,dim][~second_binary] = 0
@@ -163,18 +164,27 @@ def pred_fold(config, debug=True):
             pred_path = os.path.join(config.get('EXP_PATH'), 'pred')
             p = os.path.basename(filename).split('_volume')[0].lower()
             ensure_dir(pred_path)
+
+            volumes = [first_vols[0],
+                       second_vols[0],
+                       moved[0],
+                       moved_m[0],
+                       vects[0],
+                       vects_full[0],
+                       first_mask[0],
+                       second_mask[0],
+                       first_lvmask[0],
+                       second_lvmask[0],
+                       first_vols_full[0],
+                       second_vols[0]]
+
+            suffixes = ['_cmr.nii', '_targetcmr.nii', '_movedcmr.nii', '_movedmask.nii',
+                        '_flow.nii', '_flow_full.nii', '_mask.nii', '_targetmask.nii', '_lvmask.nii',
+                         '_lvtargetmask.nii',
+                         '_cmr_full.nii', '_targetcmr_full.nii'  ]
+
             if debug:
-                save_all_3d_vols(first_vols[0],
-                                 second_vols[0],
-                                 moved[0],
-                                 moved_m[0],
-                                 vects[0],
-                                 first_mask[0],
-                                 second_mask[0],
-                                 first_lvmask[0],
-                                 second_lvmask[0],
-                                 first_vols_full[0],
-                                 second_vols[0],
+                save_all_3d_vols_new(volumes, vol_suffixes=suffixes,
                                  EXP_PATH=pred_path, exp=p)
 
             save_gt_and_pred(gt=second_mask[0], pred=moved_m[0], exp_path=config.get('EXP_PATH'), patient=p)

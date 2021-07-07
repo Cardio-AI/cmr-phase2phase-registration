@@ -1552,7 +1552,7 @@ def get_n_windows_between_phases_from_single4D(nda4d, idx):
 
     # define the motion window --> [t-window,t+window] one of [1,2,3] depending on the temporal resolution/temporal resampling
     idxs_lower = idx
-    idxs_upper = np.roll(idx, -1) # roll to the left side
+    idxs_upper = np.roll(idx, 1) # roll to the left side
     idx = (idxs_lower + idxs_upper)//2
 
     #idxs_lower_pre = idxs_lower-1
@@ -1686,16 +1686,35 @@ def save_all_3d_vols(inputs, outputs, moved, moved_mask, flow, inputs_mask, outp
     _ = [save_3d(outputs_lvmask[...,t], lvsecondmaskname.replace('.nii', '_{}_.nii'.format(t))) for t in
          range(outputs_lvmask.shape[-1])]
     _ = [save_3d(inputs_full[..., t], firstfilename_full.replace('.nii', '_{}_.nii'.format(t))) for t in range(inputs_full.shape[-1])]
-    _ = [save_3d(outputs_full[..., t], secondfilename_full.replace('.nii', '_{}_.nii'.format(t))) for t in
-         range(outputs_full.shape[-1])]
+    _ = [save_3d(outputs_full[..., t], secondfilename_full.replace('.nii', '_{}_.nii'.format(t))) for t in range(outputs_full.shape[-1])]
+
+def save_all_3d_vols_new(volumes, vol_suffixes, EXP_PATH, exp='example_flows'):
+
+    """
+    Parameters
+    ----------
+    volumes : list of nda
+    vol_suffixes :
+    EXP_PATH :
+    exp :
+
+    Returns
+    -------
+
+    """
+
+    assert type(volumes) == type([])
+    assert type(vol_suffixes) == type([])
+    from logging import info
+    experiment_ = '{}/{}'.format(EXP_PATH, exp)
+    info(experiment_)
+    ensure_dir(experiment_)
+    list(map(lambda x : save_phases(x[0], experiment_, x[1]),list(zip(volumes, vol_suffixes))))
 
 
 
-    if save2dplus_t:
-        _ = [save_3d(flow[..., t, :], flowname.replace('.nii', '_sequence_{}_.nii'.format(t))) for t in
-             range(flow.shape[-2])]
-        _ = [save_3d(inputs[..., t, :], firstfilename.replace('.nii', '_sequence_{}_.nii'.format(t))) for t in
-             range(inputs.shape[-2])]
-        _ = [save_3d(outputs[..., t, :], secondfilename.replace('.nii', '_sequence_{}_.nii'.format(t))) for t in
-             range(outputs.shape[-2])]
-
+def save_phases(nda, experiment_, suffix):
+    f_name = os.path.join(experiment_, suffix)
+    # invert the axis
+    nda = np.einsum('tzyxc->cxyzt', nda)
+    _ = [save_3d(nda[..., t], f_name.replace('.nii', '_{}_.nii'.format(t))) for t in range(nda.shape[-1])]
