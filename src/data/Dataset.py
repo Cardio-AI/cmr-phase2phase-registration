@@ -1552,7 +1552,7 @@ def get_n_windows_between_phases_from_single4D(nda4d, idx):
 
     # define the motion window --> [t-window,t+window] one of [1,2,3] depending on the temporal resolution/temporal resampling
     idxs_lower = idx
-    idxs_upper = np.roll(idx, 1) # roll to the left side
+    idxs_upper = np.roll(idx, -1) # roll to the left side
     idx = (idxs_lower + idxs_upper)//2
 
     #idxs_lower_pre = idxs_lower-1
@@ -1600,7 +1600,7 @@ def get_n_windows_between_phases_from_single4D(nda4d, idx):
                                                        copy_direction = True),[t_lower, t, t_upper]))
 
     else:
-        return [t_lower, t, t_upper]
+        return [t_upper, t, t_lower]
 
 
 def save_3d(nda, fname, isVector=False):

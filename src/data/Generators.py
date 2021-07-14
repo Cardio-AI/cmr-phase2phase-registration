@@ -1406,6 +1406,7 @@ class PhaseMaskWindowGenerator(DataGenerator):
         # resample the temporal resolution
         # if AUGMENT_TEMP --> add an temporal augmentation factor within the range given by: AUGMENT_TEMP_RANGE
         t_spacing = self.T_SPACING
+        spatial_sampling_factor = model_inputs.GetSpacing()[-2] / self.SPACING[0]
         if self.AUGMENT_TEMP: t_spacing = t_spacing + random.randint(self.AUGMENT_TEMP_RANGE[0],
                                                                      self.AUGMENT_TEMP_RANGE[1])
         logging.debug('t-spacing: {}'.format(t_spacing))
@@ -1478,7 +1479,7 @@ class PhaseMaskWindowGenerator(DataGenerator):
                                       resample_3D(sitk_img=x[0],
                                                   size=x[1],
                                                   spacing=target_spacing,
-                                                  interpolate=self.MSK_INTERPOLATION),  # sitk.nearest
+                                                  interpolate=self.IMG_INTERPOLATION),  # sitk.nearest
                                       zip(model_m_inputs, new_size_inputs)))
 
         logging.debug('Spacing after resample: {}'.format(model_inputs[0].GetSpacing()))
@@ -1490,6 +1491,15 @@ class PhaseMaskWindowGenerator(DataGenerator):
         # transform to nda for further processing
         model_inputs = np.stack(list(map(lambda x: sitk.GetArrayViewFromImage(x), model_inputs)), axis=0)
         model_m_inputs = np.stack(list(map(lambda x: sitk.GetArrayViewFromImage(x), model_m_inputs)), axis=0)
+
+        # Create a sparse mask from the interpolated/resampled mask, by this we drop the interpolated spatial slices and replace them with zero
+        masks_given = np.where(model_m_inputs.sum(axis=(1, 2, 3)) > 0)[0]
+        scaled = masks_given * spatial_sampling_factor
+        scaled = np.round(scaled).astype(int)
+        temp = np.zeros_like(model_m_inputs, dtype=np.float32)
+        temp[scaled] = model_m_inputs[scaled]
+        model_m_inputs = temp
+
         logging.debug('transform to nda took: {:0.3f} s'.format(time() - t1))
         t1 = time()
         # self.__plot_state_if_debug__(img=model_inputs[len(model_inputs) // 2], start_time=t1, step='resampled')

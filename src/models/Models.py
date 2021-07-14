@@ -289,7 +289,7 @@ def create_RegistrationModel_inkl_mask(config):
 
         indicies = list(tf.range(len(input_vols)))
         zipped = list(zip(input_vols, indicies))
-        random.shuffle(zipped)
+        #random.shuffle(zipped)
         input_vols_shuffled, indicies = zip(*zipped)
         pre_flows = [unet(vol) for vol in input_vols_shuffled]
         flows= [Conv_layer(vol) for vol in pre_flows]
@@ -313,7 +313,7 @@ def create_RegistrationModel_inkl_mask(config):
         from src.utils.Metrics import dice_coef_loss
 
         losses = [MSE_().loss, dice_coef_loss, Grad('l2').loss]
-        weights = [image_loss_weight, image_loss_weight, reg_loss_weight]
+        weights = [image_loss_weight, 0.1, reg_loss_weight]
         model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=learning_rate), loss=losses, loss_weights=weights)
 
     return model
