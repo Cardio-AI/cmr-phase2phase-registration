@@ -30,6 +30,8 @@ def meandiff( y_true, y_pred, apply_sum=True, apply_average=True):
 
     """
     #print(y_true.shape)
+    if len(y_true) == 3: # multi input/output model
+        y_true, y_pred = y_true[0], y_pred[0]
     y_true, y_len_msk = tf.unstack(y_true,2,axis=1)
     y_pred, _ = tf.unstack(y_pred,2,axis=1)
 
@@ -311,7 +313,7 @@ class MSE(tf.keras.losses.Loss):
                 y_true = y_msk * y_true
                 y_pred = y_msk * y_pred
 
-        return tf.keras.losses.mse(y_true, y_pred) #* y_msk[...,0]
+        return tf.reduce_mean(tf.keras.losses.mse(y_true, y_pred)) #* y_msk[...,0]
 
 def mse_wrapper(y_true,y_pred):
     y_true, y_len = tf.unstack(y_true,num=2, axis=1)

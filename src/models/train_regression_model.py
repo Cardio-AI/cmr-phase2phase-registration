@@ -1,3 +1,5 @@
+from src.data.Generators import PhaseRegressionGenerator_v2
+from src.models.Models import create_PhaseRegressionModel_v2
 
 
 def train_fold(config):
@@ -51,7 +53,7 @@ def train_fold(config):
 
     DATA_PATH_SAX = config.get('DATA_PATH_SAX')
     DF_FOLDS = config.get('DF_FOLDS')
-    DF_META = config.get('DF_META', '/mnt/ssd/data/gcn/02_imported_4D_unfiltered/SAx_3D_dicomTags_phase')
+    DF_META = config.get('DF_META', '/mnt/ssd/data/gcn/02_imported_4D_unfiltered/SAx_3D_dicomTags_phase.csv')
     EPOCHS = config.get('EPOCHS')
 
     Console_and_file_logger(path=EXP_PATH, log_lvl=logging.INFO)
@@ -96,17 +98,17 @@ def train_fold(config):
 
     # instantiate the batchgenerators
 
-    batch_generator = PhaseRegressionGenerator(x_train_sax, x_train_sax, config=config)
+    batch_generator = PhaseRegressionGenerator_v2(x_train_sax, x_train_sax, config=config)
     val_config = config.copy()
     val_config['AUGMENT'] = False
     val_config['AUGMENT_PHASES'] = False
     val_config['HIST_MATCHING'] = False
     val_config['AUGMENT_TEMP'] = False
     # val_config['RESAMPLE_T'] = False # this could yield phases which does not fit into the given dim
-    validation_generator = PhaseRegressionGenerator(x_val_sax, x_val_sax, config=val_config)
+    validation_generator = PhaseRegressionGenerator_v2(x_val_sax, x_val_sax, config=val_config)
 
     # get model
-    model = create_PhaseRegressionModel(config)
+    model = create_PhaseRegressionModel_v2(config)
 
     # write the model summary to a txt file
     with open(os.path.join(EXP_PATH, 'model_summary.txt'), 'w') as fh:
@@ -131,7 +133,7 @@ def train_fold(config):
         epochs=EPOCHS,
         callbacks=get_callbacks(config, batch_generator, validation_generator),
         initial_epoch=initial_epoch,
-        max_queue_size=config.get('QUEUE_SIZE',40),
+        max_queue_size=config.get('QUEUE_SIZE',2),
         # use_multiprocessing=False,
         # workers=12,
         verbose=2)
@@ -191,7 +193,7 @@ def main(args=None):
         if args.data:  # if we specified a different data path (training from workspace or node temporal disk)
             config['DATA_PATH_SAX'] = os.path.join(args.data, "sax/")
             config['DF_FOLDS'] = os.path.join(args.data, "df_kfold.csv")
-            config['DF_META'] = os.path.join(args.data, "SAx_3D_dicomTags_phase")
+            config['DF_META'] = os.path.join(args.data, "SAx_3D_dicomTags_phase.csv")
         # we dont need to initialise this config, as it should already have the correct formatings,
         # The fold configs will be saved withn each fold run
         # config = init_config(config=config, save=False)
@@ -310,7 +312,7 @@ if __name__ == "__main__":
     parser.add_argument('-sax', action='store', default='/mnt/ssd/data/gcn/02_imported_4D_unfiltered/sax/')
     parser.add_argument('-folds', action='store', default='/mnt/ssd/data/gcn/02_imported_4D_unfiltered/df_kfold.csv')
     parser.add_argument('-meta', action='store',
-                        default='/mnt/ssd/data/gcn/02_imported_4D_unfiltered/SAx_3D_dicomTags_phase')
+                        default='/mnt/ssd/data/gcn/02_imported_4D_unfiltered/SAx_3D_dicomTags_phase.csv')
     parser.add_argument('-exp', action='store', default='temp_exp')
     parser.add_argument('-add_lstm', action='store_true', default=False)
     parser.add_argument('-lstm_units', action='store', default=64, type=int)

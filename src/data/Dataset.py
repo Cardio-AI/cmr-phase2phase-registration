@@ -1551,26 +1551,18 @@ def get_n_windows_between_phases_from_single4D(nda4d, idx):
     y_len = nda4d.shape[0]
 
     # define the motion window --> [t-window,t+window] one of [1,2,3] depending on the temporal resolution/temporal resampling
-    idxs_lower = idx
-    idxs_upper = np.roll(idx, -1) # roll to the left side
-    idx = (idxs_lower + idxs_upper)//2
-
-    #idxs_lower_pre = idxs_lower-1
-    #idxs_lower_post = idxs_lower + 1
+    idxs_phases = idx
+    idxs_shift_to_left = np.roll(idx, -1) # roll to the left side
+    idx = (idxs_phases + idxs_shift_to_left)//2
 
     debug('idx: {}'.format(idx))
     # fake ring functionality with mod
     idx = np.mod(idx, y_len)
-    idxs_lower = np.mod(idxs_lower, y_len) # this is faster in the generator, than the tf functions
-    idxs_upper = np.mod(idxs_upper, y_len)
+    idxs_phases = np.mod(idxs_phases, y_len) # this is faster in the generator, than the tf functions
+    idxs_shift_to_left = np.mod(idxs_shift_to_left, y_len)
 
-    #idxs_lower_pre = np.mod(idxs_lower_pre, y_len)
-    #idxs_lower_post = np.mod(idxs_lower_post, y_len)
-
-    #idxs_lower = tf.math.mod(idxs_lower, y_len)
-    #idxs_upper = tf.math.mod(idxs_upper, y_len)
-    debug('idx lower: {}'.format(idxs_lower))
-    debug('idx upper: {}'.format(idxs_upper))
+    debug('idx lower: {}'.format(idxs_phases))
+    debug('idx shift: {}'.format(idxs_shift_to_left))
     logging.debug('mod took: {:0.3f} s'.format(time() - t1))
     t1 = time()
 
@@ -1581,26 +1573,22 @@ def get_n_windows_between_phases_from_single4D(nda4d, idx):
     # with: (batch,phase,z,x,y,1)
     # we need to fill the dimensions from behind by [...,tf.newaxis]
     # and define the number of leading batch dimensions
-    #t_lower = tf.gather_nd(nda4d, idxs_lower[..., tf.newaxis], batch_dims=0)
-    #t_upper = tf.gather_nd(nda4d, idxs_upper[..., tf.newaxis], batch_dims=0)
-    #t_lower_pre = np.squeeze(np.take(nda4d, indices=idxs_lower_pre[..., np.newaxis], axis=0))
-    #t_lower_post = np.squeeze(np.take(nda4d, indices=idxs_lower_post[..., np.newaxis], axis=0))
 
-    t= np.squeeze(np.take(nda4d, indices=idx[..., np.newaxis], axis=0))
-    t_lower = np.squeeze(np.take(nda4d, indices=idxs_lower[..., np.newaxis], axis=0))
-    t_upper = np.squeeze(np.take(nda4d, indices=idxs_upper[..., np.newaxis], axis=0))
-    logging.debug('first vols shape: {}'.format(t_lower.shape))
+    t_middle = np.squeeze(np.take(nda4d, indices=idx[..., np.newaxis], axis=0))
+    t_phases = np.squeeze(np.take(nda4d, indices=idxs_phases[..., np.newaxis], axis=0))
+    t_shift_to_left = np.squeeze(np.take(nda4d, indices=idxs_shift_to_left[..., np.newaxis], axis=0))
+    logging.debug('first vols shape: {}'.format(t_phases.shape))
     logging.debug('gather nd took: {:0.3f} s'.format(time() - t1))
     if return_sitk: # return sitk images
-        t_lower, t, t_upper = sitk.GetImageFromArray(t_lower), sitk.GetImageFromArray(t), sitk.GetImageFromArray(t_upper)
+        t_phases, t_middle, t_shift_to_left = sitk.GetImageFromArray(t_phases), sitk.GetImageFromArray(t_middle), sitk.GetImageFromArray(t_shift_to_left)
         return list(map(lambda x: copy_meta_and_save(new_image=x,
                                                        reference_sitk_img=sitk_save,
                                                        full_filename = None,
                                                        overwrite_spacing = None,
-                                                       copy_direction = True),[t_lower, t, t_upper]))
+                                                       copy_direction = True),[t_phases, t_middle, t_shift_to_left]))
 
     else:
-        return [t_upper, t, t_lower]
+        return [t_shift_to_left, t_middle, t_phases]
 
 
 def save_3d(nda, fname, isVector=False):

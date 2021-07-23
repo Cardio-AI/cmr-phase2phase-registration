@@ -31,36 +31,10 @@ def get_callbacks(config=None, batch_generator=None, validation_generator=None, 
     callbacks = []
     ensure_dir(config['MODEL_PATH'])
 
-    if batch_generator:
-
-        if config.get('SAVE_LEARNING_PROGRESS_AS_PNG', False):
-            callbacks.append(
-                ImageSaver(image_dir='reports/figures/{}/'.format(config.get('EXPERIMENT'), 'temp'),
-                             image_freq=config.get('SAVE_LEARNING_PROGRESS_FREQUENCY', 2),
-                             feed_inputs_4_display=feed_inputs_4_tensorboard(config, batch_generator,
-                                                                             validation_generator),
-                             flow=config.get('FLOW', False)))
-        if config.get('SAVE_LEARNING_PROGRESS_AS_TF', False):
-            callbacks.append(
-            PhaseRegressionCallback(log_dir=config['TENSORBOARD_PATH'],
-                             image_freq= config.get('SAVE_LEARNING_PROGRESS_FREQUENCY', 2),
-                             feed_inputs_4_display=feed_inputs_4_tensorboard(config, batch_generator,
-                                                                             validation_generator),
-                             ))
-        callbacks.append(
-            WindowMotionCallback(log_dir=config['TENSORBOARD_PATH'],
-                                image_freq=config.get('SAVE_LEARNING_PROGRESS_FREQUENCY', 2),
-                                feed_inputs_4_display=feed_inputs_4_tensorboard(config, batch_generator,
-                                                                                    validation_generator),
-                                take_t_elem=config.get('INPUT_T_ELEM', 0)
-                                    ))
-
-    # dont save the test models
-    """callbacks.append(
-        WeightsSaver(config.get('MODEL_PATH', 'temp/models'),
-                     model_freq=2))"""
+    # add these callbacks for each training
     callbacks.append(
-        ModelCheckpoint(os.path.join(config['MODEL_PATH'], 'model.h5'), # could also be 'model.h5 to save only the weights
+        ModelCheckpoint(os.path.join(config['MODEL_PATH'], 'model.h5'),
+                        # could also be 'model.h5 to save only the weights
                         verbose=1,
                         save_best_only=True,
                         save_weights_only=True,
@@ -79,12 +53,42 @@ def get_callbacks(config=None, batch_generator=None, validation_generator=None, 
 
     callbacks.append(
         LRTensorBoard(log_dir=config.get('TENSORBOARD_PATH', 'temp/tf_log'),
-                                               histogram_freq=0,
-                                               write_graph=False,
-                                               write_images=False,
-                                               update_freq='epoch',
-                                               profile_batch=0,
-                                               embeddings_freq=0))
+                      histogram_freq=0,
+                      write_graph=False,
+                      write_images=False,
+                      update_freq='epoch',
+                      profile_batch=0,
+                      embeddings_freq=0))
+
+    # if we provide a batch_generator we assume to that we want to observe the trainings progress
+    # by intermediate predictions saved ad png or into the tensorboard
+    if batch_generator:
+
+        # depending on the task we might have different interfaces and imge, flowfield, onehot vectors etc.
+        # standard behaviour, if no flags are given: dont add them!
+        if config.get('SAVE_LEARNING_PROGRESS_AS_PNG', False):
+            callbacks.append(
+                ImageSaver(image_dir='reports/figures/{}/'.format(config.get('EXPERIMENT'), 'temp'),
+                           image_freq=config.get('SAVE_LEARNING_PROGRESS_FREQUENCY', 2),
+                           feed_inputs_4_display=feed_inputs_4_tensorboard(config, batch_generator,
+                                                                           validation_generator),
+                           flow=config.get('FLOW', False)))
+        if config.get('SAVE_LEARNING_PROGRESS_AS_TF', False):
+            callbacks.append(
+                PhaseRegressionCallback(log_dir=config['TENSORBOARD_PATH'],
+                                        image_freq=config.get('SAVE_LEARNING_PROGRESS_FREQUENCY', 2),
+                                        feed_inputs_4_display=feed_inputs_4_tensorboard(config, batch_generator,
+                                                                                        validation_generator),
+                                        ))
+        if config.get('SAVE_LEARNING_P2P_TF'):
+            callbacks.append(
+                WindowMotionCallback(log_dir=config['TENSORBOARD_PATH'],
+                                     image_freq=config.get('SAVE_LEARNING_PROGRESS_FREQUENCY', 2),
+                                     feed_inputs_4_display=feed_inputs_4_tensorboard(config, batch_generator,
+                                                                                     validation_generator),
+                                     take_t_elem=config.get('INPUT_T_ELEM', 0)
+                                     ))
+
     if config.get('POLY_LR_DECAY', False):
         callbacks.append(
             LearningRateScheduler(schedule=
@@ -94,7 +98,7 @@ def get_callbacks(config=None, batch_generator=None, validation_generator=None, 
                                   verbose=1)
         )
 
-    if metrics: # optimizer will be changed to SGD, if adam does not improve any more
+    if metrics:  # optimizer will be changed to SGD, if adam does not improve any more
         # changer will call this method without metrics to avoid recursive learning
         logging.info('optimizer will be changed to SGD after adam does not improve any more')
         # idea based on: https://arxiv.org/pdf/1712.07628.pdf
@@ -109,15 +113,14 @@ def get_callbacks(config=None, batch_generator=None, validation_generator=None, 
                              monitor=config.get('MONITOR_FUNCTION', 'loss'),
                              mode=config.get('MONITOR_MODE', 'min')
                              )
-    )
-    else: # no metrics given, use early stopping callback to stop the training after 20 epochs
+        )
+    else:  # no metrics given, use early stopping callback to stop the training after 20 epochs
         callbacks.append(
             EarlyStopping(patience=config.get('EARLY_STOPPING_PATIENCE', 10),
                           verbose=1,
                           monitor=config.get('MONITOR_FUNCTION', 'loss'),
                           mode=config.get('MONITOR_MODE', 'min'))
         )
-
 
     return callbacks
 
@@ -230,8 +233,6 @@ class TrainValTensorBoard(TensorBoard):
         self.val_writer.close()
 
 
-
-
 from tensorflow.keras.callbacks import LearningRateScheduler
 
 
@@ -242,6 +243,7 @@ class PolynomialDecay:
         self.maxEpochs = maxEpochs
         self.initAlpha = initAlpha
         self.power = power
+
     def __call__(self, epoch):
         # compute the new learning rate based on polynomial decay
         decay = (1 - (epoch / float(self.maxEpochs))) ** self.power
@@ -250,13 +252,13 @@ class PolynomialDecay:
         # return the new learning rate
         return float(alpha)
 
-class OptimizerChanger(EarlyStopping):
 
+class OptimizerChanger(EarlyStopping):
     """
     Callback to switch the optimizer instead of early stopping the training
     """
 
-    def __init__(self, on_train_end, train_generator, val_generator, config, metrics,  **kwargs):
+    def __init__(self, on_train_end, train_generator, val_generator, config, metrics, **kwargs):
         self.do_on_train_end = on_train_end
         self.train_generator = train_generator
         self.val_generator = val_generator
@@ -283,7 +285,9 @@ class OptimizerChanger(EarlyStopping):
         """
 
         super(OptimizerChanger, self).on_train_end(logs)
-        self.do_on_train_end(self.config, self.train_generator, self.val_generator, self.model, self.metrics, self.current_epoch)
+        self.do_on_train_end(self.config, self.train_generator, self.val_generator, self.model, self.metrics,
+                             self.current_epoch)
+
 
 def finetune_with_SGD(config, train_g, val_g, model, metrics, epoch_init):
     """
@@ -297,9 +301,9 @@ def finetune_with_SGD(config, train_g, val_g, model, metrics, epoch_init):
     """
     import tensorflow as tf
     loss_f = config.get('LOSS_FUNCTION', tf.keras.metrics.binary_crossentropy)
-    #loss_f = dice_coef_labels_loss
+    # loss_f = dice_coef_labels_loss
     lr = config.get('LEARNING_RATE', 0.001)
-    #opt = tf.keras.optimizers.Adam(lr=lr)
+    # opt = tf.keras.optimizers.Adam(lr=lr)
     opt = tf.keras.optimizers.SGD(name='SGD')
     model.compile(optimizer=opt, loss=loss_f, metrics=metrics)
     model.fit(
@@ -312,6 +316,7 @@ def finetune_with_SGD(config, train_g, val_g, model, metrics, epoch_init):
         initial_epoch=epoch_init,
         workers=0,
         verbose=1)
+
 
 class SGDRScheduler(tf.keras.callbacks.Callback):
     '''Cosine annealing learning rate scheduler with periodic restarts.
@@ -337,6 +342,7 @@ class SGDRScheduler(tf.keras.callbacks.Callback):
     # References
         Original paper: http://arxiv.org/abs/1608.03983
     '''
+
     def __init__(self,
                  min_lr,
                  max_lr,
@@ -364,7 +370,8 @@ class SGDRScheduler(tf.keras.callbacks.Callback):
 
     def on_train_begin(self, logs={}):
         '''Initialize the learning rate to the minimum value at the start of training.'''
-        self.steps_per_epoch = self.params['steps'] if self.params['steps'] is not None else round(self.params['samples'] / self.params['batch_size'])
+        self.steps_per_epoch = self.params['steps'] if self.params['steps'] is not None else round(
+            self.params['samples'] / self.params['batch_size'])
         logs = logs or {}
         tf.keras.backend.set_value(self.model.optimizer.lr, self.max_lr)
 
@@ -391,6 +398,7 @@ class SGDRScheduler(tf.keras.callbacks.Callback):
         '''Set weights to the values from the end of the most recent cycle for best performance.'''
         self.model.set_weights(self.best_weights)
 
+
 class CustomImageWritertf2(Callback):
 
     # Keras Callback for training progress visualisation in the Tensorboard
@@ -401,7 +409,8 @@ class CustomImageWritertf2(Callback):
     # original code from:
     # https://stackoverflow.com/questions/43784921/how-to-display-custom-images-in-tensorboard-using-keras?rq=1
 
-    def __init__(self, log_dir='./logs/tmp/', image_freq=10, feed_inputs_4_display=None, flow=False, dpi=200,f_size=(5,5), interpol='bilinear', force_plot_first_n_epochs=1):
+    def __init__(self, log_dir='./logs/tmp/', image_freq=10, feed_inputs_4_display=None, flow=False, dpi=200,
+                 f_size=(5, 5), interpol='bilinear', force_plot_first_n_epochs=1):
 
         """
         This callback gets a dict with key: x,y entries
@@ -502,12 +511,16 @@ class CustomImageWritertf2(Callback):
                             if not self.flow:
                                 tensorflow.summary.image(name='plot/{}/{}/_prediction'.format(key, i),
                                                          data=self.make_image(
-                                                             show_slice(img=x[i], mask=pred, show=False, f_size=self.f_size, dpi=self.dpi, interpol=self.interpol)),
+                                                             show_slice(img=x[i], mask=pred, show=False,
+                                                                        f_size=self.f_size, dpi=self.dpi,
+                                                                        interpol=self.interpol)),
                                                          step=epoch)
 
                                 tensorflow.summary.image(name='plot/{}/{}/_ground_truth'.format(key, i),
                                                          data=self.make_image(
-                                                             show_slice(img=x[i], mask=y[i], show=False, f_size=self.f_size, dpi=self.dpi, interpol=self.interpol)),
+                                                             show_slice(img=x[i], mask=y[i], show=False,
+                                                                        f_size=self.f_size, dpi=self.dpi,
+                                                                        interpol=self.interpol)),
                                                          step=0)
                             pred_i += 1
                         if len(x.shape) == 5:  # work with 3d data
@@ -519,15 +532,19 @@ class CustomImageWritertf2(Callback):
                                     if not self.flow:
                                         tensorflow.summary.image(name='plot/{}/{}/_prediction/{}'.format(key, i, z),
                                                                  data=self.make_image(
-                                                                     show_slice(img=x[i][z], mask=pred, show=False, f_size=self.f_size, dpi=self.dpi, interpol=self.interpol)),
+                                                                     show_slice(img=x[i][z], mask=pred, show=False,
+                                                                                f_size=self.f_size, dpi=self.dpi,
+                                                                                interpol=self.interpol)),
                                                                  step=epoch)
 
                                         tensorflow.summary.image(name='plot/{}/{}/ground_truth{}'.format(key, i, z),
                                                                  data=self.make_image(
-                                                                     show_slice(img=x[i][z], mask=y[i][z], show=False, f_size=self.f_size, dpi=self.dpi, interpol=self.interpol)),
+                                                                     show_slice(img=x[i][z], mask=y[i][z], show=False,
+                                                                                f_size=self.f_size, dpi=self.dpi,
+                                                                                interpol=self.interpol)),
                                                                  step=0)
 
-                                    else: # work with
+                                    else:  # work with
                                         tensorflow.summary.image(name='plot/{}/{}/_prediction/{}'.format(key, i, z),
                                                                  data=self.make_image(
                                                                      normalise_image(pred)),
@@ -544,7 +561,6 @@ class CustomImageWritertf2(Callback):
             # self.writer.add_summary(tf.Summary(value=summary_str), global_step=self.e)
 
 
-
 class WindowMotionCallback(Callback):
 
     # Keras Callback for training progress visualisation in the Tensorboard
@@ -555,7 +571,8 @@ class WindowMotionCallback(Callback):
     # original code from:
     # https://stackoverflow.com/questions/43784921/how-to-display-custom-images-in-tensorboard-using-keras?rq=1
 
-    def __init__(self, log_dir='./logs/tmp/', image_freq=10, feed_inputs_4_display=None, dpi=200,f_size=(5,5), interpol='bilinear', force_plot_first_n_epochs=20, take_t_elem=0):
+    def __init__(self, log_dir='./logs/tmp/', image_freq=10, feed_inputs_4_display=None, dpi=200, f_size=(5, 5),
+                 interpol='bilinear', force_plot_first_n_epochs=20, take_t_elem=0):
 
         """
         This callback gets a dict with key: x,y entries
@@ -600,11 +617,11 @@ class WindowMotionCallback(Callback):
 
         """
         Create a tf.Summary.Image from an ndarray
+        Converts the matplotlib plot specified by 'figure' to a PNG image and
+          returns it. The supplied figure is closed and inaccessible after this call.
         :param numpy_img: Greyscale image with shape (x, y, 1)
         :return:
         """
-        """Converts the matplotlib plot specified by 'figure' to a PNG image and
-          returns it. The supplied figure is closed and inaccessible after this call."""
         # Save the plot to a PNG in memory.
         buf = io.BytesIO()
         plt.savefig(buf, format='png')
@@ -651,7 +668,7 @@ class WindowMotionCallback(Callback):
                         movings, vects = pred_
                     else:
                         movings, moving_m, vects = pred_
-                    #logging.info(predictions.shape)
+                    # logging.info(predictions.shape)
                     # xs and ys have the shape n, x, y, 1, they are grouped by the key
                     # count the samples provided by each key to sort them
 
@@ -659,35 +676,39 @@ class WindowMotionCallback(Callback):
                     b = 0
                     # one plot per phase
                     for p in range(len(phases)):
+
+                        # Define the plot grid size
+                        nrows = 3
+                        ncols = 7
+                        fig, axes = plt.subplots(nrows, ncols, figsize=(14, 7))
+                        # Slice the
                         first_vol, second_vol = x[b][0][p], y[b][0][p]
                         first_m, second_m = x[1][0][p], y[1][0][p]
                         if first_vol.shape[-1] == 3:
-                            first_vol= first_vol[...,self.take_t_elem][...,np.newaxis]
+                            first_vol = first_vol[..., self.take_t_elem][..., np.newaxis]
                         if first_m.shape[-1] == 3:
                             first_m = first_m[..., self.take_t_elem]
                         moved, moved_m, vect = movings[b][p], moving_m[b][p], vects[b][p]
-                        nrows = 3
-                        ncols = 7
-                        fig, axes = plt.subplots(nrows, ncols, figsize=(14,7))
                         spatial_slices = first_vol.shape[0]
                         # pick one upper, middle and lower slice as example
-                        picks = (np.array([0.6,0.4,0.2]) * spatial_slices).astype(int)
+                        picks = (np.array([0.6, 0.4, 0.2]) * spatial_slices).astype(int)
                         y_label = ['Basal', 'Mid', 'Apex']
                         from tensorflow.keras.metrics import mse
-                        mse_1 = np.mean((first_vol - second_vol)**2)
-                        mse_2 = np.mean((moved - second_vol)**2)
-                        col_titles = ['t1', 't2', 't1 moved', 'vect', 'magn', 't1-t2 \n {:6.4f}'.format(mse_1) ,'moved-t2 \n {:6.4f}'.format(mse_2)]
+                        mse_1 = np.mean((first_vol - second_vol) ** 2)
+                        mse_2 = np.mean((moved - second_vol) ** 2)
+                        col_titles = ['t1', 't2', 't1 moved', 'vect', 'magn', 't1-t2 \n {:6.4f}'.format(mse_1),
+                                      'moved-t2 \n {:6.4f}'.format(mse_2)]
                         vmax = 1
-                        for i,z in enumerate(picks):
+                        for i, z in enumerate(picks):
                             j = 0
                             # t0
-                            axes[i, j].imshow(first_vol[z], 'gray')
-                            axes[i, j].imshow(first_m[z],alpha=0.6)
+                            axes[i, j].imshow(normalise_image(first_vol[z]), 'gray')
+                            axes[i, j].imshow(first_m[z], alpha=0.6)
                             axes[i, j].set_ylabel(y_label[i], rotation=90, size='medium')
                             axes[i, j].set_xticks([])
                             axes[i, j].set_yticks([])
                             j = j + 1
-                            #t1
+                            # t1
                             axes[i, j].imshow(second_vol[z], 'gray')
                             axes[i, j].imshow(second_m[z], alpha=0.6)
                             axes[i, j].set_xticks([])
@@ -699,43 +720,47 @@ class WindowMotionCallback(Callback):
                             axes[i, j].set_xticks([])
                             axes[i, j].set_yticks([])
                             j = j + 1
-                            # vect
+                            # vect, abs & min/max normalized
                             temp = np.absolute(vect[z])
                             axes[i, j].imshow(first_vol[z], 'gray', vmin=0, vmax=0.8)
                             axes[i, j].imshow(normalise_image(temp), alpha=0.8)
                             axes[i, j].set_xticks([])
-                            axes[i, j].set_yticks([]);j=j+1
+                            axes[i, j].set_yticks([]);
+                            j = j + 1
 
                             # magnitude
-                            temp = normalise_image(np.sqrt(np.square(vect[z][...,0]) + np.square(vect[z][...,1]) + np.square(vect[z][...,2])))
+                            temp = normalise_image(np.sqrt(
+                                np.square(vect[z][..., 0]) + np.square(vect[z][..., 1]) + np.square(vect[z][..., 2])))
                             axes[i, j].imshow(first_vol[z], 'gray', vmin=0, vmax=.8)
                             axes[i, j].imshow(temp, cmap='seismic', alpha=0.8)
 
                             axes[i, j].set_xticks([])
-                            axes[i, j].set_yticks([]);j=j+1
+                            axes[i, j].set_yticks([]);
+                            j = j + 1
                             # diff t0 - t1
                             axes[i, j].imshow(first_vol[z], 'gray', vmin=0, vmax=.8)
-                            axes[i, j].imshow(np.abs(first_vol[z] - second_vol[z]),cmap='seismic', interpolation='none')
+                            axes[i, j].imshow(np.abs(first_vol[z] - second_vol[z]), cmap='seismic',
+                                              interpolation='none')
                             axes[i, j].set_xticks([])
-                            axes[i, j].set_yticks([]);j=j+1
+                            axes[i, j].set_yticks([]);
+                            j = j + 1
                             # diff moved - t1
                             axes[i, j].imshow(first_vol[z], 'gray', vmin=0, vmax=.8)
-                            axes[i, j].imshow(np.abs(moved[z] - second_vol[z]),cmap='seismic', interpolation='none')
+                            axes[i, j].imshow(np.abs(moved[z] - second_vol[z]), cmap='seismic', interpolation='none')
                             axes[i, j].set_xticks([])
                             axes[i, j].set_yticks([])
                         # set column names
                         for i in range(ncols):
-                            axes[0,i].set_title(col_titles[i])
+                            axes[0, i].set_title(col_titles[i])
                         # set row names
-#                        for j in range(nrows):
-#                            axes[j,0].set_ylabel(y_label[j], rotation=90, size='medium')
+                        #                        for j in range(nrows):
+                        #                            axes[j,0].set_ylabel(y_label[j], rotation=90, size='medium')
 
                         fig.subplots_adjust(wspace=0.0, hspace=0.0)
-                        #fig.tight_layout()
+                        # fig.tight_layout()
                         tensorflow.summary.image(name='plot/{}/batch_{}/{}/summary'.format(key, b, phases[p]),
                                                  data=self.make_image(fig),
                                                  step=epoch)
-
 
 
 class PhaseRegressionCallback(Callback):
@@ -748,7 +773,8 @@ class PhaseRegressionCallback(Callback):
     # original code from:
     # https://stackoverflow.com/questions/43784921/how-to-display-custom-images-in-tensorboard-using-keras?rq=1
 
-    def __init__(self, log_dir='./logs/tmp/', image_freq=10, feed_inputs_4_display=None, dpi=200,f_size=(5,5), interpol='bilinear', force_plot_first_n_epochs=5):
+    def __init__(self, log_dir='./logs/tmp/', image_freq=10, feed_inputs_4_display=None, dpi=200, f_size=(5, 5),
+                 interpol='bilinear', force_plot_first_n_epochs=5):
 
         """
         This callback gets a dict with key: x,y entries
@@ -839,13 +865,14 @@ class PhaseRegressionCallback(Callback):
 
                 for key, x, y in zip(self.keys, self.xs, self.ys):
                     predictions = self.model.predict(x)
-                    #logging.info(predictions.shape)
+                    if len(predictions) == 3:  # multi-output-model
+                        predictions, y = predictions[0], y[0]
+                    # logging.info(predictions.shape)
                     # xs and ys have the shape n, x, y, 1, they are grouped by the key
                     # count the samples provided by each key to sort them
                     tensorflow.summary.image(name='plot/{}/_pred'.format(key, pred_i),
-                                                 data=self.make_image(show_phases(y,predictions)),
-                                                 step=epoch)
-
+                                             data=self.make_image(show_phases(y, predictions)),
+                                             step=epoch)
 
 
 class ImageSaver(Callback):
@@ -858,7 +885,8 @@ class ImageSaver(Callback):
     # original code from:
     # https://stackoverflow.com/questions/43784921/how-to-display-custom-images-in-tensorboard-using-keras?rq=1
 
-    def __init__(self, image_dir='./reports/tmp/figures/', image_freq=2, feed_inputs_4_display=None, flow=False, dpi=200,f_size=(5,5), interpol='bilinear'):
+    def __init__(self, image_dir='./reports/tmp/figures/', image_freq=2, feed_inputs_4_display=None, flow=False,
+                 dpi=200, f_size=(5, 5), interpol='bilinear'):
 
         """
         This callback gets a dict with key: x,y entries
@@ -880,7 +908,8 @@ class ImageSaver(Callback):
         self.e = 0
         self.n_start_epochs = 20
         self.feed_inputs_4_display = feed_inputs_4_display
-        self.image_dir = os.path.join(image_dir, 'trainings_progress')  # create a subdir for the imagewriter summary file
+        self.image_dir = os.path.join(image_dir,
+                                      'trainings_progress')  # create a subdir for the imagewriter summary file
         ensure_dir(self.image_dir)
 
     def custom_set_feed_input_to_display(self, feed_inputs_display):
@@ -951,9 +980,10 @@ class ImageSaver(Callback):
                     if len(x.shape) == 4:  # work with 2d data
                         pred = predictions[pred_i]
                         if not self.flow:
-                            self.save_image(show_slice(img=x[i], mask=pred, show=False, f_size=self.f_size),'pred_{}_img{}_epoch{}.png'.format(key, i, epoch),dpi=300)
+                            self.save_image(show_slice(img=x[i], mask=pred, show=False, f_size=self.f_size),
+                                            'pred_{}_img{}_epoch{}.png'.format(key, i, epoch), dpi=300)
 
-                            if epoch == 1: # save the gt image only once
+                            if epoch == 1:  # save the gt image only once
                                 self.save_image(show_slice(img=x[i], mask=y[i], show=False, f_size=self.f_size),
                                                 'gt_{}_img{}_epoch{}.png'.format(key, i, epoch), dpi=self.dpi)
 
@@ -967,12 +997,12 @@ class ImageSaver(Callback):
                                 self.save_image(show_slice(img=x[i][z], mask=pred, show=False),
                                                 'pred_{}_img{}_{}_epoch{}'.format(key, i, z, epoch), dpi=300)
 
-                                if epoch ==1:
+                                if epoch == 1:
                                     self.save_image(show_slice(img=x[i][z], mask=y[i][z], show=False),
                                                     'gt_{}_img{}_{}_epoch{}'.format(key, i, z, epoch), dpi=300)
 
 
-                            else: # work with flowfields
+                            else:  # work with flowfields
                                 raise NotImplemented('saving predicted flow fields is not supported so far')
                                 tensorflow.summary.image(name='plot/{}/{}/_prediction/{}'.format(key, i, z),
                                                          data=self.make_image(
@@ -988,7 +1018,6 @@ class ImageSaver(Callback):
             # del xs, ys, pred
 
             # self.writer.add_summary(tf.Summary(value=summary_str), global_step=self.e)
-
 
 
 class WeightsSaver(Callback):
@@ -1015,10 +1044,11 @@ class WeightsSaver(Callback):
                     json_file.write(model_json)
             except Exception as e:
                 logging.error(str(e))
-        if self.epoch_w % self.N == 0: # to save continous files
+        if self.epoch_w % self.N == 0:  # to save continous files
             # Save the model
             try:
-                tf.keras.models.save_model(self.model,filepath=self.model_path,overwrite=True,include_optimizer=False,save_format='tf')
+                tf.keras.models.save_model(self.model, filepath=self.model_path, overwrite=True,
+                                           include_optimizer=False, save_format='tf')
             except Exception as e:
                 model_path = self.model_path
                 ensure_dir(model_path)

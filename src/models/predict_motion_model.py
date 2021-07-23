@@ -79,6 +79,7 @@ def pred_fold(config, debug=True):
         pred_config['AUGMENT_TEMP'] = False
         pred_config['BATCHSIZE'] = 1
         pred_config['HIST_MATCHING'] = False
+        pred_config['ISTRAINING'] = False
         INPUT_T_ELEM = config.get('INPUT_T_ELEM', 0)
         pred_generator = PhaseMaskWindowGenerator(x_train_sax, x_train_sax, config=pred_config)
         full_pred_config = pred_config.copy()
@@ -87,9 +88,12 @@ def pred_fold(config, debug=True):
         x_train_sax_masks = [f.replace('clean', 'mask') for f in x_train_sax]
         '''pred_mask_generator = PhaseWindowGenerator(x_train_sax_masks, x_train_sax_masks, config=pred_config,
                                                    yield_masks=True)'''
+        import SimpleITK as sitk
         pred_mask_config = pred_config.copy()
         pred_mask_config['MASKING_VALUES']=[2]
         pred_mask_config['MASKING_IMAGE']=True
+        pred_mask_config['IMG_INTERPOLATION'] = sitk.sitkNearestNeighbor
+        pred_mask_config['MSK_INTERPOLATION'] = sitk.sitkNearestNeighbor
         pred_myo_mask_generator = PhaseWindowGenerator(x_train_sax_masks, x_train_sax_masks, config=pred_mask_config,
                                                    yield_masks=True)
         pred_mask_config['MASKING_VALUES'] = [3]
@@ -143,11 +147,11 @@ def pred_fold(config, debug=True):
 
             moved_m = tf.cast(moved_m,tf.uint8)
 
-            first_binary = first_mask>0.5
+            first_binary = first_mask > 0.5
             second_binary = second_mask > 0.5
+            #first_binary = ndimage.binary_closing(first_binary, structure=kernel, iterations=1)
 
-            second_binary = ndimage.binary_closing(second_binary, structure=kernel,iterations=1)
-            first_binary = ndimage.binary_closing(first_binary, structure=kernel, iterations=1)
+
             #first_binary = ndimage.median_filter(first_mask, size=3, mode='nearest')
             #combined_mask = combined_mask.astype(np.float32)
             #second_binary = ndimage.convolve(second_binary, weights=kernel)
@@ -155,6 +159,8 @@ def pred_fold(config, debug=True):
             second_mask = tf.cast(second_binary, tf.uint8)
             first_mask = tf.cast(first_binary, tf.uint8)
             vects_full = np.copy(vects)
+            second_binary = ndimage.binary_dilation(second_binary, structure=kernel_small, iterations=1)
+
             second_binary = second_binary[...,0]
             for dim in range(vects.shape[-1]):
                 vects[...,dim][~second_binary] = 0

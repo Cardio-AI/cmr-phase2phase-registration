@@ -28,15 +28,16 @@ def calc_dice(gt_path, pred_path, export_path):
     results_df.to_csv(results_file, index=False)
     g = sns.violinplot(x='phase', y='dice', data=results_df[['patient', 'phase', 'dice']])
     g.set(ylim=(0,1))
-    plt.show()
+    plt.savefig(exp_path + '/dice.png')
+    plt.clf()
     g = sns.violinplot(x='phase', y='hd', data=results_df[['patient', 'phase', 'hd']])
     g.set(ylim=(0, 25))
-    plt.show()
+    plt.savefig(exp_path + '/hd.png')
 
 
 if __name__ == "__main__":
     import os
-    exp_path = '/mnt/sds/sd20i001/sven/code/dynamic-cmr-models/exp/temp/phase2phase/v3/64_128_128/window1/reg0_001/gcn/NOmask_f0/2021-06-29_13_05'
+    exp_path = '/mnt/ssd/git/dynamic-cmr-models/exp/temp/phase2phase/v3/64_128_128/window1/reg0_001/dmd/NOmask_f0/2021-07-14_20_37'
     gt_path = os.path.join(exp_path, 'gt_m')
     pred_path = os.path.join(exp_path, 'pred_m')
     export_path = exp_path

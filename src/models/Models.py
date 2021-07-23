@@ -178,6 +178,191 @@ def create_PhaseRegressionModel(config, networkname='PhaseRegressionModel'):
         return model
 
 
+def create_PhaseRegressionModel_v2(config, networkname='PhaseRegressionModel'):
+    if tf.distribute.has_strategy():
+        strategy = tf.distribute.get_strategy()
+    else:
+        # distribute the training with the "mirrored data"-paradigm across multiple gpus if available, if not use gpu 0
+        strategy = tf.distribute.MirroredStrategy(devices=config.get('GPUS', ["/gpu:0"]))
+    with strategy.scope():
+
+        input_shape = config.get('DIM', [10, 224, 224])
+        T_SHAPE = config.get('T_SHAPE', 36)
+        PHASES = config.get('PHASES', 5)
+        input_tensor = Input(shape=(T_SHAPE, *input_shape, 1))
+        input_tensor_empty1 = Input(shape=(T_SHAPE, *input_shape, 1))
+        input_tensor_empty2 = Input(shape=(T_SHAPE, *input_shape, 3))  # empty vector field
+        # define standard values according to the convention over configuration paradigm
+        activation = config.get('ACTIVATION', 'elu')
+        batch_norm = config.get('BATCH_NORMALISATION', False)
+        pad = config.get('PAD', 'same')
+        kernel_init = config.get('KERNEL_INIT', 'he_normal')
+        m_pool = config.get('M_POOL', (1, 2, 2))
+        f_size = config.get('F_SIZE', (3, 3, 3))
+        filters = config.get('FILTERS', 16)
+        drop_1 = config.get('DROPOUT_MIN', 0.3)
+        drop_3 = config.get('DROPOUT_MAX', 0.5)
+        bn_first = config.get('BN_FIRST', False)
+        ndims = len(config.get('DIM', [10, 224, 224]))
+        depth = config.get('DEPTH', 4)
+        batchsize = config.get('BATCHSIZE', 8)
+        add_bilstm = config.get('ADD_BILSTM', False)
+        lstm_units = config.get('BILSTM_UNITS', 64)
+        final_activation = config.get('FINAL_ACTIVATION', 'relu').lower()
+        loss = config.get('LOSS', 'mse').lower()
+        mask_loss = config.get('MASK_LOSS', False)
+        pre_gap_conv = config.get('PRE_GAP_CONV', False)
+        interp_method = 'linear'
+        indexing = 'ij'
+
+        # increase the dropout through the layer depth
+        dropouts = list(np.linspace(drop_1, drop_3, depth))
+        dropouts = [round(i, 1) for i in dropouts]
+        # start with very small deformation
+        Conv = getattr(KL, 'Conv{}D'.format(ndims))
+        Conv_layer = Conv(ndims, kernel_size=3, padding='same',
+                          kernel_initializer=tensorflow.keras.initializers.RandomNormal(mean=0.0, stddev=1e-5),
+                          name='unet2flow')
+
+        """temporal_encoder = ConvEncoder(activation=activation,
+                                       batch_norm=batch_norm,
+                                       bn_first=bn_first,
+                                       depth=depth,
+                                       drop_3=drop_3,
+                                       dropouts=dropouts,
+                                       f_size=f_size,
+                                       filters=filters,
+                                       kernel_init=kernel_init,
+                                       m_pool=m_pool,
+                                       ndims=ndims,
+                                       pad=pad)"""
+
+        unet = create_unet(config, single_model=False)
+        st_layer = nrn_layers.SpatialTransformer(interp_method=interp_method, indexing=indexing, ident=True,
+                                                 name='deformable_layer')
+
+        gap = tensorflow.keras.layers.GlobalAveragePooling3D()
+
+        # unstack along the temporal axis
+        # added shuffling, which avoids the model to be biased by the order
+        # unstack along t, yielding a list of 3D volumes
+
+        import random
+        # unstack along t yielding a list of 3D volumes
+        inputs_spatial = tf.unstack(input_tensor, axis=1)
+        # first tests without shuffleing, later we can add the shuffleing
+        """indicies = list(tf.range(len(inputs_spatial)))
+        zipped = list(zip(inputs_spatial, indicies))
+        random.shuffle(zipped)
+        inputs_spatial, indicies = zip(*zipped)"""
+        # feed the T x 3D volumes into the spatial encoder (3D conv)
+        pre_flows = [unet(vol) for vol in inputs_spatial]
+
+        #pre_flows, _ = zip(*sorted(zip(pre_flows, indicies), key=lambda tup: tup[1]))
+        flows= [Conv_layer(vol) for vol in pre_flows]
+
+        transformed = [st_layer([input_vol, flow]) for input_vol, flow in
+                       zip(inputs_spatial, flows)]
+
+        if pre_gap_conv:
+            gap_conv = tf.keras.layers.Conv3D(filters=64, kernel_size=1, strides=(1, 1, 1), padding='valid',
+                                              activation=activation, kernel_initializer=kernel_init)
+
+            inputs_spatial = [tf.keras.layers.BatchNormalization()(elem) for elem in flows]
+            inputs_spatial = [tf.keras.layers.Dropout(rate=0.5)(elem) for elem in inputs_spatial]
+            inputs_spatial = [gap_conv(vol) for vol in inputs_spatial]
+
+        # global average pooling for T x 3D vols
+        inputs_spatial = [gap(vol) for vol in inputs_spatial]
+        inputs_spatial = tf.stack(inputs_spatial, axis=1)
+
+        inputs = inputs_spatial
+        print('Shape after GAP')
+        print(inputs.shape)
+        # 36, 256
+        if add_bilstm:
+            print('add a bilstm layer with: {} lstm units'.format(lstm_units))
+            forward_layer = LSTM(lstm_units, return_sequences=True)
+            backward_layer = LSTM(lstm_units, activation='tanh', return_sequences=True,
+                                  go_backwards=True)  # maybe change to tanh
+            inputs = Bidirectional(forward_layer, backward_layer=backward_layer, input_shape=inputs.shape)(inputs)
+
+        # 36,64
+        print('Shape after Bi-LSTM layer')
+        print(inputs.shape)
+
+        # input (36,encoding) output (36,5)
+        # either 36,256 --> from the temp encoder or
+        # 36,64 --> 64 --> number of BI-LSTM units
+        # activation to linear
+        onehot = tf.keras.layers.Conv1D(filters=PHASES, kernel_size=5, strides=1, padding='same', activation='linear',
+                                        name='final_conv')(inputs)
+        flows = tf.stack(flows, axis=1, name='flow')
+        transformed = tf.stack(transformed, axis=1, name='transformed')
+        if final_activation == 'relu':
+            onehot = tf.keras.layers.ReLU()(onehot)
+        elif final_activation == 'softmax':
+            # axis -1 --> one class per timestep, as we repeat the phases its not possible to softmax the phase
+            onehot = tf.keras.activations.softmax(onehot, axis=-1)
+        elif final_activation == 'sigmoid':
+            onehot = tf.keras.activations.sigmoid(onehot)
+        else:
+            logging.info('No final activation given! Please check the "FINAL_ACTIVATION" param!')
+
+        # 36, 5
+        print('Shape after final conv layer')
+        print(onehot.shape)
+
+        # add empty tensor with one-hot shape to align with gt
+        zeros = tf.zeros_like(onehot)
+        onehot = tf.stack([onehot, zeros], axis=1)
+
+        onehot = tf.keras.layers.Activation('linear', name='onehot')(onehot)
+        transformed = tf.keras.layers.Activation('linear', name='transformed')(transformed)
+        flows = tf.keras.layers.Activation('linear', name='flows')(flows)
+
+        outputs = [onehot, transformed, flows]
+
+        if loss == 'cce':
+            losses = [own_metr.CCE(masked=mask_loss, smooth=0.8, transposed=False)]
+        elif loss == 'meandiff':
+            losses = [own_metr.Meandiff_loss()]
+        elif loss == 'msecce':
+            print(loss)
+            # own_metr.CCE(masked=False,smooth=0.8,transposed=False)
+            losses = [own_metr.MSE(), own_metr.CCE(masked=mask_loss, smooth=0.8, transposed=False)]
+            print(losses)
+        else:  # default fallback --> MSE - works the best
+            from tensorflow.keras.losses import mse
+            from src.utils.Metrics import Grad, MSE_
+            losses = {
+                'onehot': own_metr.MSE(masked=mask_loss),
+                'transformed': MSE_().loss,
+                'flows': Grad('l2').loss}
+
+            weights = {
+                'onehot': 10,
+                'transformed': 1,
+                'flows': 0.001}
+            #losses = [mse]
+
+        print('added loss: {}'.format(loss))
+        model = Model(inputs=[input_tensor], outputs=outputs, name=networkname)
+        model.compile(
+            optimizer=get_optimizer(config, networkname),
+            loss=losses,
+            loss_weights=weights,
+            # metrics=[own_metr.mse_wrapper, own_metr.ca_wrapper, own_metr.meandiff] #
+            metrics={
+                'onehot': own_metr.MSE(masked=mask_loss),
+                'transformed': MSE_().loss,
+                'flows': Grad('l2').loss
+            }
+        )
+
+        return model
+
+
 def create_RegistrationModel(config):
     """
     A registration wrapper for 3D image2image registration
@@ -259,6 +444,7 @@ def create_RegistrationModel_inkl_mask(config):
         input_shape = config.get('DIM', [10, 224, 224])
         T_SHAPE = config.get('T_SHAPE', 5)
         image_loss_weight = config.get('IMAGE_LOSS_WEIGHT', 1)
+        dice_loss_weight = config.get('MASK_LOSS_WEIGHT', 0.1)
         reg_loss_weight = config.get('REG_LOSS_WEIGHT', 0.001)
         learning_rate = config.get('LEARNING_RATE', 0.001)
 
@@ -313,7 +499,7 @@ def create_RegistrationModel_inkl_mask(config):
         from src.utils.Metrics import dice_coef_loss
 
         losses = [MSE_().loss, dice_coef_loss, Grad('l2').loss]
-        weights = [image_loss_weight, 0.1, reg_loss_weight]
+        weights = [image_loss_weight, dice_loss_weight, reg_loss_weight]
         model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=learning_rate), loss=losses, loss_weights=weights)
 
     return model
