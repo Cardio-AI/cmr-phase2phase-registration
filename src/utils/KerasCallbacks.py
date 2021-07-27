@@ -1,3 +1,4 @@
+import concurrent
 import os
 import io
 import logging
@@ -10,7 +11,7 @@ from tensorflow.keras import backend as K
 from tensorflow.keras.callbacks import TensorBoard
 from tensorflow.keras.callbacks import Callback
 from tensorflow.keras.callbacks import EarlyStopping, ModelCheckpoint, ReduceLROnPlateau, LearningRateScheduler
-from src.visualization.Visualize import plot_3d_vol, plot_4d_vol
+from src.visualization.Visualize import plot_3d_vol, plot_4d_vol, plot_displacement
 from src.visualization.Visualize import show_slice_transparent as show_slice
 from src.utils.Utils_io import ensure_dir
 
@@ -32,7 +33,7 @@ def get_callbacks(config=None, batch_generator=None, validation_generator=None, 
     ensure_dir(config['MODEL_PATH'])
 
     # add these callbacks for each training
-    callbacks.append(
+    """callbacks.append(
         ModelCheckpoint(os.path.join(config['MODEL_PATH'], 'model.h5'),
                         # could also be 'model.h5 to save only the weights
                         verbose=1,
@@ -40,7 +41,7 @@ def get_callbacks(config=None, batch_generator=None, validation_generator=None, 
                         save_weights_only=True,
                         monitor=config.get('SAVE_MODEL_FUNCTION', 'loss'),
                         mode=config.get('SAVE_MODEL_MODE', 'min'),
-                        save_freq='epoch'))
+                        save_freq='epoch'))"""
 
     callbacks.append(
         tensorflow.keras.callbacks.ReduceLROnPlateau(monitor=config.get('MONITOR_FUNCTION', 'loss'),
@@ -63,7 +64,6 @@ def get_callbacks(config=None, batch_generator=None, validation_generator=None, 
     # if we provide a batch_generator we assume to that we want to observe the trainings progress
     # by intermediate predictions saved ad png or into the tensorboard
     if batch_generator:
-
         # depending on the task we might have different interfaces and imge, flowfield, onehot vectors etc.
         # standard behaviour, if no flags are given: dont add them!
         if config.get('SAVE_LEARNING_PROGRESS_AS_PNG', False):
@@ -175,14 +175,7 @@ class StepDecay:
         return float(alpha)
 
 
-class LRTensorBoard(TensorBoard):
-    def __init__(self, log_dir, **kwargs):  # add other arguments to __init__ if you need
-        super().__init__(log_dir=log_dir, **kwargs)
 
-    def on_epoch_end(self, epoch, logs=None):
-        logs = logs or {}
-        logs.update({'lr': K.eval(self.model.optimizer.lr)})
-        super().on_epoch_end(epoch, logs)
 
 
 class TrainValTensorBoard(TensorBoard):
@@ -232,6 +225,14 @@ class TrainValTensorBoard(TensorBoard):
         super(TrainValTensorBoard, self).on_train_end(logs)
         self.val_writer.close()
 
+class LRTensorBoard(TensorBoard):
+    def __init__(self, log_dir, **kwargs):  # add other arguments to __init__ if you need
+        super().__init__(log_dir=log_dir, **kwargs)
+
+    def on_epoch_end(self, epoch, logs=None):
+        logs = logs or {}
+        logs.update({'lr': K.eval(self.model.optimizer.lr)})
+        super().on_epoch_end(epoch, logs)
 
 from tensorflow.keras.callbacks import LearningRateScheduler
 
@@ -677,11 +678,8 @@ class WindowMotionCallback(Callback):
                     # one plot per phase
                     for p in range(len(phases)):
 
-                        # Define the plot grid size
-                        nrows = 3
-                        ncols = 7
-                        fig, axes = plt.subplots(nrows, ncols, figsize=(14, 7))
-                        # Slice the
+
+                        # Slice the volumes
                         first_vol, second_vol = x[b][0][p], y[b][0][p]
                         first_m, second_m = x[1][0][p], y[1][0][p]
                         if first_vol.shape[-1] == 3:
@@ -698,65 +696,8 @@ class WindowMotionCallback(Callback):
                         mse_2 = np.mean((moved - second_vol) ** 2)
                         col_titles = ['t1', 't2', 't1 moved', 'vect', 'magn', 't1-t2 \n {:6.4f}'.format(mse_1),
                                       'moved-t2 \n {:6.4f}'.format(mse_2)]
-                        vmax = 1
-                        for i, z in enumerate(picks):
-                            j = 0
-                            # t0
-                            axes[i, j].imshow(normalise_image(first_vol[z]), 'gray')
-                            axes[i, j].imshow(first_m[z], alpha=0.6)
-                            axes[i, j].set_ylabel(y_label[i], rotation=90, size='medium')
-                            axes[i, j].set_xticks([])
-                            axes[i, j].set_yticks([])
-                            j = j + 1
-                            # t1
-                            axes[i, j].imshow(second_vol[z], 'gray')
-                            axes[i, j].imshow(second_m[z], alpha=0.6)
-                            axes[i, j].set_xticks([])
-                            axes[i, j].set_yticks([])
-                            j = j + 1
-                            # moved t0
-                            axes[i, j].imshow(moved[z], 'gray')
-                            axes[i, j].imshow(moved_m[z], alpha=0.6)
-                            axes[i, j].set_xticks([])
-                            axes[i, j].set_yticks([])
-                            j = j + 1
-                            # vect, abs & min/max normalized
-                            temp = np.absolute(vect[z])
-                            axes[i, j].imshow(first_vol[z], 'gray', vmin=0, vmax=0.8)
-                            axes[i, j].imshow(normalise_image(temp), alpha=0.8)
-                            axes[i, j].set_xticks([])
-                            axes[i, j].set_yticks([]);
-                            j = j + 1
-
-                            # magnitude
-                            temp = normalise_image(np.sqrt(
-                                np.square(vect[z][..., 0]) + np.square(vect[z][..., 1]) + np.square(vect[z][..., 2])))
-                            axes[i, j].imshow(first_vol[z], 'gray', vmin=0, vmax=.8)
-                            axes[i, j].imshow(temp, cmap='seismic', alpha=0.8)
-
-                            axes[i, j].set_xticks([])
-                            axes[i, j].set_yticks([]);
-                            j = j + 1
-                            # diff t0 - t1
-                            axes[i, j].imshow(first_vol[z], 'gray', vmin=0, vmax=.8)
-                            axes[i, j].imshow(np.abs(first_vol[z] - second_vol[z]), cmap='seismic',
-                                              interpolation='none')
-                            axes[i, j].set_xticks([])
-                            axes[i, j].set_yticks([]);
-                            j = j + 1
-                            # diff moved - t1
-                            axes[i, j].imshow(first_vol[z], 'gray', vmin=0, vmax=.8)
-                            axes[i, j].imshow(np.abs(moved[z] - second_vol[z]), cmap='seismic', interpolation='none')
-                            axes[i, j].set_xticks([])
-                            axes[i, j].set_yticks([])
-                        # set column names
-                        for i in range(ncols):
-                            axes[0, i].set_title(col_titles[i])
-                        # set row names
-                        #                        for j in range(nrows):
-                        #                            axes[j,0].set_ylabel(y_label[j], rotation=90, size='medium')
-
-                        fig.subplots_adjust(wspace=0.0, hspace=0.0)
+                        fig = plot_displacement(col_titles, first_m, first_vol, moved, moved_m, picks,
+                                               second_m, second_vol, vect, y_label)
                         # fig.tight_layout()
                         tensorflow.summary.image(name='plot/{}/batch_{}/{}/summary'.format(key, b, phases[p]),
                                                  data=self.make_image(fig),
@@ -806,6 +747,7 @@ class PhaseRegressionCallback(Callback):
         x_ = np.stack(self.xs, axis=0)
         self.x_ = x_.reshape((x_.shape[0] * x_.shape[1], *x_.shape[2:]))
 
+
     def custom_set_feed_input_to_display(self, feed_inputs_display):
 
         """
@@ -840,6 +782,10 @@ class PhaseRegressionCallback(Callback):
         image = tensorflow.expand_dims(image, 0)
         return image
 
+    def on_train_begin(self, logs=None):
+        # Call the image writer callback once before training
+        self.on_epoch_end(epoch=0, logs=logs)
+
     def on_epoch_end(self, epoch, logs=None):
 
         """
@@ -866,12 +812,43 @@ class PhaseRegressionCallback(Callback):
                 for key, x, y in zip(self.keys, self.xs, self.ys):
                     predictions = self.model.predict(x)
                     if len(predictions) == 3:  # multi-output-model
-                        predictions, y = predictions[0], y[0]
+                        onehot_predictions, onehot_y = predictions[0], y[0]
+                        movings, vects = predictions[1], predictions[2]
+
+                        # slice the volumes
+                        b = 0
+                        figures = list()
+                        for t in range(0,x[0][b].shape[0], 5):
+                            first_vol, second_vol = x[0][b][t][:], y[1][b][t][:]
+
+                            moved, vect = movings[b][t][:], vects[b][t][:]
+                            spatial_slices = first_vol.shape[0]
+                            # pick one upper, middle and lower slice as example
+                            picks = (np.array([1, 0.5, 0]) * spatial_slices).astype(int)
+                            picks = np.clip(picks, 0, spatial_slices-1)
+                            y_label = ['Basal', 'Mid', 'Apex']
+                            from tensorflow.keras.metrics import mse
+                            mse_1 = np.mean((first_vol - second_vol) ** 2)
+                            mse_2 = np.mean((moved - second_vol) ** 2)
+                            col_titles = ['t1', 't2', 't1 moved', 'vect', 'magn', 't1-t2 \n {:6.4f}'.format(mse_1),
+                                          'moved-t2 \n {:6.4f}'.format(mse_2)]
+
+                            fig = plot_displacement(col_titles=col_titles,
+                                                    first_m=np.zeros_like(first_vol),
+                                                    first_vol=first_vol,
+                                                    moved=moved, moved_m=np.zeros_like(moved),
+                                                    picks=picks,second_m=np.zeros_like(second_vol),
+                                                    second_vol=second_vol, vect=vect, y_label=y_label)
+
+                            tensorflow.summary.image(name='plot/{}/batch_{}/{}/summary'.format(key, b, t),
+                                                     data=self.make_image(fig),
+                                                     step=epoch)
+
                     # logging.info(predictions.shape)
                     # xs and ys have the shape n, x, y, 1, they are grouped by the key
                     # count the samples provided by each key to sort them
                     tensorflow.summary.image(name='plot/{}/_pred'.format(key, pred_i),
-                                             data=self.make_image(show_phases(y, predictions)),
+                                             data=self.make_image(show_phases(onehot_y, onehot_predictions)),
                                              step=epoch)
 
 

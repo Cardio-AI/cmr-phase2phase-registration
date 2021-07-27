@@ -1,10 +1,11 @@
-from src.data.Generators import PhaseRegressionGenerator_v2
-from src.models.Models import create_PhaseRegressionModel_v2
+
 
 
 def train_fold(config):
     # make sure all neccessary params in config are set
     # if not set them with default values
+    import tensorflow as tf
+    tf.get_logger().setLevel('FATAL')
     from src.utils.Tensorflow_helper import choose_gpu_by_id
     # ------------------------------------------define GPU id/s to use
     GPU_IDS = config.get('GPU_IDS', '0,1')
@@ -12,9 +13,7 @@ def train_fold(config):
     print(GPUS)
     # ------------------------------------------ import helpers
     # this should import glob, os, and many other standard libs
-    from tensorflow.python.client import device_lib
-    import tensorflow as tf
-    tf.get_logger().setLevel('ERROR')
+    #from tensorflow.python.client import device_lib
     import gc, logging, os, datetime, re
     from logging import info
 
@@ -22,6 +21,8 @@ def train_fold(config):
     from src.utils.Utils_io import Console_and_file_logger, init_config, ensure_dir
     from src.utils.KerasCallbacks import get_callbacks
     from src.data.Dataset import get_trainings_files
+    from src.data.Generators import PhaseRegressionGenerator_v2
+    from src.models.Models import create_PhaseRegressionModel_v2
     from src.data.Generators import PhaseRegressionGenerator
     from src.models.Models import create_PhaseRegressionModel
 
@@ -60,13 +61,16 @@ def train_fold(config):
     config = init_config(config=locals(), save=True)
     logging.info('Is built with tensorflow: {}'.format(tf.test.is_built_with_cuda()))
     logging.info('Visible devices:\n{}'.format(tf.config.list_physical_devices()))
-    logging.info('Local devices: \n {}'.format(device_lib.list_local_devices()))
+    #logging.info('Local devices: \n {}'.format(device_lib.list_local_devices()))
 
     # get kfolded data from DATA_ROOT and subdirectories
     # Load SAX volumes
     x_train_sax, y_train_sax, x_val_sax, y_val_sax = get_trainings_files(data_path=DATA_PATH_SAX,
                                                                          path_to_folds_df=DF_FOLDS,
                                                                          fold=FOLD)
+    """examples = 12
+    x_train_sax, y_train_sax, x_val_sax, y_val_sax = x_train_sax[:examples], y_train_sax[:examples], x_val_sax[:examples], y_val_sax[:examples]
+    """
     logging.info('SAX train CMR: {}, SAX train masks: {}'.format(len(x_train_sax), len(y_train_sax)))
     logging.info('SAX val CMR: {}, SAX val masks: {}'.format(len(x_val_sax), len(y_val_sax)))
 
@@ -98,14 +102,14 @@ def train_fold(config):
 
     # instantiate the batchgenerators
 
-    batch_generator = PhaseRegressionGenerator_v2(x_train_sax, x_train_sax, config=config)
+    batch_generator = PhaseRegressionGenerator_v2(x_train_sax, x_train_sax, config=config, in_memory=True)
     val_config = config.copy()
     val_config['AUGMENT'] = False
     val_config['AUGMENT_PHASES'] = False
     val_config['HIST_MATCHING'] = False
     val_config['AUGMENT_TEMP'] = False
     # val_config['RESAMPLE_T'] = False # this could yield phases which does not fit into the given dim
-    validation_generator = PhaseRegressionGenerator_v2(x_val_sax, x_val_sax, config=val_config)
+    validation_generator = PhaseRegressionGenerator_v2(x_val_sax, x_val_sax, config=val_config, in_memory=True)
 
     # get model
     model = create_PhaseRegressionModel_v2(config)
@@ -116,11 +120,11 @@ def train_fold(config):
         model.summary(print_fn=lambda x: fh.write(x + '\n'))
 
     tf.keras.utils.plot_model(
-        model, show_shapes=True,
+        model, show_shapes=False,
         to_file=os.path.join(EXP_PATH, 'model.png'),
         show_layer_names=True,
         rankdir='TB',
-        expand_nested=True,
+        expand_nested=False,
         dpi=96
     )
 
@@ -136,7 +140,7 @@ def train_fold(config):
         max_queue_size=config.get('QUEUE_SIZE',2),
         # use_multiprocessing=False,
         # workers=12,
-        verbose=2)
+        verbose=1)
 
     # free as much memory as possible
     del batch_generator
@@ -149,22 +153,21 @@ def train_fold(config):
 
 
 def main(args=None):
+    import os
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
     # ------------------------------------------define logging and working directory
     # import the packages inside this function enables to train on different folds
     from ProjectRoot import change_wd_to_project_root
     change_wd_to_project_root()
     import sys, os, datetime
     sys.path.append(os.getcwd())
-    from src.utils.Tensorflow_helper import choose_gpu_by_id
-    # ------------------------------------------define GPU id/s to use, if given
 
     # local imports
-    from src.utils.Utils_io import Console_and_file_logger, init_config
-
     # import external libs
     import tensorflow as tf
-    tf.get_logger().setLevel('ERROR')
+    tf.get_logger().setLevel('FATAL')
     import cv2
+    from src.utils.Utils_io import Console_and_file_logger, init_config
 
     EXPERIMENTS_ROOT = 'exp/'
 
@@ -176,34 +179,32 @@ def main(args=None):
         with open(cfg, encoding='utf-8') as data_file:
             config = json.loads(data_file.read())
 
-        # if config given, define new paths, so that we make sure that:
+        # Define new paths, so that we make sure that:
         # 1. we dont overwrite a previous config
-        # 2. we store the experiment in the current source directory (cluster/local)
+        # 2. cluster based trainings are compatible with saving locally (cluster/local)
+        # we dont need to initialise this config, as it should already have the correct formatings,
+        # The fold configs will be saved within each fold run
+        # add a timestep to each project to make repeated experiments unique
         EXPERIMENT = config.get('EXPERIMENT', 'UNDEFINED')
-        timestemp = str(datetime.datetime.now().strftime(
-            "%Y-%m-%d_%H_%M"))  # ad a timestep to each project to make repeated experiments unique
+        timestemp = str(datetime.datetime.now().strftime("%Y-%m-%d_%H_%M"))
 
         config['EXP_PATH'] = os.path.join(EXPERIMENTS_ROOT, EXPERIMENT, timestemp)
         config['MODEL_PATH'] = os.path.join(config['EXP_PATH'], 'model', )
         config['TENSORBOARD_PATH'] = os.path.join(config['EXP_PATH'], 'tensorboard_logs')
         config['CONFIG_PATH'] = os.path.join(config['EXP_PATH'], 'config')
         config['HISTORY_PATH'] = os.path.join(config['EXP_PATH'], 'history')
-        # Console_and_file_logger(path=config['EXP_PATH'])
 
         if args.data:  # if we specified a different data path (training from workspace or node temporal disk)
             config['DATA_PATH_SAX'] = os.path.join(args.data, "sax/")
             config['DF_FOLDS'] = os.path.join(args.data, "df_kfold.csv")
             config['DF_META'] = os.path.join(args.data, "SAx_3D_dicomTags_phase.csv")
-        # we dont need to initialise this config, as it should already have the correct formatings,
-        # The fold configs will be saved withn each fold run
-        # config = init_config(config=config, save=False)
         print(config)
     else:
         print('no config given, build a new one')
 
         EXPERIMENT = args.exp
         timestemp = str(datetime.datetime.now().strftime(
-            "%Y-%m-%d_%H_%M"))  # ad a timestep to each project to make repeated experiments unique
+            "%Y-%m-%d_%H_%M"))  # add a timestep to each project to make repeated experiments unique
 
         EXP_PATH = os.path.join(EXPERIMENTS_ROOT, EXPERIMENT, timestemp)
         MODEL_PATH = os.path.join(EXP_PATH, 'model', )
@@ -214,7 +215,7 @@ def main(args=None):
 
         # define the input data paths and fold
         # first to the 4D Nrrd files,
-        # second to a dataframe with a mapping of the Fold-number
+        # second to a dataframe with a mapping of fold:patient
         # Finally the path to the metadata
         DATA_PATH_SAX = args.sax
         DF_FOLDS = args.folds
@@ -278,18 +279,14 @@ def main(args=None):
         RESAMPLE_T = args.tresample
         HIST_MATCHING = args.hmatch
         SCALER = 'MinMax'  # MinMax, Standard or Robust
-        # We define 5 target phases and a background phase for the pad/empty volumes
-        PHASES = len(['ED#', 'MS#', 'ES#', 'PF#', 'MD#'])  # skipped 'pad backround manually added', due to repeating
+        # We define 5 target phases
+        PHASES = len(['ED#', 'MS#', 'ES#', 'PF#', 'MD#'])
         TARGET_SMOOTHING = True
         SMOOTHING_WEIGHT_CORRECT = args.gausweight
         GAUS_SIGMA = args.gaussigma
 
         print('init config')
         config = init_config(config=locals(), save=False)
-
-    GPU_IDS = '0,1'
-    GPUS = choose_gpu_by_id(GPU_IDS)
-    print(GPUS)
 
     for f in config.get('FOLDS', [0]):
         print('starting fold: {}'.format(f))
@@ -301,24 +298,21 @@ def main(args=None):
 
 if __name__ == "__main__":
     import argparse
-
     parser = argparse.ArgumentParser(description='train a phase registration model')
 
     # usually these two parameters should encapsulate all experiment parameters
     parser.add_argument('-cfg', action='store', default=None)
     parser.add_argument('-data', action='store', default=None)
 
-    #
+    # anyway, there are cases were we want to define some specific parameters, a better choice would be to modify the config
     parser.add_argument('-sax', action='store', default='/mnt/ssd/data/gcn/02_imported_4D_unfiltered/sax/')
     parser.add_argument('-folds', action='store', default='/mnt/ssd/data/gcn/02_imported_4D_unfiltered/df_kfold.csv')
-    parser.add_argument('-meta', action='store',
-                        default='/mnt/ssd/data/gcn/02_imported_4D_unfiltered/SAx_3D_dicomTags_phase.csv')
+    parser.add_argument('-meta', action='store', default='/mnt/ssd/data/gcn/02_imported_4D_unfiltered/SAx_3D_dicomTags_phase.csv')
     parser.add_argument('-exp', action='store', default='temp_exp')
     parser.add_argument('-add_lstm', action='store_true', default=False)
     parser.add_argument('-lstm_units', action='store', default=64, type=int)
     parser.add_argument('-depth', action='store', default=4, type=int)
     parser.add_argument('-filters', action='store', default=20, type=int)
-
     parser.add_argument('-aug', action='store', default=True)
     parser.add_argument('-paug', action='store', default=False)
     parser.add_argument('-prange', action='store', default=2, type=int)

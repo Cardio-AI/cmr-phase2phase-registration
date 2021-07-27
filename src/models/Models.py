@@ -190,8 +190,6 @@ def create_PhaseRegressionModel_v2(config, networkname='PhaseRegressionModel'):
         T_SHAPE = config.get('T_SHAPE', 36)
         PHASES = config.get('PHASES', 5)
         input_tensor = Input(shape=(T_SHAPE, *input_shape, 1))
-        input_tensor_empty1 = Input(shape=(T_SHAPE, *input_shape, 1))
-        input_tensor_empty2 = Input(shape=(T_SHAPE, *input_shape, 3))  # empty vector field
         # define standard values according to the convention over configuration paradigm
         activation = config.get('ACTIVATION', 'elu')
         batch_norm = config.get('BATCH_NORMALISATION', False)
@@ -224,7 +222,7 @@ def create_PhaseRegressionModel_v2(config, networkname='PhaseRegressionModel'):
                           kernel_initializer=tensorflow.keras.initializers.RandomNormal(mean=0.0, stddev=1e-5),
                           name='unet2flow')
 
-        """temporal_encoder = ConvEncoder(activation=activation,
+        spatial_encoder = ConvEncoder(activation=activation,
                                        batch_norm=batch_norm,
                                        bn_first=bn_first,
                                        depth=depth,
@@ -235,13 +233,13 @@ def create_PhaseRegressionModel_v2(config, networkname='PhaseRegressionModel'):
                                        kernel_init=kernel_init,
                                        m_pool=m_pool,
                                        ndims=ndims,
-                                       pad=pad)"""
+                                       pad=pad)
 
-        unet = create_unet(config, single_model=False)
+        unet = create_unet(config, single_model=False, networkname='3D-Unet')
         st_layer = nrn_layers.SpatialTransformer(interp_method=interp_method, indexing=indexing, ident=True,
                                                  name='deformable_layer')
 
-        gap = tensorflow.keras.layers.GlobalAveragePooling3D()
+        gap = tensorflow.keras.layers.GlobalAveragePooling3D(name='GAP_3D_Layer')
 
         # unstack along the temporal axis
         # added shuffling, which avoids the model to be biased by the order
@@ -249,13 +247,15 @@ def create_PhaseRegressionModel_v2(config, networkname='PhaseRegressionModel'):
 
         import random
         # unstack along t yielding a list of 3D volumes
-        inputs_spatial = tf.unstack(input_tensor, axis=1)
-        # first tests without shuffleing, later we can add the shuffleing
+        inputs_spatial = input_tensor
+        inputs_spatial = tf.unstack(input_tensor, axis=1, name='split_into_3D_vols')
+        # first tests without shuffling, later we can add the shuffling
         """indicies = list(tf.range(len(inputs_spatial)))
         zipped = list(zip(inputs_spatial, indicies))
         random.shuffle(zipped)
         inputs_spatial, indicies = zip(*zipped)"""
         # feed the T x 3D volumes into the spatial encoder (3D conv)
+        #pre_flows = tf.map_fn(unet, inputs_spatial)
         pre_flows = [unet(vol) for vol in inputs_spatial]
 
         #pre_flows, _ = zip(*sorted(zip(pre_flows, indicies), key=lambda tup: tup[1]))
@@ -263,28 +263,38 @@ def create_PhaseRegressionModel_v2(config, networkname='PhaseRegressionModel'):
 
         transformed = [st_layer([input_vol, flow]) for input_vol, flow in
                        zip(inputs_spatial, flows)]
+        inputs_spatial = flows
+
+        encode_flow=False
+        if encode_flow:
+
+            enc = [spatial_encoder(vol)[0] for vol in inputs_spatial]
+            print('shape after flow encoding: {}'.format(enc[0].shape))
+            inputs_spatial = [gap(vol) for vol in enc]
+
+        else:
+            # global average pooling for T x 3D vols
+            inputs_spatial = [gap(vol) for vol in inputs_spatial]
 
         if pre_gap_conv:
-            gap_conv = tf.keras.layers.Conv3D(filters=64, kernel_size=1, strides=(1, 1, 1), padding='valid',
-                                              activation=activation, kernel_initializer=kernel_init)
+            gap_conv = tf.keras.layers.Conv3D(filters=64, kernel_size=3, strides=(1, 3, 3), padding='valid',
+                                              activation=activation, kernel_initializer=kernel_init, name='pre-conv')
 
-            inputs_spatial = [tf.keras.layers.BatchNormalization()(elem) for elem in flows]
-            inputs_spatial = [tf.keras.layers.Dropout(rate=0.5)(elem) for elem in inputs_spatial]
+            inputs_spatial = [tf.keras.layers.BatchNormalization(name='final-BN')(elem) for elem in inputs_spatial]
+            inputs_spatial = [tf.keras.layers.Dropout(rate=0.5, name='final-dropout')(elem) for elem in inputs_spatial]
             inputs_spatial = [gap_conv(vol) for vol in inputs_spatial]
 
-        # global average pooling for T x 3D vols
-        inputs_spatial = [gap(vol) for vol in inputs_spatial]
-        inputs_spatial = tf.stack(inputs_spatial, axis=1)
+
+        inputs_spatial = tf.stack(inputs_spatial, axis=1, name='merge_3D_into_4D')
 
         inputs = inputs_spatial
-        print('Shape after GAP')
-        print(inputs.shape)
+
         # 36, 256
         if add_bilstm:
             print('add a bilstm layer with: {} lstm units'.format(lstm_units))
-            forward_layer = LSTM(lstm_units, return_sequences=True)
+            forward_layer = LSTM(lstm_units, return_sequences=True, name='forward_LSTM')
             backward_layer = LSTM(lstm_units, activation='tanh', return_sequences=True,
-                                  go_backwards=True)  # maybe change to tanh
+                                  go_backwards=True, name='backward_LSTM')  # maybe change to tanh
             inputs = Bidirectional(forward_layer, backward_layer=backward_layer, input_shape=inputs.shape)(inputs)
 
         # 36,64
@@ -295,11 +305,11 @@ def create_PhaseRegressionModel_v2(config, networkname='PhaseRegressionModel'):
         # either 36,256 --> from the temp encoder or
         # 36,64 --> 64 --> number of BI-LSTM units
         # activation to linear
-        onehot = tf.keras.layers.Conv1D(filters=PHASES, kernel_size=5, strides=1, padding='same', activation='linear',
-                                        name='final_conv')(inputs)
-        flows = tf.stack(flows, axis=1, name='flow')
-        transformed = tf.stack(transformed, axis=1, name='transformed')
-        if final_activation == 'relu':
+        onehot = tf.keras.layers.Conv1D(filters=PHASES, kernel_size=1, strides=1, padding='same', activation=final_activation,
+                                        name='pre_onehot')(inputs)
+        flows = tf.stack(flows, axis=1, name='stacked_flows')
+        transformed = tf.stack(transformed, axis=1, name='stacked_transformed')
+        """if final_activation == 'relu':
             onehot = tf.keras.layers.ReLU()(onehot)
         elif final_activation == 'softmax':
             # axis -1 --> one class per timestep, as we repeat the phases its not possible to softmax the phase
@@ -307,15 +317,15 @@ def create_PhaseRegressionModel_v2(config, networkname='PhaseRegressionModel'):
         elif final_activation == 'sigmoid':
             onehot = tf.keras.activations.sigmoid(onehot)
         else:
-            logging.info('No final activation given! Please check the "FINAL_ACTIVATION" param!')
+            logging.info('No final activation given! Please check the "FINAL_ACTIVATION" param!')"""
 
         # 36, 5
         print('Shape after final conv layer')
         print(onehot.shape)
 
         # add empty tensor with one-hot shape to align with gt
-        zeros = tf.zeros_like(onehot)
-        onehot = tf.stack([onehot, zeros], axis=1)
+        zeros = tf.zeros_like(onehot, name='zero_padding')
+        onehot = tf.stack([onehot, zeros], axis=1, name='extend_onehot_by_zeros')
 
         onehot = tf.keras.layers.Activation('linear', name='onehot')(onehot)
         transformed = tf.keras.layers.Activation('linear', name='transformed')(transformed)
@@ -341,7 +351,7 @@ def create_PhaseRegressionModel_v2(config, networkname='PhaseRegressionModel'):
                 'flows': Grad('l2').loss}
 
             weights = {
-                'onehot': 10,
+                'onehot': 1,
                 'transformed': 1,
                 'flows': 0.001}
             #losses = [mse]
@@ -354,7 +364,7 @@ def create_PhaseRegressionModel_v2(config, networkname='PhaseRegressionModel'):
             loss_weights=weights,
             # metrics=[own_metr.mse_wrapper, own_metr.ca_wrapper, own_metr.meandiff] #
             metrics={
-                'onehot': own_metr.MSE(masked=mask_loss),
+                'onehot': own_metr.meandiff,
                 'transformed': MSE_().loss,
                 'flows': Grad('l2').loss
             }

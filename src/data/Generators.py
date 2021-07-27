@@ -936,7 +936,7 @@ class PhaseRegressionGenerator_v2(DataGenerator):
     yields n input volumes and n output volumes
     """
 
-    def __init__(self, x=None, y=None, config=None):
+    def __init__(self, x=None, y=None, config=None, in_memory=False):
 
         if config is None:
             config = {}
@@ -960,6 +960,9 @@ class PhaseRegressionGenerator_v2(DataGenerator):
         self.AUGMENT_TEMP = config.get('AUGMENT_TEMP', False)
         self.AUGMENT_TEMP_RANGE = config.get('AUGMENT_TEMP_RANGE', (-5, 5))
         self.RESAMPLE_T = config.get('RESAMPLE_T', False)
+        self.IN_MEMORY = in_memory
+        self.THREAD_POOL = concurrent.futures.ThreadPoolExecutor(max_workers=12)
+        self.config = config
 
         if self.REPEAT:
             self.TARGET_SHAPE = (self.T_SHAPE, self.PHASES)
@@ -990,13 +993,24 @@ class PhaseRegressionGenerator_v2(DataGenerator):
                      '\n'
                      'Repeat volume: \n{}'.format(self.AUGMENT_PHASES, self.REPEAT))
 
+        # in memory preprocessing for the cluster
+        # in memory training for the cluster
+        if self.IN_MEMORY:
+            zipped = list()
+            futures = [self.THREAD_POOL.submit(self.__fix_preprocessing__,i,i) for i in range(len(self.IMAGES))]
+            for i, future in enumerate(as_completed(futures)):
+                zipped.append(future.result())
+            self.model_inputs, self.onehots, self.reps, self.gt_lengths = list(map(list, zip(*zipped)))
+
         self.MASKS = None  # need to check if this is still necessary!
 
         # define a random seed for albumentations
         random.seed(config.get('SEED', 42))
         logging.info('params of generator:')
+        exclude_vars = ['IMAGES', 'LABELS', 'model_inputs','onehots', 'reps', 'gt_lengths', 'config']
+        valid_var_types = [int, str, list, bool]
         logging.info(list((k, v) for k, v in vars(self).items() if
-                          type(v) in [int, str, list, bool] and str(k) not in ['IMAGES', 'LABELS']))
+                          type(v) in valid_var_types and str(k) not in exclude_vars))
 
     def on_batch_end(self):
         """
@@ -1023,23 +1037,22 @@ class PhaseRegressionGenerator_v2(DataGenerator):
         futures = set()
 
         # spawn one thread per worker
-        with concurrent.futures.ThreadPoolExecutor(max_workers=self.MAX_WORKERS) as executor:
-            t0 = time()
-            ID = ''
-            # Generate data
-            for i, ID in enumerate(list_IDs_temp):
+        t0 = time()
+        ID = ''
+        # Generate data
+        for i, ID in enumerate(list_IDs_temp):
 
-                try:
-                    # remember the ordering of the shuffled indexes,
-                    # otherwise files, that take longer are always at the batch end
-                    futures.add(executor.submit(self.__preprocess_one_image__, i, ID))
+            try:
+                # remember the ordering of the shuffled indexes,
+                # otherwise files, that take longer are always at the batch end
+                futures.add(self.THREAD_POOL.submit(self.__preprocess_one_image__, i, ID))
 
-                except Exception as e:
-                    PrintException()
-                    print(e)
-                    logging.error(
-                        'Exception {} in datagenerator with: image: {} or mask: {}'.format(str(e), self.IMAGES[ID],
-                                                                                           self.LABELS[ID]))
+            except Exception as e:
+                PrintException()
+                print(e)
+                logging.error(
+                    'Exception {} in datagenerator with: image: {} or mask: {}'.format(str(e), self.IMAGES[ID],
+                                                                                       self.LABELS[ID]))
 
         for i, future in enumerate(as_completed(futures)):
             # use the indexes to order the batch
@@ -1064,15 +1077,17 @@ class PhaseRegressionGenerator_v2(DataGenerator):
 
         return tuple([[x], [y, y2, np.zeros((*y2.shape, 3))]])
 
-    def __preprocess_one_image__(self, i, ID):
+    def __fix_preprocessing__(self,i,ID):
 
+        t0 = time()
         ref = None
-        if self.HIST_MATCHING:
-            ignore_z = 2
+        apply_hist_matching=False
+        if self.HIST_MATCHING and random.random() <= self.AUGMENT_PROB:
+            apply_hist_matching = True
+            ignore_z = 1
             # use a random image, given to this generator, as histogram template for histogram matching augmentation
             ref = sitk.GetArrayFromImage(sitk.ReadImage((choice(self.IMAGES))))
-            ref = ref[choice(list(range(ref.shape[0]-1))), choice(list(range(ref.shape[1]-1))[ignore_z:-ignore_z])]
-        t0 = time()
+            ref = ref[choice(list(range(ref.shape[0] - 1))), choice(list(range(ref.shape[1] - 1))[ignore_z:-ignore_z])]
 
         x = self.IMAGES[ID]
 
@@ -1191,7 +1206,7 @@ class PhaseRegressionGenerator_v2(DataGenerator):
                                     resample_3D(sitk_img=x[0],
                                                 size=x[1],
                                                 spacing=target_spacing,
-                                                interpolate=sitk.sitkLinear),
+                                                interpolate=self.IMG_INTERPOLATION),
                                     zip(model_inputs, new_size_inputs)))
 
         logging.debug('Spacing after resample: {}'.format(model_inputs[0].GetSpacing()))
@@ -1201,26 +1216,53 @@ class PhaseRegressionGenerator_v2(DataGenerator):
         # repeat the 3D volumes along t (we did the same with the onehot vector)
         model_inputs = np.stack(list(map(lambda x: sitk.GetArrayFromImage(x), model_inputs)), axis=0)
 
-        self.__plot_state_if_debug__(img=model_inputs[len(model_inputs) // 2], start_time=t1, step='resampled')
+        if apply_hist_matching:
+            model_inputs = match_hist(model_inputs, ref)
+            logging.debug('hist matching took: {:0.3f} s'.format(time() - t1))
+            t1 = time()
 
+        self.__plot_state_if_debug__(img=model_inputs[len(model_inputs) // 2], start_time=t1, step='resampled')
+        model_inputs = clip_quantile(model_inputs, .9999)
+        return model_inputs, onehot, reps, gt_length
+
+
+    def __preprocess_one_image__(self, i, ID):
+
+        """
+
+        Parameters
+        ----------
+        i : the index in the current batch
+        ID : the index of entity which should be loaded
+
+        Returns
+        -------
+
+        """
+
+        t0 = time()
+        if self.IN_MEMORY:
+            model_inputs, onehot, reps, gt_length = self.model_inputs[ID], self.onehots[ID], self.reps[ID], self.gt_lengths[ID]
+        else:
+            model_inputs, onehot, reps, gt_length = self.__fix_preprocessing__(i,ID)
+        t1 = time()
         if self.AUGMENT:
             # use albumentation to apply random rotation scaling and shifts
             model_inputs = augmentation_compose_2d_3d_4d(img=model_inputs, mask=None,
-                                                         probabillity=self.AUGMENT_PROB)
+                                                         probabillity=self.AUGMENT_PROB,
+                                                         config=self.config)
             self.__plot_state_if_debug__(img=model_inputs[0], start_time=t1, step='augmented')
             t1 = time()
 
         # clip, pad/crop and normalise & extend last axis
         # We repeat/tile the 3D volume at this time, to avoid resampling/augmenting the same slices multiple times
         # Ideally this saves computation time and memory
-        model_inputs = clip_quantile(model_inputs, .9999)
+
         model_inputs = np.tile(model_inputs, (reps, 1, 1, 1))[:self.T_SHAPE, ...]
-
-        msk = np.ones_like(onehot)
-
         # we crop and pad the 4D volume and the target vectors into the same size
         model_inputs = pad_and_crop(model_inputs, target_shape=(self.T_SHAPE, *self.DIM))
         onehot = pad_and_crop(onehot, target_shape=self.TARGET_SHAPE)
+        msk = np.ones_like(onehot)
         logging.debug('onehot pap and cropped:')
         if self.DEBUG_MODE: plt.imshow(onehot); plt.show()
         msk = pad_and_crop(msk, target_shape=self.TARGET_SHAPE)

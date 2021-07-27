@@ -485,7 +485,7 @@ def create_2d_3d_avg_model(config, metrics=None, supervision=False):
     return model
 
 
-class Unet(tf.keras.Model):
+class Unet(tf.keras.layers.Layer):
 
     def __init__(self, dim=[10, 224, 224], activation='elu', batch_norm=False, bn_first=False, depth=4, drop_3=0.5,
                  dropouts=[0.2, 0.3, 0.4, 0.5], f_size=(3, 3, 3), filters=16,

@@ -82,8 +82,8 @@ if __name__ == "__main__":
     sys.path.append(os.getcwd())
     print('given parameters: {}'.format(results))
 
-    # get all cfgs
-    # call main for each cfg
+    # get all cfgs - we expect to find 4 as we usually train a 4-fold cv
+    # call the predict_fn for each cfg
     search_pattern = '**/**/config/config.json'
     search_path = os.path.join(results.exp_root, search_pattern)
     print(search_path)
