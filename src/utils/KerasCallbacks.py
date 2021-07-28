@@ -33,7 +33,7 @@ def get_callbacks(config=None, batch_generator=None, validation_generator=None, 
     ensure_dir(config['MODEL_PATH'])
 
     # add these callbacks for each training
-    """callbacks.append(
+    callbacks.append(
         ModelCheckpoint(os.path.join(config['MODEL_PATH'], 'model.h5'),
                         # could also be 'model.h5 to save only the weights
                         verbose=1,
@@ -41,7 +41,7 @@ def get_callbacks(config=None, batch_generator=None, validation_generator=None, 
                         save_weights_only=True,
                         monitor=config.get('SAVE_MODEL_FUNCTION', 'loss'),
                         mode=config.get('SAVE_MODEL_MODE', 'min'),
-                        save_freq='epoch'))"""
+                        save_freq='epoch'))
 
     callbacks.append(
         tensorflow.keras.callbacks.ReduceLROnPlateau(monitor=config.get('MONITOR_FUNCTION', 'loss'),

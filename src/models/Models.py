@@ -255,7 +255,6 @@ def create_PhaseRegressionModel_v2(config, networkname='PhaseRegressionModel'):
         random.shuffle(zipped)
         inputs_spatial, indicies = zip(*zipped)"""
         # feed the T x 3D volumes into the spatial encoder (3D conv)
-        #pre_flows = tf.map_fn(unet, inputs_spatial)
         pre_flows = [unet(vol) for vol in inputs_spatial]
 
         #pre_flows, _ = zip(*sorted(zip(pre_flows, indicies), key=lambda tup: tup[1]))
@@ -263,7 +262,48 @@ def create_PhaseRegressionModel_v2(config, networkname='PhaseRegressionModel'):
 
         transformed = [st_layer([input_vol, flow]) for input_vol, flow in
                        zip(inputs_spatial, flows)]
-        inputs_spatial = flows
+        inputs_spatial = flows[:]
+        print('Flowfield shape: {}'.format(inputs_spatial[0].shape))
+
+        # add the magnitude as fourth channel
+        tensor_magnitude = [tf.norm(vol, ord='euclidean', axis=-1, keepdims=True, name='flow2norm') for vol in inputs_spatial]
+        inputs_spatial = [tf.concat([vol, norm], axis=-1, name='extend_flow_with_norm') for vol,norm in zip(inputs_spatial, tensor_magnitude)]
+        print('inkl norm shape: {}'.format(inputs_spatial[0].shape))
+        # How to downscale the in-plane and spatial resolution?
+        # 1st idea: apply conv layers with a stride
+        # b, t, 16, 64, 64, 3/4
+        # conv with: n times 4,4,4 filters, valid/no border padding and a striding of 4
+        conv_1 = Conv(filters=16, kernel_size=4, padding='valid', strides=4,
+                          kernel_initializer=kernel_init,
+                      activation=activation,
+                          name='downsample_1')
+        inputs_spatial = [conv_1(vol) for vol in inputs_spatial]
+        print('first conv shape: {}'.format(inputs_spatial[0].shape))
+        #  b, t, 4, 16, 16, n
+        # conv with: n times 4,4,4 filters, valid/no border padding and a striding of 4
+        conv_2 = Conv(filters=32, kernel_size=4, padding='valid', strides=4,
+                      kernel_initializer=kernel_init,
+                      activation=activation,
+                      name='downsample_2')
+        inputs_spatial = [conv_2(vol) for vol in inputs_spatial]
+        print('second conv shape: {}'.format(inputs_spatial[0].shape))
+        # b, t, 1, 4, 4, n
+        # conv with: n times 4,4,4 filters, valid/no border padding and a striding of 4
+        conv_3 = Conv(filters=64, kernel_size=(1,4,4), padding='valid', strides=(1,4,4),
+                      kernel_initializer=kernel_init,
+                      activation=activation,
+                      name='downsample_3')
+        inputs_spatial = [conv_3(vol) for vol in inputs_spatial]
+        print('third conv shape: {}'.format(inputs_spatial[0].shape))
+
+
+        # b, t, 1, 1, 1, n
+        # global average pooling for T x 3D vols
+        #inputs_spatial = [gap(vol) for vol in inputs_spatial]
+        # 2nd idea: GAP with/without pre-conv layer which extracts motion features into the channels
+
+        # 3rd idea use the tft.pca module to transform the downstream.
+        # This transform reduces the dimension of input vectors to output_dim in a way that retains the maximal variance
 
         encode_flow=False
         if encode_flow:
@@ -272,9 +312,6 @@ def create_PhaseRegressionModel_v2(config, networkname='PhaseRegressionModel'):
             print('shape after flow encoding: {}'.format(enc[0].shape))
             inputs_spatial = [gap(vol) for vol in enc]
 
-        else:
-            # global average pooling for T x 3D vols
-            inputs_spatial = [gap(vol) for vol in inputs_spatial]
 
         if pre_gap_conv:
             gap_conv = tf.keras.layers.Conv3D(filters=64, kernel_size=3, strides=(1, 3, 3), padding='valid',
@@ -285,17 +322,20 @@ def create_PhaseRegressionModel_v2(config, networkname='PhaseRegressionModel'):
             inputs_spatial = [gap_conv(vol) for vol in inputs_spatial]
 
 
-        inputs_spatial = tf.stack(inputs_spatial, axis=1, name='merge_3D_into_4D')
+        inputs_spatial = tf.concat(inputs_spatial, axis=1, name='merge_3D_into_4D')
+        inputs_spatial = tf.keras.layers.Reshape(target_shape=(36,64))(inputs_spatial)
 
         inputs = inputs_spatial
 
         # 36, 256
         if add_bilstm:
             print('add a bilstm layer with: {} lstm units'.format(lstm_units))
+            print('Shape before LSTM layers: {}'.format(inputs.shape))
             forward_layer = LSTM(lstm_units, return_sequences=True, name='forward_LSTM')
             backward_layer = LSTM(lstm_units, activation='tanh', return_sequences=True,
                                   go_backwards=True, name='backward_LSTM')  # maybe change to tanh
             inputs = Bidirectional(forward_layer, backward_layer=backward_layer, input_shape=inputs.shape)(inputs)
+            print('Shape after bilstm layer: {}'.format(inputs.shape))
 
         # 36,64
         print('Shape after Bi-LSTM layer')

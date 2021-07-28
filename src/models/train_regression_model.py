@@ -102,14 +102,14 @@ def train_fold(config):
 
     # instantiate the batchgenerators
 
-    batch_generator = PhaseRegressionGenerator_v2(x_train_sax, x_train_sax, config=config, in_memory=True)
+    batch_generator = PhaseRegressionGenerator_v2(x_train_sax, x_train_sax, config=config, in_memory=False)
     val_config = config.copy()
     val_config['AUGMENT'] = False
     val_config['AUGMENT_PHASES'] = False
     val_config['HIST_MATCHING'] = False
     val_config['AUGMENT_TEMP'] = False
     # val_config['RESAMPLE_T'] = False # this could yield phases which does not fit into the given dim
-    validation_generator = PhaseRegressionGenerator_v2(x_val_sax, x_val_sax, config=val_config, in_memory=True)
+    validation_generator = PhaseRegressionGenerator_v2(x_val_sax, x_val_sax, config=val_config, in_memory=False)
 
     # get model
     model = create_PhaseRegressionModel_v2(config)

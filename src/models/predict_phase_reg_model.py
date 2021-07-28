@@ -5,8 +5,8 @@ def predict(cfg_file, data_root, c2l=False):
     import numpy as np
     from src.data.Dataset import get_trainings_files
     from src.utils.Utils_io import Console_and_file_logger, ensure_dir
-    from src.data.Generators import PhaseRegressionGenerator
-    from src.models.Models import create_PhaseRegressionModel
+    from src.data.Generators import PhaseRegressionGenerator_v2
+    from src.models.Models import create_PhaseRegressionModel_v2
     from ProjectRoot import change_wd_to_project_root
     change_wd_to_project_root()
     import tensorflow as tf
@@ -42,20 +42,22 @@ def predict(cfg_file, data_root, c2l=False):
     #batch_generator = PhaseRegressionGenerator(x_train_sax, x_train_sax, config=config)
     # create another config for the validation data, for the case of different evaluation
     val_config = config.copy()
-    validation_generator = PhaseRegressionGenerator(x_val_sax, x_val_sax, config=val_config)
+    validation_generator = PhaseRegressionGenerator_v2(x_val_sax, x_val_sax, config=val_config)
 
-    model = create_PhaseRegressionModel(config)
-    print(os.getcwd())
+    model = create_PhaseRegressionModel_v2(config)
+    logging.info('Trying to load the model weights')
+    logging.info('work dir: {}'.format(os.getcwd()))
+    logging.info('model weights dir: {}'.format(os.path.join(config['MODEL_PATH'], 'model.h5')))
     model.load_weights(os.path.join(config['MODEL_PATH'], 'model.h5'))
     logging.info('loaded model weights as h5 file')
 
     # predict on the validation generator
     preds = model.predict(validation_generator)
-    logging.info(preds.shape)
+    logging.info('Shape of the predictions: {}'.format(preds.shape))
 
     # get all ground truth vectors
     gts = np.stack([np.squeeze(y) for x, y in validation_generator])
-    logging.info(gts.shape)
+    logging.info('Shape of GT: {}'.format(gts.shape))
 
     pred_path = os.path.join(config['EXP_PATH'], 'pred')
     ensure_dir(pred_path)

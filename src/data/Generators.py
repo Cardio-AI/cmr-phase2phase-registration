@@ -1023,8 +1023,10 @@ class PhaseRegressionGenerator_v2(DataGenerator):
         """
         Loads and pre-process one batch
 
-        :param list_IDs_temp:
-        :return: X : (batchsize, *dim, n_channels), Y : (batchsize, self.T_SHAPE, number_of_classes)
+        :param list_IDs_temp: list of int - list of ids to load
+        :return: x (4d-CMR),y (Phase vector, rolled 4d-CMR, zero-flowfield)
+        [(batchsize, *dim, n_channels)],
+        [(batchsize, self.T_SHAPE, number_of_classes), (batchsize, *dim, n_channels), (batchsize, *dim, 3)]
         """
         # use this for batch wise histogram-reference selection
         self.on_batch_end()
@@ -1053,6 +1055,7 @@ class PhaseRegressionGenerator_v2(DataGenerator):
                 logging.error(
                     'Exception {} in datagenerator with: image: {} or mask: {}'.format(str(e), self.IMAGES[ID],
                                                                                        self.LABELS[ID]))
+                raise e # testing phase --> make sure all errors are handled
 
         for i, future in enumerate(as_completed(futures)):
             # use the indexes to order the batch
@@ -1232,7 +1235,7 @@ class PhaseRegressionGenerator_v2(DataGenerator):
 
         Parameters
         ----------
-        i : the index in the current batch
+        i : the position within the current batch
         ID : the index of entity which should be loaded
 
         Returns
@@ -1247,6 +1250,10 @@ class PhaseRegressionGenerator_v2(DataGenerator):
             model_inputs, onehot, reps, gt_length = self.__fix_preprocessing__(i,ID)
         t1 = time()
         if self.AUGMENT:
+            # pad and crop in-plane to augment as less as possible
+            # keep t as it is to align with the onehot vector, we modify t by np.tile/repeating and than cropping
+            augment_shape = (model_inputs.shape[0], *self.DIM)
+            model_inputs = pad_and_crop(model_inputs, target_shape=augment_shape)
             # use albumentation to apply random rotation scaling and shifts
             model_inputs = augmentation_compose_2d_3d_4d(img=model_inputs, mask=None,
                                                          probabillity=self.AUGMENT_PROB,
