@@ -423,9 +423,9 @@ def show_vec_transparent(img=None, mask=None, show=True, f_size=(5, 5), ax=None,
         return fig
 
 def plot_displacement(col_titles, first_m, first_vol, moved, moved_m, picks, second_m,
-                      second_vol, vect, y_label):
+                      second_vol, vect, y_label, plot_masks=True):
     from src.data.Preprocess import normalise_image
-
+    cmap = 'inferno'
     # Define the plot grid size
     nrows = 3
     ncols = 7
@@ -433,52 +433,53 @@ def plot_displacement(col_titles, first_m, first_vol, moved, moved_m, picks, sec
     vmax = 1
     for i, z in enumerate(picks):
         j = 0
+        f_vol, s_vol, mov = first_vol[z], second_vol[z], moved[z]
         # t0
-        axes[i, j].imshow(normalise_image(first_vol[z]), 'gray')
-        axes[i, j].imshow(first_m[z], alpha=0.6)
+        axes[i, j].imshow(normalise_image(f_vol), 'gray',vmin=0, vmax=0.8)
+        if plot_masks: axes[i, j].imshow(first_m[z], alpha=0.6)
         axes[i, j].set_ylabel(y_label[i], rotation=90, size='medium')
         axes[i, j].set_xticks([])
         axes[i, j].set_yticks([])
         j = j + 1
         # t1
-        axes[i, j].imshow(second_vol[z], 'gray')
-        axes[i, j].imshow(second_m[z], alpha=0.6)
+        axes[i, j].imshow(normalise_image(s_vol), 'gray',vmin=0, vmax=0.8)
+        if plot_masks: axes[i, j].imshow(second_m[z], alpha=0.6)
         axes[i, j].set_xticks([])
         axes[i, j].set_yticks([])
         j = j + 1
-        # moved t0
-        axes[i, j].imshow(moved[z], 'gray')
-        axes[i, j].imshow(moved_m[z], alpha=0.6)
+        # moved t0 and marks for the moved areas
+        axes[i, j].imshow(normalise_image(mov), 'gray',vmin=0, vmax=0.8)
+        if plot_masks: [i, j].imshow(moved_m[z], alpha=0.6)
+        axes[i, j].imshow(np.abs(f_vol - s_vol), cmap=cmap, alpha=0.6)
         axes[i, j].set_xticks([])
         axes[i, j].set_yticks([])
         j = j + 1
         # vect, abs & min/max normalized
         temp = np.absolute(vect[z])
-        axes[i, j].imshow(first_vol[z], 'gray', vmin=0, vmax=0.8)
-        axes[i, j].imshow(normalise_image(temp), alpha=0.8)
+        axes[i, j].imshow(normalise_image(f_vol), 'gray', vmin=0, vmax=0.8)
+        axes[i, j].imshow(normalise_image(temp), alpha=0.6)
         axes[i, j].set_xticks([])
         axes[i, j].set_yticks([]);
         j = j + 1
 
         # magnitude
-        temp = normalise_image(np.sqrt(
-            np.square(vect[z][..., 0]) + np.square(vect[z][..., 1]) + np.square(vect[z][..., 2])))
-        axes[i, j].imshow(first_vol[z], 'gray', vmin=0, vmax=.8)
-        axes[i, j].imshow(temp, cmap='seismic', alpha=0.8)
+        temp = np.sqrt(
+            np.square(vect[z][..., 0]) + np.square(vect[z][..., 1]) + np.square(vect[z][..., 2]))
+        axes[i, j].imshow(normalise_image(f_vol), 'gray', vmin=0, vmax=.8)
+        axes[i, j].imshow(temp, cmap='cividis', alpha=0.6)
 
         axes[i, j].set_xticks([])
         axes[i, j].set_yticks([]);
         j = j + 1
         # diff t0 - t1
-        axes[i, j].imshow(first_vol[z], 'gray', vmin=0, vmax=.8)
-        axes[i, j].imshow(np.abs(first_vol[z] - second_vol[z]), cmap='seismic',
-                          interpolation='none')
+        axes[i, j].imshow(normalise_image(f_vol), 'gray', vmin=0, vmax=.8)
+        axes[i, j].imshow(np.abs(s_vol - f_vol), cmap=cmap,alpha=0.6)
         axes[i, j].set_xticks([])
         axes[i, j].set_yticks([]);
         j = j + 1
         # diff moved - t1
-        axes[i, j].imshow(first_vol[z], 'gray', vmin=0, vmax=.8)
-        axes[i, j].imshow(np.abs(moved[z] - second_vol[z]), cmap='seismic', interpolation='none')
+        axes[i, j].imshow(normalise_image(f_vol), 'gray', vmin=0, vmax=.8)
+        axes[i, j].imshow(np.abs(s_vol - mov), cmap=cmap, alpha=0.6)
         axes[i, j].set_xticks([])
         axes[i, j].set_yticks([])
     # set column names

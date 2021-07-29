@@ -812,24 +812,22 @@ class PhaseRegressionCallback(Callback):
                 for key, x, y in zip(self.keys, self.xs, self.ys):
                     predictions = self.model.predict(x)
                     if len(predictions) == 3:  # multi-output-model
-                        onehot_predictions, onehot_y = predictions[0], y[0]
-                        movings, vects = predictions[1], predictions[2]
+                        onehot_predictions, movings, vects = predictions
+                        onehot_y =  y[0]
 
                         # slice the volumes
                         b = 0
-                        figures = list()
                         for t in range(0,x[0][b].shape[0], 5):
-                            first_vol, second_vol = x[0][b][t][:], y[1][b][t][:]
-
-                            moved, vect = movings[b][t][:], vects[b][t][:]
+                            first_vol, second_vol = x[0][b][t], y[1][b][t]
+                            moved, vect = movings[b][t], vects[b][t]
                             spatial_slices = first_vol.shape[0]
                             # pick one upper, middle and lower slice as example
                             picks = (np.array([1, 0.5, 0]) * spatial_slices).astype(int)
                             picks = np.clip(picks, 0, spatial_slices-1)
                             y_label = ['Basal', 'Mid', 'Apex']
-                            from tensorflow.keras.metrics import mse
-                            mse_1 = np.mean((first_vol - second_vol) ** 2)
-                            mse_2 = np.mean((moved - second_vol) ** 2)
+                            from src.utils.Metrics import MSE_
+                            mse_1 = MSE_().loss(second_vol,first_vol)
+                            mse_2 = MSE_().loss(second_vol, moved)
                             col_titles = ['t1', 't2', 't1 moved', 'vect', 'magn', 't1-t2 \n {:6.4f}'.format(mse_1),
                                           'moved-t2 \n {:6.4f}'.format(mse_2)]
 
@@ -838,7 +836,8 @@ class PhaseRegressionCallback(Callback):
                                                     first_vol=first_vol,
                                                     moved=moved, moved_m=np.zeros_like(moved),
                                                     picks=picks,second_m=np.zeros_like(second_vol),
-                                                    second_vol=second_vol, vect=vect, y_label=y_label)
+                                                    second_vol=second_vol, vect=vect, y_label=y_label,
+                                                    plot_masks=False)
 
                             tensorflow.summary.image(name='plot/{}/batch_{}/{}/summary'.format(key, b, t),
                                                      data=self.make_image(fig),

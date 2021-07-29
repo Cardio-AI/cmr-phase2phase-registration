@@ -67,10 +67,11 @@ def train_fold(config, in_memory=True):
     # Load SAX volumes
     x_train_sax, y_train_sax, x_val_sax, y_val_sax = get_trainings_files(data_path=DATA_PATH_SAX,
                                                                          path_to_folds_df=DF_FOLDS,
-                                                                         fold=FOLD)
-    """examples = 12
+                                                                        fold=FOLD)
+
+    '''examples = 12
     x_train_sax, y_train_sax, x_val_sax, y_val_sax = x_train_sax[:examples], y_train_sax[:examples], x_val_sax[:examples], y_val_sax[:examples]
-    """
+    '''
     logging.info('SAX train CMR: {}, SAX train masks: {}'.format(len(x_train_sax), len(y_train_sax)))
     logging.info('SAX val CMR: {}, SAX val masks: {}'.format(len(x_val_sax), len(y_val_sax)))
 

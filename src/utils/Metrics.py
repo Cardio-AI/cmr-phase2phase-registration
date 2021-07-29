@@ -4,6 +4,16 @@
 import numpy as np
 import tensorflow as tf
 
+class Meandiff():
+
+    def __init__(self, apply_sum=True, apply_average=True):
+        self.__name__ = 'meandiff_sum_{}_avg_{}'.format(apply_sum, apply_average)
+        self.apply_sum=apply_sum
+        self.apply_average = apply_average
+
+    def __call__(self, y_true, y_pred, **kwargs):
+        return  meandiff(y_true, y_pred, apply_sum=self.apply_sum, apply_average=self.apply_average) # this should yield a loss between 1 and 0.0001
+
 
 def meandiff( y_true, y_pred, apply_sum=True, apply_average=True):
 

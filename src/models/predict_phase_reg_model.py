@@ -27,7 +27,13 @@ def predict(cfg_file, data_root, c2l=False):
         config['DATA_PATH_SAX'] = os.path.join(data_root, 'sax')
         config['DF_FOLDS'] = os.path.join(data_root, 'df_kfold.csv')
         config['DF_META'] = os.path.join(data_root, 'SAx_3D_dicomTags_phase.csv')
-    x_train_sax, y_train_sax, x_val_sax, y_val_sax = get_trainings_files(data_path=config['DATA_PATH_SAX'],
+    isacdc = True
+    if isacdc:
+        x_train_sax, y_train_sax, x_val_sax, y_val_sax = get_trainings_files(data_path='/mnt/ssd/data/acdc/3D/all',
+                                                                         path_to_folds_df='/mnt/ssd/data/acdc/3D/df_kfold.csv',
+                                                                         fold=config['FOLD'])
+    else:
+        x_train_sax, y_train_sax, x_val_sax, y_val_sax = get_trainings_files(data_path=config['DATA_PATH_SAX'],
                                                                          path_to_folds_df=config['DF_FOLDS'],
                                                                          fold=config['FOLD'])
     logging.info('SAX train CMR: {}, SAX train masks: {}'.format(len(x_train_sax), len(y_train_sax)))
@@ -52,11 +58,11 @@ def predict(cfg_file, data_root, c2l=False):
     logging.info('loaded model weights as h5 file')
 
     # predict on the validation generator
-    preds = model.predict(validation_generator)
+    preds, _, _ = model.predict(validation_generator)
     logging.info('Shape of the predictions: {}'.format(preds.shape))
 
     # get all ground truth vectors
-    gts = np.stack([np.squeeze(y) for x, y in validation_generator])
+    gts = np.stack([np.squeeze(y[0]) for x, y in validation_generator])
     logging.info('Shape of GT: {}'.format(gts.shape))
 
     pred_path = os.path.join(config['EXP_PATH'], 'pred')
@@ -86,13 +92,17 @@ if __name__ == "__main__":
 
     # get all cfgs - we expect to find 4 as we usually train a 4-fold cv
     # call the predict_fn for each cfg
-    search_pattern = '**/**/config/config.json'
-    search_path = os.path.join(results.exp_root, search_pattern)
-    print(search_path)
-
+    initial_search_pattern = 'config/config.json' # path to one experiment
+    search_path = os.path.join(results.exp_root, initial_search_pattern)
     cfg_files = sorted(glob.glob(search_path))
+    if len(cfg_files) == 0:
+        search_pattern = '**/**/config/config.json'
+        search_path = os.path.join(results.exp_root, search_pattern)
+        print(search_path)
+        cfg_files = sorted(glob.glob(search_path))
+        assert len(cfg_files) == 4, 'Expect 4 cfgs, but found {}'.format(len(cfg_files)) # avoid loading too many cfgs
     print(cfg_files)
-    assert len(cfg_files) == 4, 'Expect 4 cfgs, but found {}'.format(len(cfg_files))
+
     for cfg in cfg_files:
         try:
             predict(cfg_file=cfg, data_root=results.data, c2l=results.c2l)

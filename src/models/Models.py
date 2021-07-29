@@ -212,6 +212,9 @@ def create_PhaseRegressionModel_v2(config, networkname='PhaseRegressionModel'):
         pre_gap_conv = config.get('PRE_GAP_CONV', False)
         interp_method = 'linear'
         indexing = 'ij'
+        # TODO: this parameter is also used by the generator to define the number of channels
+        # here we stack the volume within the model manually, so keep that aligned!!!
+        #config['IMG_CHANNELS'] = 3
 
         # increase the dropout through the layer depth
         dropouts = list(np.linspace(drop_1, drop_3, depth))
@@ -240,94 +243,94 @@ def create_PhaseRegressionModel_v2(config, networkname='PhaseRegressionModel'):
                                                  name='deformable_layer')
 
         gap = tensorflow.keras.layers.GlobalAveragePooling3D(name='GAP_3D_Layer')
+        concat_layer = tf.keras.layers.Concatenate(axis=-1, name='stack_with_moved')
 
-        # unstack along the temporal axis
-        # added shuffling, which avoids the model to be biased by the order
-        # unstack along t, yielding a list of 3D volumes
+        norm_lambda = tf.keras.layers.Lambda(
+            lambda x: tf.norm(x, ord='euclidean', axis=-1, keepdims=True, name='flow2norm'), name='flow2norm')
+        concat_lambda = tf.keras.layers.Lambda(lambda x: tf.concat(x, axis=-1, name='extend_flow_with_norm'),
+                                               name='stack_flow_norm')
 
-        import random
-        # unstack along t yielding a list of 3D volumes
-        inputs_spatial = input_tensor
-        inputs_spatial = tf.unstack(input_tensor, axis=1, name='split_into_3D_vols')
-        # first tests without shuffling, later we can add the shuffling
-        """indicies = list(tf.range(len(inputs_spatial)))
-        zipped = list(zip(inputs_spatial, indicies))
-        random.shuffle(zipped)
-        inputs_spatial, indicies = zip(*zipped)"""
-        # feed the T x 3D volumes into the spatial encoder (3D conv)
-        pre_flows = [unet(vol) for vol in inputs_spatial]
-
-        #pre_flows, _ = zip(*sorted(zip(pre_flows, indicies), key=lambda tup: tup[1]))
-        flows= [Conv_layer(vol) for vol in pre_flows]
-
-        transformed = [st_layer([input_vol, flow]) for input_vol, flow in
-                       zip(inputs_spatial, flows)]
-        inputs_spatial = flows[:]
-        print('Flowfield shape: {}'.format(inputs_spatial[0].shape))
-
-        # add the magnitude as fourth channel
-        tensor_magnitude = [tf.norm(vol, ord='euclidean', axis=-1, keepdims=True, name='flow2norm') for vol in inputs_spatial]
-        inputs_spatial = [tf.concat([vol, norm], axis=-1, name='extend_flow_with_norm') for vol,norm in zip(inputs_spatial, tensor_magnitude)]
-        print('inkl norm shape: {}'.format(inputs_spatial[0].shape))
         # How to downscale the in-plane and spatial resolution?
         # 1st idea: apply conv layers with a stride
         # b, t, 16, 64, 64, 3/4
-        # conv with: n times 4,4,4 filters, valid/no border padding and a striding of 4
-        conv_1 = Conv(filters=16, kernel_size=4, padding='valid', strides=4,
-                          kernel_initializer=kernel_init,
-                      activation=activation,
-                          name='downsample_1')
-        inputs_spatial = [conv_1(vol) for vol in inputs_spatial]
-        print('first conv shape: {}'.format(inputs_spatial[0].shape))
-        #  b, t, 4, 16, 16, n
-        # conv with: n times 4,4,4 filters, valid/no border padding and a striding of 4
-        conv_2 = Conv(filters=32, kernel_size=4, padding='valid', strides=4,
-                      kernel_initializer=kernel_init,
-                      activation=activation,
-                      name='downsample_2')
-        inputs_spatial = [conv_2(vol) for vol in inputs_spatial]
-        print('second conv shape: {}'.format(inputs_spatial[0].shape))
-        # b, t, 1, 4, 4, n
-        # conv with: n times 4,4,4 filters, valid/no border padding and a striding of 4
-        conv_3 = Conv(filters=64, kernel_size=(1,4,4), padding='valid', strides=(1,4,4),
-                      kernel_initializer=kernel_init,
-                      activation=activation,
-                      name='downsample_3')
-        inputs_spatial = [conv_3(vol) for vol in inputs_spatial]
-        print('third conv shape: {}'.format(inputs_spatial[0].shape))
-
-
+        # conv with: n times 4,4,4 filters, valid/no border padding and a stride of 4
         # b, t, 1, 1, 1, n
         # global average pooling for T x 3D vols
         #inputs_spatial = [gap(vol) for vol in inputs_spatial]
         # 2nd idea: GAP with/without pre-conv layer which extracts motion features into the channels
-
         # 3rd idea use the tft.pca module to transform the downstream.
-        # This transform reduces the dimension of input vectors to output_dim in a way that retains the maximal variance
+        # This would reduce the dimension of input vectors to output_dim in a way that retains the maximal variance
+        conv_1 = Conv(filters=16, kernel_size=4, padding='valid', strides=4,
+                          kernel_initializer=kernel_init,
+                      activation=activation,
+                          name='downsample_1')
+
+        #  b, t, 4, 16, 16, n
+        # conv with: n times 4,4,4 filters, valid/no border padding and a stride of 4
+        conv_2 = Conv(filters=32, kernel_size=4, padding='valid', strides=4,
+                      kernel_initializer=kernel_init,
+                      activation=activation,
+                      name='downsample_2')
+
+        # b, t, 1, 4, 4, n
+        # conv with: n times 4,4,4 filters, valid/no border padding and a stride of 4
+        conv_3 = Conv(filters=64, kernel_size=(1,4,4), padding='valid', strides=(1,4,4),
+                      kernel_initializer=kernel_init,
+                      activation=activation,
+                      name='downsample_3')
+        downsample = tf.keras.Sequential(layers=[conv_1, conv_2, conv_3], name='downsample_inplane_and_spatial')
+        final_onehot_conv = tf.keras.layers.Conv1D(filters=PHASES, kernel_size=1, strides=1, padding='same', kernel_initializer=kernel_init, activation=final_activation,
+                                        name='pre_onehot')
+        ##################################### Layer definition ##############################################
+
+        import random
+        # unstack along t yielding a list of 3D volumes
+        # stack t-1, t and t+1 along the channels
+        unet_axis = 2
+        stack_axis = 1
+        inputs_spatial_stacked = input_tensor
+        #inputs_spatial_stacked = concat_layer([tf.roll(input_tensor, shift=1, axis=stack_axis), input_tensor, tf.roll(input_tensor, shift=-1, axis=stack_axis)])
+        inputs_spatial_unstacked = tf.unstack(inputs_spatial_stacked, axis=unet_axis, name='split_into_2D_plus_t_vols')
+        # first tests without shuffle, later we can add it, it seems to drop the train/val gap
+        '''indicies = list(tf.range(len(inputs_spatial_unstacked)))
+        zipped = list(zip(inputs_spatial_unstacked, indicies))
+        random.shuffle(zipped)
+        inputs_spatial_unstacked, indicies = zip(*zipped)'''
+        # feed the T x 3D volumes into the spatial encoder (3D conv)
+        pre_flows = [unet(vol) for vol in inputs_spatial_unstacked]
+        #pre_flows, _ = zip(*sorted(zip(pre_flows, indicies), key=lambda tup: tup[1]))
+        flows= [Conv_layer(vol) for vol in pre_flows]
+
+        flows = tf.stack(flows, axis=unet_axis, name='stack_flows')
+        pre_flows = tf.stack(pre_flows, axis=unet_axis, name='stack_preflows')
+
+        inputs_spatial = tf.unstack(input_tensor, axis=1, name='split_into_3D_vols')
+        flows_unstacked = tf.unstack(flows, axis=1, name='split_flows_into_3D')
+
+        pre_flows_unstacked = tf.unstack(pre_flows, axis=1, name='split_preflows_into_3D')
+
+        transformed = [st_layer([input_vol, flow]) for input_vol, flow in
+                       zip(inputs_spatial, flows_unstacked)]
+        #inputs_spatial = flows
+        print('Flowfield shape: {}'.format(inputs_spatial[0].shape))
+
+        # add the magnitude as fourth channel
+        tensor_magnitude = [norm_lambda(vol) for vol in flows_unstacked]
+        inputs_spatial = [concat_lambda([flow,norm]) for flow,  norm in zip(pre_flows_unstacked, tensor_magnitude)]
+        print('inkl norm shape: {}'.format(inputs_spatial[0].shape))
+        inputs_spatial = [downsample(vol) for vol in inputs_spatial]
 
         encode_flow=False
-        if encode_flow:
-
+        if encode_flow:# 36, 256
             enc = [spatial_encoder(vol)[0] for vol in inputs_spatial]
             print('shape after flow encoding: {}'.format(enc[0].shape))
             inputs_spatial = [gap(vol) for vol in enc]
 
-
-        if pre_gap_conv:
-            gap_conv = tf.keras.layers.Conv3D(filters=64, kernel_size=3, strides=(1, 3, 3), padding='valid',
-                                              activation=activation, kernel_initializer=kernel_init, name='pre-conv')
-
-            inputs_spatial = [tf.keras.layers.BatchNormalization(name='final-BN')(elem) for elem in inputs_spatial]
-            inputs_spatial = [tf.keras.layers.Dropout(rate=0.5, name='final-dropout')(elem) for elem in inputs_spatial]
-            inputs_spatial = [gap_conv(vol) for vol in inputs_spatial]
-
-
-        inputs_spatial = tf.concat(inputs_spatial, axis=1, name='merge_3D_into_4D')
-        inputs_spatial = tf.keras.layers.Reshape(target_shape=(36,64))(inputs_spatial)
-
+        inputs_spatial = tf.stack(inputs_spatial, axis=1, name='merge_3D_into_4D')
+        inputs_spatial = tf.keras.layers.Reshape(target_shape=(inputs_spatial.shape[1],64))(inputs_spatial)
         inputs = inputs_spatial
 
-        # 36, 256
+
         if add_bilstm:
             print('add a bilstm layer with: {} lstm units'.format(lstm_units))
             print('Shape before LSTM layers: {}'.format(inputs.shape))
@@ -338,31 +341,13 @@ def create_PhaseRegressionModel_v2(config, networkname='PhaseRegressionModel'):
             print('Shape after bilstm layer: {}'.format(inputs.shape))
 
         # 36,64
-        print('Shape after Bi-LSTM layer')
-        print(inputs.shape)
-
+        print('Shape after Bi-LSTM layer: {}'.format(inputs.shape))
         # input (36,encoding) output (36,5)
-        # either 36,256 --> from the temp encoder or
-        # 36,64 --> 64 --> number of BI-LSTM units
-        # activation to linear
-        onehot = tf.keras.layers.Conv1D(filters=PHASES, kernel_size=1, strides=1, padding='same', activation=final_activation,
-                                        name='pre_onehot')(inputs)
-        flows = tf.stack(flows, axis=1, name='stacked_flows')
-        transformed = tf.stack(transformed, axis=1, name='stacked_transformed')
-        """if final_activation == 'relu':
-            onehot = tf.keras.layers.ReLU()(onehot)
-        elif final_activation == 'softmax':
-            # axis -1 --> one class per timestep, as we repeat the phases its not possible to softmax the phase
-            onehot = tf.keras.activations.softmax(onehot, axis=-1)
-        elif final_activation == 'sigmoid':
-            onehot = tf.keras.activations.sigmoid(onehot)
-        else:
-            logging.info('No final activation given! Please check the "FINAL_ACTIVATION" param!')"""
+        onehot = final_onehot_conv(inputs)
 
         # 36, 5
-        print('Shape after final conv layer')
-        print(onehot.shape)
-
+        print('Shape after final conv layer: {}'.format(onehot.shape))
+        transformed = tf.stack(transformed, axis=1, name='stacked_transformed')
         # add empty tensor with one-hot shape to align with gt
         zeros = tf.zeros_like(onehot, name='zero_padding')
         onehot = tf.stack([onehot, zeros], axis=1, name='extend_onehot_by_zeros')
@@ -392,14 +377,13 @@ def create_PhaseRegressionModel_v2(config, networkname='PhaseRegressionModel'):
 
             weights = {
                 'onehot': 1,
-                'transformed': 1,
+                'transformed': 10,
                 'flows': 0.001}
-            #losses = [mse]
 
         print('added loss: {}'.format(loss))
         model = Model(inputs=[input_tensor], outputs=outputs, name=networkname)
         model.compile(
-            optimizer=get_optimizer(config, networkname),
+            optimizer=tf.keras.optimizers.Adam(learning_rate=config.get('LEARNING_RATE', 0.001)),
             loss=losses,
             loss_weights=weights,
             # metrics=[own_metr.mse_wrapper, own_metr.ca_wrapper, own_metr.meandiff] #

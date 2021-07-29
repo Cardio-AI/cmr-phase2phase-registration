@@ -1063,7 +1063,7 @@ class PhaseRegressionGenerator_v2(DataGenerator):
             try:
                 x_, y_, i, ID, needed_time = future.result()
 
-                x[i,], y2[i,], y[i,] = x_, np.roll(x_,-1), y_
+                x[i,], y2[i,], y[i,] = x_, np.roll(x_,shift=-1, axis=0), y_
                 logging.debug('img finished after {:0.3f} sec.'.format(needed_time))
             except Exception as e:
                 # write these files into a dedicated error log
