@@ -21,6 +21,7 @@ sys.path.append('src/ext/neuron')
 sys.path.append('src/ext/pynd-lib')
 sys.path.append('src/ext/pytools-lib')
 import src.ext.neuron.neuron.layers as nrn_layers
+#import neurite as ne
 
 
 def create_PhaseRegressionModel(config, networkname='PhaseRegressionModel'):
@@ -215,7 +216,7 @@ def create_PhaseRegressionModel_v2(config, networkname='PhaseRegressionModel'):
         # TODO: this parameter is also used by the generator to define the number of channels
         # here we stack the volume within the model manually, so keep that aligned!!!
         #config['IMG_CHANNELS'] = 3
-
+        ############################# definition of the layers ######################################
         # increase the dropout through the layer depth
         dropouts = list(np.linspace(drop_1, drop_3, depth))
         dropouts = [round(i, 1) for i in dropouts]
@@ -306,7 +307,6 @@ def create_PhaseRegressionModel_v2(config, networkname='PhaseRegressionModel'):
 
         inputs_spatial = tf.unstack(input_tensor, axis=1, name='split_into_3D_vols')
         flows_unstacked = tf.unstack(flows, axis=1, name='split_flows_into_3D')
-
         pre_flows_unstacked = tf.unstack(pre_flows, axis=1, name='split_preflows_into_3D')
 
         transformed = [st_layer([input_vol, flow]) for input_vol, flow in
@@ -569,8 +569,282 @@ def create_affine_transformer_fixed(config, networkname='affine_transformer_fixe
         return model
 
 
+def create_dense_compose(config, networkname='dense_compose_displacement'):
+    """
+    Apply a learned transformation matrix to an input image, no training possible
+    :param config:  Key value pairs for image size and other network parameters
+    :param networkname: string, name of this model scope
+    :param fill_value:
+    :return: compiled tf.keras model
+    """
+    if tf.distribute.has_strategy():
+        strategy = tf.distribute.get_strategy()
+    else:
+        # distribute the training with the mirrored data paradigm across multiple gpus if available, if not use gpu 0
+        strategy = tf.distribute.MirroredStrategy(devices=config.get('GPUS', ["/gpu:0"]))
+
+    with strategy.scope():
+
+        inputs = Input((5,*config.get('DIM', [10, 224, 224]), 3))
+        input_displacement = Input((*config.get('DIM', [10, 224, 224]), 3))
+        indexing = config.get('INDEXING', 'ij')
+
+        # warp the source with the flow
+        flows = tf.unstack(inputs, axis=1)
+
+        y = [ComposeTransform(interp_method='linear', shift_center=True, indexing=indexing, name='Compose_transform{}'.format(i))(flows[:i]) for i in range(2,len(flows)+1)]
+        y = tf.stack([flows[0],*y], axis=1)
+
+        model = Model(inputs=[inputs], outputs=[y], name=networkname)
+
+        return model
 
 
+class ComposeTransform(tf.keras.layers.Layer):
+    """
+    Composes a single transform from a series of transforms.
+    Supports both dense and affine transforms, and returns a dense transform unless all
+    inputs are affine. The list of transforms to compose should be in the order in which
+    they would be individually applied to an image. For example, given transforms A, B,
+    and C, to compose a single transform T, where T(x) = C(B(A(x))), the appropriate
+    function call is:
+    T = ComposeTransform()([A, B, C])
+    """
 
+    def __init__(self, interp_method='linear', shift_center=True, indexing='ij', **kwargs):
+        """
+        Parameters:
+            shape: Target shape of dense shift.
+            interp_method: Interpolation method. Must be 'linear' or 'nearest'.
+            shift_center: Shift grid to image center.
+            indexing: Must be 'xy' or 'ij'.
+        """
+        self.interp_method = interp_method
+        self.shift_center = shift_center
+        self.indexing = indexing
+        super().__init__(**kwargs)
 
+    def get_config(self):
+        config = super().get_config().copy()
+        config.update({
+            'interp_method': self.interp_method,
+            'shift_center': self.shift_center,
+            'indexing': self.indexing,
+        })
+        return config
+
+    def build(self, input_shape, **kwargs):
+
+        # sanity check on the inputs
+        if not isinstance(input_shape, (list, tuple)):
+            raise Exception('ComposeTransform must be called for a list of transforms.')
+        if len(input_shape) < 2:
+            raise ValueError('ComposeTransform input list size must be greater than 1.')
+
+        # determine output transform type
+        dense_shape = next((t for t in input_shape if not is_affine_shape(t[1:])), None)
+        if dense_shape is not None:
+            # extract shape information from the dense transform
+            self.outshape = (input_shape[0], *dense_shape)
+        else:
+            # extract dimension information from affine
+            ndims = input_shape[0][-1] - 1
+            self.outshape = (input_shape[0], ndims, ndims + 1)
+
+    def call(self, transforms):
+        """
+        Parameters:
+            transforms: List of affine or dense transforms to compose.
+        """
+        compose_ = lambda trf: compose(trf, interp_method=self.interp_method,shift_center=self.shift_center, indexing=self.indexing)
+        return tf.map_fn(compose_, transforms, dtype=tf.float32)
+
+    def compute_output_shape(self, input_shape):
+        return self.outshape
+
+def compose(transforms, interp_method='linear', shift_center=True, indexing='ij'):
+    """
+    Compose a single transform from a series of transforms.
+    Supports both dense and affine transforms, and returns a dense transform unless all
+    inputs are affine. The list of transforms to compose should be in the order in which
+    they would be individually applied to an image. For example, given transforms A, B,
+    and C, to compose a single transform T, where T(x) = C(B(A(x))), the appropriate
+    function call is:
+    T = compose([A, B, C])
+    Parameters:
+        transforms: List of affine and/or dense transforms to compose.
+        interp_method: Interpolation method. Must be 'linear' or 'nearest'.
+        shift_center: Shift grid to image center.
+        indexing: Must be 'xy' or 'ij'.
+    Returns:
+        Composed affine or dense transform.
+    """
+    if indexing != 'ij':
+        raise ValueError('Compose transform only supports ij indexing')
+
+    if len(transforms) < 2:
+        raise ValueError('Compose transform list size must be greater than 1')
+
+    def ensure_dense(trf, shape):
+        if is_affine_shape(trf.shape):
+            return affine_to_dense_shift(trf, shape, shift_center=shift_center, indexing=indexing)
+        return trf
+
+    def ensure_square_affine(matrix):
+        if matrix.shape[-1] != matrix.shape[-2]:
+            return make_square_affine(matrix)
+        return matrix
+
+    curr = transforms[-1]
+    for nxt in reversed(transforms[:-1]):
+        # check if either transform is dense
+        found_dense = next((t for t in (nxt, curr) if not is_affine_shape(t.shape)), None)
+        if found_dense is not None:
+            # compose dense warps
+            shape = found_dense.shape[:-1]
+            nxt = ensure_dense(nxt, shape)
+            curr = ensure_dense(curr, shape)
+            curr = curr + transform(nxt, curr, interp_method=interp_method, indexing=indexing)
+        else:
+            # compose affines
+            nxt = ensure_square_affine(nxt)
+            curr = ensure_square_affine(curr)
+            curr = tf.linalg.matmul(nxt, curr)[:-1]
+
+    return curr
+
+def make_square_affine(mat):
+    """
+    Converts a [N, N+1] affine matrix to square shape [N+1, N+1].
+    Parameters:
+        mat: Affine matrix of shape [..., N, N+1].
+    """
+    validate_affine_shape(mat.shape)
+    bs = mat.shape[:-2]
+    zeros = tf.zeros((*bs, 1, mat.shape[-2]), dtype=mat.dtype)
+    one = tf.ones((*bs, 1, 1), dtype=mat.dtype)
+    row = tf.concat((zeros, one), axis=-1)
+    mat = tf.concat([mat, row], axis=-2)
+    return mat
+
+def affine_to_dense_shift(matrix, shape, shift_center=True, indexing='ij'):
+    """
+    Transforms an affine matrix to a dense location shift.
+    Algorithm:
+        1. Build and (optionally) shift grid to center of image.
+        2. Apply affine matrix to each index.
+        3. Subtract grid.
+    Parameters:
+        matrix: affine matrix of shape (N, N+1).
+        shape: ND shape of the target warp.
+        shift_center: Shift grid to image center.
+        indexing: Must be 'xy' or 'ij'.
+    Returns:
+        Dense shift (warp) of shape (*shape, N).
+    """
+
+    if isinstance(shape, (tf.compat.v1.Dimension, tf.TensorShape)):
+        shape = shape.as_list()
+
+    if matrix.dtype != 'float32':
+        matrix = tf.cast(matrix, 'float32')
+
+    # check input shapes
+    ndims = len(shape)
+    if matrix.shape[-1] != (ndims + 1):
+        matdim = matrix.shape[-1] - 1
+        raise ValueError(f'Affine ({matdim}D) does not match target shape ({ndims}D).')
+    validate_affine_shape(matrix.shape)
+
+    # list of volume ndgrid
+    # N-long list, each entry of shape
+    mesh = ne.utils.volshape_to_meshgrid(shape, indexing=indexing)
+    mesh = [tf.cast(f, 'float32') for f in mesh]
+
+    if shift_center:
+        mesh = [mesh[f] - (shape[f] - 1) / 2 for f in range(len(shape))]
+
+    # add an all-ones entry and transform into a large matrix
+    flat_mesh = [ne.utils.flatten(f) for f in mesh]
+    flat_mesh.append(tf.ones(flat_mesh[0].shape, dtype='float32'))
+    mesh_matrix = tf.transpose(tf.stack(flat_mesh, axis=1))  # 4 x nb_voxels
+
+    # compute locations
+    loc_matrix = tf.matmul(matrix, mesh_matrix)  # N+1 x nb_voxels
+    loc_matrix = tf.transpose(loc_matrix[:ndims, :])  # nb_voxels x N
+    loc = tf.reshape(loc_matrix, list(shape) + [ndims])  # *shape x N
+
+    # get shifts and return
+    return loc - tf.stack(mesh, axis=ndims)
+
+def validate_affine_shape(shape):
+    """
+    Validates whether the given input shape represents a valid affine matrix.
+    Throws error if the shape is valid.
+    Parameters:
+        shape: List of integers of the form [..., N, N+1].
+    """
+    ndim = shape[-1] - 1
+    actual = tuple(shape[-2:])
+    if ndim not in (2, 3) or actual != (ndim, ndim + 1):
+        raise ValueError(f'Affine matrix must be of shape (2, 3) or (3, 4), got {actual}.')
+
+def is_affine_shape(shape):
+    """
+    Determins whether the given shape (single-batch) represents an
+    affine matrix.
+    Parameters:
+        shape:  List of integers of the form [N, N+1], assuming an affine.
+    """
+    if len(shape) == 2 and shape[-1] != 1:
+        validate_affine_shape(shape)
+        return True
+    return False
+
+def transform(vol, loc_shift, interp_method='linear', indexing='ij', fill_value=None):
+    """
+    transform (interpolation N-D volumes (features) given shifts at each location in tensorflow
+    Essentially interpolates volume vol at locations determined by loc_shift.
+    This is a spatial transform in the sense that at location [x] we now have the data from,
+    [x + shift] so we've moved data.
+    Args:
+        vol (Tensor): volume with size vol_shape or [*vol_shape, C]
+            where C is the number of channels
+        loc_shift: shift volume [*new_vol_shape, D] or [*new_vol_shape, C, D]
+            where C is the number of channels, and D is the dimentionality len(vol_shape)
+            If loc_shift is [*new_vol_shape, D], it applies to all channels of vol
+        interp_method (default:'linear'): 'linear', 'nearest'
+        indexing (default: 'ij'): 'ij' (matrix) or 'xy' (cartesian).
+            In general, prefer to leave this 'ij'
+        fill_value (default: None): value to use for points outside the domain.
+            If None, the nearest neighbors will be used.
+    Return:
+        new interpolated volumes in the same size as loc_shift[0]
+    Keyworks:
+        interpolation, sampler, resampler, linear, bilinear
+    """
+
+    # parse shapes.
+    # location volshape, including channels if available
+    loc_volshape = loc_shift.shape[:-1]
+    if isinstance(loc_volshape, (tf.compat.v1.Dimension, tf.TensorShape)):
+        loc_volshape = loc_volshape.as_list()
+
+    # volume dimensions
+    nb_dims = len(vol.shape) - 1
+    is_channelwise = len(loc_volshape) == (nb_dims + 1)
+    assert loc_shift.shape[-1] == nb_dims, \
+        'Dimension check failed for ne.utils.transform(): {}D volume (shape {}) called ' \
+        'with {}D transform'.format(nb_dims, vol.shape[:-1], loc_shift.shape[-1])
+
+    # location should be mesh and delta
+    mesh = ne.utils.volshape_to_meshgrid(loc_volshape, indexing=indexing)  # volume mesh
+    loc = [tf.cast(mesh[d], 'float32') + loc_shift[..., d] for d in range(nb_dims)]
+
+    # if channelwise location, then append the channel as part of the location lookup
+    if is_channelwise:
+        loc.append(tf.cast(mesh[-1], 'float32'))
+
+    # test single
+    return ne.utils.interpn(vol, loc, interp_method=interp_method, fill_value=fill_value)
 

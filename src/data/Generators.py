@@ -1078,7 +1078,7 @@ class PhaseRegressionGenerator_v2(DataGenerator):
 
         logging.debug('Batchsize: {} preprocessing took: {:0.3f} sec'.format(self.BATCHSIZE, time() - t0))
 
-        return tuple([[x], [y, y2, np.zeros((*y2.shape, 3))]])
+        return tuple([[x], [y, y2, np.zeros((*y2.shape[:-1], 3))]])
 
     def __fix_preprocessing__(self,i,ID):
 
@@ -1753,7 +1753,7 @@ class PhaseMaskWindowGenerator(DataGenerator):
 
         logging.debug('Batchsize: {} preprocessing took: {:0.3f} sec'.format(self.BATCHSIZE, time() - t0))
         zeros = np.zeros((*x.shape[:-1], 3), dtype=np.float32)
-        return tuple([list(x), [y, y2, zeros]])
+        return tuple([[x,x2,zeros], [y, y2, zeros]])
 
     def __pre_load_one_image__(self, i, ID):
 

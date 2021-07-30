@@ -138,7 +138,12 @@ def pred_fold(config, debug=True):
             else:
                 moved, moved_m, vects = preds
             moved = tf.cast(moved, tf.float32)
-            # do
+            # compose vectors
+
+            from src.models.Models import create_dense_compose
+            comp = create_dense_compose(config)
+            vects_composed = comp.predict(vects)
+
 
 
             moved_m = tf.cast(moved_m > 0.5, tf.uint8)
@@ -177,6 +182,7 @@ def pred_fold(config, debug=True):
                        moved_m[0],
                        vects[0],
                        vects_full[0],
+                       vects_composed[0],
                        first_mask[0],
                        second_mask[0],
                        first_lvmask[0],
@@ -185,7 +191,7 @@ def pred_fold(config, debug=True):
                        second_vols[0]]
 
             suffixes = ['_cmr.nii', '_targetcmr.nii', '_movedcmr.nii', '_movedmask.nii',
-                        '_flow.nii', '_flow_full.nii', '_mask.nii', '_targetmask.nii', '_lvmask.nii',
+                        '_flow.nii', '_flow_full.nii', '_flow_comp.nii', '_mask.nii', '_targetmask.nii', '_lvmask.nii',
                          '_lvtargetmask.nii',
                          '_cmr_full.nii', '_targetcmr_full.nii'  ]
 
@@ -198,9 +204,9 @@ def pred_fold(config, debug=True):
     except Exception as e:
         logging.error(e)
         logging.error(first_vols.shape)
-        logging.error(moved_m.shape)
         logging.error(second_vols.shape)
         logging.error(vects.shape)
+        logging.error(moved_m.shape)
 
     # free as much memory as possible
     del pred_generator
