@@ -96,6 +96,7 @@ def train_fold(config, in_memory=False):
             indices = ind.values[0].astype(int) - 1
 
         except Exception as e:
+            info(e)
             logging.info(patient_str)
             logging.info(ind)
             logging.info('indices: \n{}'.format(indices))
