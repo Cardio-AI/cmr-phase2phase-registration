@@ -153,7 +153,7 @@ def train_fold(config, in_memory=False):
     return True
 
 
-def main(args=None):
+def main(args=None, in_memory=False):
     import os
     os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
     # ------------------------------------------define logging and working directory
@@ -293,7 +293,7 @@ def main(args=None):
         print('starting fold: {}'.format(f))
         config_ = config.copy()
         config_['FOLD'] = f
-        train_fold(config_)
+        train_fold(config_, in_memory=in_memory)
         print('train fold: {}'.format(f))
 
 
@@ -304,6 +304,7 @@ if __name__ == "__main__":
     # usually these two parameters should encapsulate all experiment parameters
     parser.add_argument('-cfg', action='store', default=None)
     parser.add_argument('-data', action='store', default=None)
+    parser.add_argument('-inmemory', action='store', default=False) # enable in memory pre-processing on the cluster
 
     # anyway, there are cases were we want to define some specific parameters, a better choice would be to modify the config
     parser.add_argument('-sax', action='store', default='/mnt/ssd/data/gcn/02_imported_4D_unfiltered/sax/')
@@ -329,7 +330,7 @@ if __name__ == "__main__":
     print('given parameters: {}'.format(results))
 
     try:
-        main(results)
+        main(results, in_memory=results.inmemory)
     except Exception as e:
         print(e)
     exit()
