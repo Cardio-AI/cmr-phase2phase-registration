@@ -1360,9 +1360,20 @@ def get_phases_as_onehot_gcn(file_path, df, temporal_sampling_factor, length, we
     """
     import re
 
-    patient_str = re.search('-(.{8})_', file_path).group(1).upper()
-    assert (len(patient_str) == 8), 'matched patient ID from the phase sheet has a length of: {}'.format(
-        len(patient_str))
+    patient_str, ind, indices = '', '', ''
+    patient_str = re.search('-(.{8})_', file_path)
+    if patient_str:  # GCN data
+        patient_str = patient_str.group(1).upper()
+        assert (
+                    len(patient_str) == 8), 'matched patient ID from the phase sheet has a length of: {}, expected a length of 8 for GCN data'.format(
+            len(patient_str))
+    else:  # DMD data
+        patient_str = os.path.basename(file_path).split('_volume')[0].lower()
+
+    assert len(
+        patient_str) > 0, 'empty patient id found, please check the get_patient_id in fn train_fold(), usually there are path problems'
+
+
 
     # Returns the indices in the following order: 'ED#', 'MS#', 'ES#', 'PF#', 'MD#'
     # Reduce the indices of the excel sheet by one, as the indexes start at 0, the excel-sheet at 1

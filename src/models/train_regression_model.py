@@ -86,10 +86,18 @@ def train_fold(config, in_memory=False):
     info('Check if we find the patient ID and phase mapping for all: {} files.'.format(len(files_)))
     for x in files_:
         try:
-            patient_str = re.search('-(.{8})_', x).group(1).upper()
+            patient_str, ind, indices = '','',''
+            patient_str = re.search('-(.{8})_', x)
+            if patient_str: # GCN data
+                patient_str = patient_str.group(1).upper()
+                assert (len(patient_str) == 8), 'matched patient ID from the phase sheet has a length of: {}, expected a length of 8 for GCN data'.format(
+                    len(patient_str))
+            else: # DMD data
+                patient_str = os.path.basename(x).split('_volume')[0].lower()
 
-            assert (len(patient_str) == 8), 'matched patient ID from the phase sheet has a length of: {}'.format(
-                len(patient_str))
+            assert len(
+                patient_str) > 0, 'empty patient id found, please check the get_patient_id in fn train_fold(), usually there are path problems'
+
             # returns the indices in the following order: 'ED#', 'MS#', 'ES#', 'PF#', 'MD#'
             # reduce by one, as the indexes start at 0, the excel-sheet at 1
             ind = DF_METADATA[DF_METADATA.patient.str.contains(patient_str)][['ED#', 'MS#', 'ES#', 'PF#', 'MD#']]
