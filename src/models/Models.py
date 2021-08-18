@@ -742,6 +742,7 @@ def affine_to_dense_shift(matrix, shape, shift_center=True, indexing='ij'):
     Returns:
         Dense shift (warp) of shape (*shape, N).
     """
+    import neurite as ne
 
     if isinstance(shape, (tf.compat.v1.Dimension, tf.TensorShape)):
         shape = shape.as_list()
@@ -823,7 +824,7 @@ def transform(vol, loc_shift, interp_method='linear', indexing='ij', fill_value=
     Keyworks:
         interpolation, sampler, resampler, linear, bilinear
     """
-
+    import neurite as ne
     # parse shapes.
     # location volshape, including channels if available
     loc_volshape = loc_shift.shape[:-1]

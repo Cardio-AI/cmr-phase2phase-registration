@@ -1892,7 +1892,6 @@ class PhaseMaskWindowGenerator(DataGenerator):
         # --------------- SLICE PAIRS OF INPUT AND TARGET VOLUMES ACCORDING TO CARDIAC PHASE IDX -------------
         # get the volumes of each phase window
         # combined --> t-w, t, t+w, We can use this window in different combinations as input and target
-
         model_inputs = pad_and_crop(model_inputs, target_shape=(model_inputs.shape[0], *self.DIM))
         model_m_inputs = pad_and_crop(model_m_inputs, target_shape=(model_m_inputs.shape[0], *self.DIM))
         logging.debug('pad/crop took: {:0.3f} s'.format(time() - t1))

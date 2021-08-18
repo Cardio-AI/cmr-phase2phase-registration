@@ -27,7 +27,8 @@ def predict(cfg_file, data_root, c2l=False):
         config['DATA_PATH_SAX'] = os.path.join(data_root, 'sax')
         config['DF_FOLDS'] = os.path.join(data_root, 'df_kfold.csv')
         config['DF_META'] = os.path.join(data_root, 'SAx_3D_dicomTags_phase.csv')
-    isacdc = True
+    # TODO: add a dataset flag for this script which allows different datasets, tan the training dataset for inference
+    isacdc = False
     if isacdc:
         x_train_sax, y_train_sax, x_val_sax, y_val_sax = get_trainings_files(data_path='/mnt/ssd/data/acdc/3D/all',
                                                                          path_to_folds_df='/mnt/ssd/data/acdc/3D/df_kfold.csv',
