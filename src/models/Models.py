@@ -273,17 +273,19 @@ def create_PhaseRegressionModel_v2(config, networkname='PhaseRegressionModel'):
         # conv with: n times 4,4,4 filters, valid/no border padding and a stride of 4
         for i in range(2):
             downsamples.append(Dropout(d_rate))
-            downsamples.append(Conv(filters=filters_, kernel_size=4, padding='valid', strides=4,
-                          kernel_initializer=kernel_init,
-                      activation=activation,
-                          name='downsample_{}'.format(i)))
+            downsamples.append(
+                Conv(filters=filters_, kernel_size=4, padding='valid', strides=4,
+                     kernel_initializer=kernel_init,
+                     activation=activation,
+                     name='downsample_{}'.format(i)))
             downsamples.append(BatchNormalization(axis=-1))
             filters_ = filters_*2
         #downsample.append(Dropout(d_rate))
-        downsamples.append(Conv(filters=filters_, kernel_size=(1,4,4), padding='valid', strides=(1,4,4),
-                      kernel_initializer=kernel_init,
-                      activation=activation,
-                      name='downsample_{}'.format(i+1)))
+        downsamples.append(
+            Conv(filters=filters_, kernel_size=(1,4,4), padding='valid', strides=(1,4,4),
+                 kernel_initializer=kernel_init,
+                 activation=activation,
+                 name='downsample_{}'.format(i+1)))
 
         downsample = tf.keras.Sequential(layers=downsamples, name='downsample_inplane_and_spatial')
         final_onehot_conv = tf.keras.layers.Conv1D(filters=PHASES, kernel_size=1, strides=1, padding='same', kernel_initializer=kernel_init, activation=final_activation,
