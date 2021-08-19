@@ -380,7 +380,7 @@ class ConvDecoder(Layer):
 
 class ConvBlock(Layer):
     def __init__(self, filters=16, f_size=(3, 3, 3), activation='elu', batch_norm=True, kernel_init='he_normal',
-                 pad='same', bn_first=False, ndims=2):
+                 pad='same', bn_first=False, ndims=2, strides=1):
         """
         Wrapper for a 2/3D-conv layer + batchnormalisation
         Either with Conv,BN,activation or Conv,activation,BN
@@ -393,6 +393,7 @@ class ConvBlock(Layer):
         :param pad: string, keras enum how to pad, the conv
         :param bn_first: bool, decide if we want to apply the BN before the conv. operation or afterwards
         :param ndims: int, define the conv dimension
+        :param strides: int, stride of the conv filter
         :return: a functional tf.keras conv block
         expects an numpy or tensor object with (batchsize,z,x,y,channels)
         """
@@ -405,6 +406,7 @@ class ConvBlock(Layer):
         self.kernel_init = kernel_init
         self.ndims = ndims
         self.pad = pad
+        self.strides = strides
         self.encoder = list()
 
         # create the layers
@@ -412,9 +414,9 @@ class ConvBlock(Layer):
         f_size = self.f_size[:self.ndims]
 
         self.conv = Conv(filters=self.filters, kernel_size=f_size, kernel_initializer=self.kernel_init,
-                         padding=self.pad)
+                         padding=self.pad, strides=self.strides)
         self.conv_activation = Conv(filters=self.filters, kernel_size=f_size, kernel_initializer=self.kernel_init,
-                                    padding=self.pad)
+                                    padding=self.pad, strides=self.strides)
         self.bn = BatchNormalization(axis=-1)
         self.activation = Activation(self.activation)
 

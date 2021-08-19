@@ -261,6 +261,28 @@ def create_PhaseRegressionModel_v2(config, networkname='PhaseRegressionModel'):
         # 2nd idea: GAP with/without pre-conv layer which extracts motion features into the channels
         # 3rd idea use the tft.pca module to transform the downstream.
         # This would reduce the dimension of input vectors to output_dim in a way that retains the maximal variance
+        from src.models.KerasLayers import ConvBlock
+        from tensorflow.keras.layers import Dropout
+        downsample = []
+        d_rate = 0.3
+        filters_ = 16
+        for _ in range(2):
+            downsample.append(Dropout(d_rate))
+            downsample.append(ConvBlock(filters=filters_,
+                                        f_size=(4,4,4),
+                                        activation=activation,
+                                        batch_norm=batch_norm,
+                                        kernel_init=kernel_init,
+                                        pad='valid', ndims=3, strides=4))
+            filters_ = filters_*2
+        downsample.append(Dropout(d_rate))
+        downsample.append(ConvBlock(filters=64,
+                                    f_size=(1, 4, 4),
+                                    activation=activation,
+                                    batch_norm=batch_norm,
+                                    kernel_init=kernel_init,
+                                    pad='valid', ndims=3, strides=(1,4,4)))
+
         conv_1 = Conv(filters=16, kernel_size=4, padding='valid', strides=4,
                           kernel_initializer=kernel_init,
                       activation=activation,
@@ -279,7 +301,8 @@ def create_PhaseRegressionModel_v2(config, networkname='PhaseRegressionModel'):
                       kernel_initializer=kernel_init,
                       activation=activation,
                       name='downsample_3')
-        downsample = tf.keras.Sequential(layers=[conv_1, conv_2, conv_3], name='downsample_inplane_and_spatial')
+        #downsample = tf.keras.Sequential(layers=[conv_1, conv_2, conv_3], name='downsample_inplane_and_spatial')
+        downsample = tf.keras.Sequential(layers=downsample, name='downsample_inplane_and_spatial')
         final_onehot_conv = tf.keras.layers.Conv1D(filters=PHASES, kernel_size=1, strides=1, padding='same', kernel_initializer=kernel_init, activation=final_activation,
                                         name='pre_onehot')
         ##################################### Layer definition ##############################################
@@ -316,7 +339,7 @@ def create_PhaseRegressionModel_v2(config, networkname='PhaseRegressionModel'):
 
         # add the magnitude as fourth channel
         tensor_magnitude = [norm_lambda(vol) for vol in flows_unstacked]
-        inputs_spatial = [concat_lambda([flow,norm]) for flow,  norm in zip(pre_flows_unstacked, tensor_magnitude)]
+        inputs_spatial = [concat_lambda([flow,norm]) for flow,  norm in zip(flows_unstacked, tensor_magnitude)]
         print('inkl norm shape: {}'.format(inputs_spatial[0].shape))
         inputs_spatial = [downsample(vol) for vol in inputs_spatial]
 
