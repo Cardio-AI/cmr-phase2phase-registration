@@ -416,7 +416,7 @@ class ConvBlock(Layer):
         self.conv = Conv(filters=self.filters, kernel_size=f_size, kernel_initializer=self.kernel_init,
                          padding=self.pad, strides=self.strides)
         self.conv_activation = Conv(filters=self.filters, kernel_size=f_size, kernel_initializer=self.kernel_init,
-                                    padding=self.pad, strides=self.strides)
+                                    padding=self.pad, strides=self.strides, activation=activation)
         self.bn = BatchNormalization(axis=-1)
         self.activation = Activation(self.activation)
 

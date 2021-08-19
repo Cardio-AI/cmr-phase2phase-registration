@@ -256,53 +256,36 @@ def create_PhaseRegressionModel_v2(config, networkname='PhaseRegressionModel'):
         # b, t, 16, 64, 64, 3/4
         # conv with: n times 4,4,4 filters, valid/no border padding and a stride of 4
         # b, t, 1, 1, 1, n
+
         # global average pooling for T x 3D vols
         #inputs_spatial = [gap(vol) for vol in inputs_spatial]
         # 2nd idea: GAP with/without pre-conv layer which extracts motion features into the channels
         # 3rd idea use the tft.pca module to transform the downstream.
         # This would reduce the dimension of input vectors to output_dim in a way that retains the maximal variance
-        from src.models.KerasLayers import ConvBlock
-        from tensorflow.keras.layers import Dropout
-        downsample = []
-        d_rate = 0.3
+        from src.models.KerasLayers import conv_layer_fn, ConvBlock
+        from tensorflow.keras.layers import Dropout, BatchNormalization
+        downsamples = []
+        d_rate = 0.2
         filters_ = 16
-        for _ in range(2):
-            downsample.append(Dropout(d_rate))
-            downsample.append(ConvBlock(filters=filters_,
-                                        f_size=(4,4,4),
-                                        activation=activation,
-                                        batch_norm=batch_norm,
-                                        kernel_init=kernel_init,
-                                        pad='valid', ndims=3, strides=4))
-            filters_ = filters_*2
-        downsample.append(Dropout(d_rate))
-        downsample.append(ConvBlock(filters=64,
-                                    f_size=(1, 4, 4),
-                                    activation=activation,
-                                    batch_norm=batch_norm,
-                                    kernel_init=kernel_init,
-                                    pad='valid', ndims=3, strides=(1,4,4)))
-
-        conv_1 = Conv(filters=16, kernel_size=4, padding='valid', strides=4,
-                          kernel_initializer=kernel_init,
-                      activation=activation,
-                          name='downsample_1')
-
         #  b, t, 4, 16, 16, n
-        # conv with: n times 4,4,4 filters, valid/no border padding and a stride of 4
-        conv_2 = Conv(filters=32, kernel_size=4, padding='valid', strides=4,
-                      kernel_initializer=kernel_init,
-                      activation=activation,
-                      name='downsample_2')
-
+        # two times conv with: n times 4,4,4 filters, valid/no border padding and a stride of 4
         # b, t, 1, 4, 4, n
         # conv with: n times 4,4,4 filters, valid/no border padding and a stride of 4
-        conv_3 = Conv(filters=64, kernel_size=(1,4,4), padding='valid', strides=(1,4,4),
+        for i in range(2):
+            downsamples.append(Dropout(d_rate))
+            downsamples.append(Conv(filters=filters_, kernel_size=4, padding='valid', strides=4,
+                          kernel_initializer=kernel_init,
+                      activation=activation,
+                          name='downsample_{}'.format(i)))
+            downsamples.append(BatchNormalization(axis=-1))
+            filters_ = filters_*2
+        #downsample.append(Dropout(d_rate))
+        downsamples.append(Conv(filters=filters_, kernel_size=(1,4,4), padding='valid', strides=(1,4,4),
                       kernel_initializer=kernel_init,
                       activation=activation,
-                      name='downsample_3')
-        #downsample = tf.keras.Sequential(layers=[conv_1, conv_2, conv_3], name='downsample_inplane_and_spatial')
-        downsample = tf.keras.Sequential(layers=downsample, name='downsample_inplane_and_spatial')
+                      name='downsample_{}'.format(i+1)))
+
+        downsample = tf.keras.Sequential(layers=downsamples, name='downsample_inplane_and_spatial')
         final_onehot_conv = tf.keras.layers.Conv1D(filters=PHASES, kernel_size=1, strides=1, padding='same', kernel_initializer=kernel_init, activation=final_activation,
                                         name='pre_onehot')
         ##################################### Layer definition ##############################################
