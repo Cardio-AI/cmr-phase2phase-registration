@@ -1693,8 +1693,8 @@ def save_all_3d_vols_new(volumes, vol_suffixes, EXP_PATH, exp='example_flows'):
     Parameters
     ----------
     volumes : list of nda
-    vol_suffixes :
-    EXP_PATH :
+    vol_suffixes : list of filenames
+    EXP_PATH : (str), path to export
     exp :
 
     Returns
@@ -1708,11 +1708,26 @@ def save_all_3d_vols_new(volumes, vol_suffixes, EXP_PATH, exp='example_flows'):
     experiment_ = '{}/{}'.format(EXP_PATH, exp)
     info(experiment_)
     ensure_dir(experiment_)
+    # iterate over volumes and sufixes save each tuple
     list(map(lambda x : save_phases(x[0], experiment_, x[1]),list(zip(volumes, vol_suffixes))))
 
 
 
 def save_phases(nda, experiment_, suffix):
+    """
+    Save each 3D nda of a 4D nda with reversed axis order
+    expects an nda with: t,z,y,x,c --> saves t times with nda axis of c,x,y,z
+    Note: simpleITK will again invert the axis, so that the dicom files have a order of z,y,x,c
+    Parameters
+    ----------
+    nda :
+    experiment_ :
+    suffix :
+
+    Returns
+    -------
+
+    """
     f_name = os.path.join(experiment_, suffix)
     # invert the axis
     nda = np.einsum('tzyxc->cxyzt', nda)

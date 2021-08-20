@@ -490,12 +490,38 @@ def augmentation_compose_2d_3d_4d(img, mask, probabillity=1, config={}):
         return augmented['image']
 
 
-def _create_aug_compose(p=1, border_mode=cv2.BORDER_REPLICATE, val=0, targets=None, config=None):
+def _create_aug_compose(p=1, border_mode=cv2.BORDER_CONSTANT, val=0, targets=None, config=None):
+    """
+    Create an Albumentations Reply compose augmentation based on the config params
+    Parameters
+    ----------
+    p :
+    border_mode :
+    val :
+    targets :
+    config :
+    Note for the border mode from openCV:
+    BORDER_CONSTANT    = 0,
+    BORDER_REPLICATE   = 1,
+    BORDER_REFLECT     = 2,
+    BORDER_WRAP        = 3,
+    BORDER_REFLECT_101 = 4,
+    BORDER_TRANSPARENT = 5,
+    BORDER_REFLECT101  = BORDER_REFLECT_101,
+    BORDER_DEFAULT     = BORDER_REFLECT_101,
+    BORDER_ISOLATED    = 16,
+
+    Returns
+    -------
+
+    """
     if config is None:
         config = {}
     if targets is None:
         targets = {}
     prob = config.get('AUGMENT_PROB', 0.8)
+    border_mode = config.get('BORDER_MODE', border_mode)
+    val = config.get('BORDER_VALUE', val)
     augmentations = []
     if config.get('RANDOMROTATE', False):augmentations.append(RandomRotate90(p=0.2))
     if config.get('SHIFTSCALEROTATE', False): augmentations.append(ShiftScaleRotate(p=prob, rotate_limit=45,shift_limit=0.025, scale_limit=0,value=val, border_mode=border_mode))

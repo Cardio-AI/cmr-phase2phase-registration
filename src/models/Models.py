@@ -271,10 +271,10 @@ def create_PhaseRegressionModel_v2(config, networkname='PhaseRegressionModel'):
         # two times conv with: n times 4,4,4 filters, valid/no border padding and a stride of 4
         # b, t, 1, 4, 4, n
         # conv with: n times 4,4,4 filters, valid/no border padding and a stride of 4
-        for i in range(2):
+        for i in range(4):
             #downsamples.append(Dropout(d_rate))
             downsamples.append(
-                Conv(filters=filters_, kernel_size=4, padding='valid', strides=4,
+                Conv(filters=filters_, kernel_size=3, padding='same', strides=2,
                      kernel_initializer=kernel_init,
                      activation=activation,
                      name='downsample_{}'.format(i)))
@@ -335,7 +335,7 @@ def create_PhaseRegressionModel_v2(config, networkname='PhaseRegressionModel'):
             inputs_spatial = [gap(vol) for vol in enc]
 
         inputs_spatial = tf.stack(inputs_spatial, axis=1, name='merge_3D_into_4D')
-        inputs_spatial = tf.keras.layers.Reshape(target_shape=(inputs_spatial.shape[1],64))(inputs_spatial)
+        inputs_spatial = tf.keras.layers.Reshape(target_shape=(inputs_spatial.shape[1],inputs_spatial.shape[-1]))(inputs_spatial)
         inputs = inputs_spatial
 
 

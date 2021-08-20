@@ -107,8 +107,9 @@ def pred_fold(config, debug=True):
         kernel = np.ones((1, 1, 5, 5, 5, 1))
         kernel_ = np.ones((1, 5, 5, 5, 1))
         kernel_small = np.ones((1, 1, 3, 3, 3, 1))
+        prediction_tuple = x_train_sax, pred_generator, pred_myo_mask_generator, pred_lv_mask_generator, full_image_generator
 
-        for filename, pred_batch, myo_mask_b, lv_mask_b, full_cmr in zip(x_train_sax, pred_generator, pred_myo_mask_generator, pred_lv_mask_generator, full_image_generator):
+        for filename, pred_batch, myo_mask_b, lv_mask_b, full_cmr in zip(prediction_tuple):
 
             # first_vols shape:
             # Batch, Z, X, Y, Channels --> three timesteps - t_n-1, t_n, t_n+1
@@ -143,8 +144,6 @@ def pred_fold(config, debug=True):
             from src.models.Models import create_dense_compose
             comp = create_dense_compose(config)
             vects_composed = comp.predict(vects)
-
-
 
             moved_m = tf.cast(moved_m > 0.5, tf.uint8)
             moved_m = ndimage.binary_closing(moved_m, structure=kernel, iterations=1)

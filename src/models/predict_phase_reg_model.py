@@ -40,14 +40,14 @@ def predict(cfg_file, data_root, c2l=False):
     logging.info('SAX train CMR: {}, SAX train masks: {}'.format(len(x_train_sax), len(y_train_sax)))
     logging.info('SAX val CMR: {}, SAX val masks: {}'.format(len(x_val_sax), len(y_val_sax)))
 
+    # turn off all augmentation operations while inference
     config['SHUFFLE'] = False
     config['AUGMENT'] = False
     config['AUGMENT_PHASES'] = False
     config['AUGMENT_TEMP'] = False
     config['BATCHSIZE'] = 1
     config['HIST_MATCHING'] = False
-    #batch_generator = PhaseRegressionGenerator(x_train_sax, x_train_sax, config=config)
-    # create another config for the validation data, for the case of different evaluation
+    # create another config for the validation data
     val_config = config.copy()
     validation_generator = PhaseRegressionGenerator_v2(x_val_sax, x_val_sax, config=val_config)
 
@@ -80,7 +80,7 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description='predict a phase registration model')
 
-    # usually these two parameters should encapsulate all experiment parameters
+    # usually the exp root parameters should yield to a config, which encapsulate all experiment parameters
     parser.add_argument('-exp_root', action='store', default='/mnt/sds/sd20i001/sven/code/exp/miccai_baseline')
     parser.add_argument('-data', action='store', default='/mnt/ssd/data/gcn/02_imported_4D_unfiltered')
     parser.add_argument('-work_dir', action='store', default='/mnt/ssd/git/dynamic-cmr-models')
