@@ -238,7 +238,7 @@ def create_PhaseRegressionModel_v2(config, networkname='PhaseRegressionModel'):
                                        m_pool=m_pool,
                                        ndims=ndims,
                                        pad=pad)
-
+        config['IMG_CHANNELS'] = 3 # we roll the temporal axis and stack t-1, t and t+1 along the last axis
         unet = create_unet(config, single_model=False, networkname='3D-Unet')
         st_layer = nrn_layers.SpatialTransformer(interp_method=interp_method, indexing=indexing, ident=True,
                                                  name='deformable_layer')
@@ -272,7 +272,7 @@ def create_PhaseRegressionModel_v2(config, networkname='PhaseRegressionModel'):
         # b, t, 1, 4, 4, n
         # conv with: n times 4,4,4 filters, valid/no border padding and a stride of 4
         for i in range(2):
-            downsamples.append(Dropout(d_rate))
+            #downsamples.append(Dropout(d_rate))
             downsamples.append(
                 Conv(filters=filters_, kernel_size=4, padding='valid', strides=4,
                      kernel_initializer=kernel_init,
@@ -295,10 +295,10 @@ def create_PhaseRegressionModel_v2(config, networkname='PhaseRegressionModel'):
         import random
         # unstack along t yielding a list of 3D volumes
         # stack t-1, t and t+1 along the channels
-        unet_axis = 2
+        unet_axis = 1
         stack_axis = 1
         inputs_spatial_stacked = input_tensor
-        #inputs_spatial_stacked = concat_layer([tf.roll(input_tensor, shift=1, axis=stack_axis), input_tensor, tf.roll(input_tensor, shift=-1, axis=stack_axis)])
+        inputs_spatial_stacked = concat_layer([tf.roll(input_tensor, shift=1, axis=stack_axis), input_tensor, tf.roll(input_tensor, shift=-1, axis=stack_axis)])
         inputs_spatial_unstacked = tf.unstack(inputs_spatial_stacked, axis=unet_axis, name='split_into_2D_plus_t_vols')
         # first tests without shuffle, later we can add it, it seems to drop the train/val gap
         '''indicies = list(tf.range(len(inputs_spatial_unstacked)))
