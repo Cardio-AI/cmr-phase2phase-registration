@@ -249,7 +249,7 @@ def create_PhaseRegressionModel_v2(config, networkname='PhaseRegressionModel'):
         norm_lambda = tf.keras.layers.Lambda(
             lambda x: tf.norm(x, ord='euclidean', axis=-1, keepdims=True, name='flow2norm'), name='flow2norm')
         concat_lambda = tf.keras.layers.Lambda(lambda x: tf.concat(x, axis=-1, name='extend_flow_with_norm'),
-                                               name='stack_flow_norm')
+                                               name='stack_flow_with_norm')
 
         # How to downscale the in-plane and spatial resolution?
         # 1st idea: apply conv layers with a stride
@@ -271,21 +271,24 @@ def create_PhaseRegressionModel_v2(config, networkname='PhaseRegressionModel'):
         # two times conv with: n times 4,4,4 filters, valid/no border padding and a stride of 4
         # b, t, 1, 4, 4, n
         # conv with: n times 4,4,4 filters, valid/no border padding and a stride of 4
-        for i in range(4):
+        for i in range(6):
             #downsamples.append(Dropout(d_rate))
-            downsamples.append(
-                Conv(filters=filters_, kernel_size=3, padding='same', strides=2,
-                     kernel_initializer=kernel_init,
-                     activation=activation,
-                     name='downsample_{}'.format(i)))
+            if i < 4:
+                downsamples.append(
+                    Conv(filters=filters_, kernel_size=3, padding='same', strides=2,
+                         kernel_initializer=kernel_init,
+                         activation=activation,
+                         name='downsample_{}'.format(i)))
+            else: # 40,1,4,4
+                downsamples.append(
+                    Conv(filters=filters_, kernel_size=(1, 3, 3), padding='same', strides=(1, 2, 2),
+                         kernel_initializer=kernel_init,
+                         activation=activation,
+                         name='downsample_{}'.format(i + 1)))
             downsamples.append(BatchNormalization(axis=-1))
             filters_ = filters_*2
         #downsample.append(Dropout(d_rate))
-        downsamples.append(
-            Conv(filters=filters_, kernel_size=(1,4,4), padding='valid', strides=(1,4,4),
-                 kernel_initializer=kernel_init,
-                 activation=activation,
-                 name='downsample_{}'.format(i+1)))
+
 
         downsample = tf.keras.Sequential(layers=downsamples, name='downsample_inplane_and_spatial')
         final_onehot_conv = tf.keras.layers.Conv1D(filters=PHASES, kernel_size=1, strides=1, padding='same', kernel_initializer=kernel_init, activation=final_activation,
@@ -297,7 +300,7 @@ def create_PhaseRegressionModel_v2(config, networkname='PhaseRegressionModel'):
         # stack t-1, t and t+1 along the channels
         unet_axis = 1
         stack_axis = 1
-        inputs_spatial_stacked = input_tensor
+        #inputs_spatial_stacked = input_tensor
         inputs_spatial_stacked = concat_layer([tf.roll(input_tensor, shift=1, axis=stack_axis), input_tensor, tf.roll(input_tensor, shift=-1, axis=stack_axis)])
         inputs_spatial_unstacked = tf.unstack(inputs_spatial_stacked, axis=unet_axis, name='split_into_2D_plus_t_vols')
         # first tests without shuffle, later we can add it, it seems to drop the train/val gap

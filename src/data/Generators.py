@@ -1099,7 +1099,7 @@ class PhaseRegressionGenerator_v2(DataGenerator):
                                        masking_values=self.MASKING_VALUES, replace=self.REPLACE_WILDCARD)
 
         # resample the temporal resolution
-        # if AUGMENT_TEMP --> add an temporal augmentation factor within the range given by: AUGMENT_TEMP_RANGE
+        # if AUGMENT_TEMP --> add a temporal augmentation factor within the range given by: AUGMENT_TEMP_RANGE
         t_spacing = self.T_SPACING
         if self.AUGMENT_TEMP: t_spacing = t_spacing + random.randint(self.AUGMENT_TEMP_RANGE[0],
                                                                      self.AUGMENT_TEMP_RANGE[1])
@@ -1244,7 +1244,7 @@ class PhaseRegressionGenerator_v2(DataGenerator):
         """
 
         t0 = time()
-        if self.IN_MEMORY:
+        if self.IN_MEMORY: # load pre-loaded images from the current gen object
             model_inputs, onehot, reps, gt_length = self.model_inputs[ID], self.onehots[ID], self.reps[ID], self.gt_lengths[ID]
         else:
             model_inputs, onehot, reps, gt_length = self.__fix_preprocessing__(i,ID)
