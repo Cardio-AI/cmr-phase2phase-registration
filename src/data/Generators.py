@@ -1252,8 +1252,8 @@ class PhaseRegressionGenerator_v2(DataGenerator):
         if self.AUGMENT:
             # pad and crop in-plane to augment as less as possible
             # keep t as it is to align with the onehot vector, we modify t by np.tile/repeating and than cropping
-            augment_shape = (model_inputs.shape[0], *self.DIM)
-            model_inputs = pad_and_crop(model_inputs, target_shape=augment_shape)
+            #augment_shape = (model_inputs.shape[0], *self.DIM)
+            #model_inputs = pad_and_crop(model_inputs, target_shape=augment_shape)
             # use albumentation to apply random rotation scaling and shifts
             model_inputs = augmentation_compose_2d_3d_4d(img=model_inputs, mask=None,
                                                          probabillity=self.AUGMENT_PROB,
