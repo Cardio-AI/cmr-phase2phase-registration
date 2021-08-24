@@ -1308,7 +1308,6 @@ class PhaseRegressionGenerator_v2(DataGenerator):
         # make sure we do not introduce Nans to the model
         assert not np.any(np.isnan(onehot))
         assert not np.any(np.isnan(model_inputs))
-
         return model_inputs[..., None], onehot, i, ID, time() - t0
 
 class PhaseWindowGenerator(DataGenerator):

@@ -279,6 +279,8 @@ def create_PhaseRegressionModel_v2(config, networkname='PhaseRegressionModel'):
                          kernel_initializer=kernel_init,
                          activation=activation,
                          name='downsample_{}'.format(i)))
+
+                filters_ = filters_ * 2
             else: # 40,1,4,4
                 downsamples.append(
                     Conv(filters=filters_, kernel_size=(1, 3, 3), padding='same', strides=(1, 2, 2),
@@ -286,9 +288,6 @@ def create_PhaseRegressionModel_v2(config, networkname='PhaseRegressionModel'):
                          activation=activation,
                          name='downsample_{}'.format(i)))
             downsamples.append(BatchNormalization(axis=-1))
-            filters_ = filters_*2
-        #downsample.append(Dropout(d_rate))
-
 
         downsample = tf.keras.Sequential(layers=downsamples, name='downsample_inplane_and_spatial')
         final_onehot_conv = tf.keras.layers.Conv1D(filters=PHASES, kernel_size=1, strides=1, padding='same', kernel_initializer=kernel_init, activation=final_activation,
@@ -301,9 +300,11 @@ def create_PhaseRegressionModel_v2(config, networkname='PhaseRegressionModel'):
         unet_axis = 1
         stack_axis = 1
         #inputs_spatial_stacked = input_tensor
+        print('Shape Input Tensor: {}'.format(input_tensor.shape))
         inputs_spatial_stacked = concat_layer([tf.roll(input_tensor, shift=1, axis=stack_axis), input_tensor, tf.roll(input_tensor, shift=-1, axis=stack_axis)])
-
-        inputs_spatial_unstacked = tf.unstack(inputs_spatial_stacked, axis=unet_axis, name='split_into_2D_plus_t_vols')
+        print('Shape rolled and stacked: {}'.format(inputs_spatial_stacked.shape))
+        inputs_spatial_unstacked = tf.unstack(inputs_spatial_stacked, axis=unet_axis, name='split_into_t_times_3D_vols')
+        print('Shape after unstacking: {} x {}'.format(len(inputs_spatial_unstacked), inputs_spatial_unstacked[0].shape))
         # first tests without shuffle, later we can add it, it seems to drop the train/val gap
         '''indicies = list(tf.range(len(inputs_spatial_unstacked)))
         zipped = list(zip(inputs_spatial_unstacked, indicies))
@@ -314,48 +315,34 @@ def create_PhaseRegressionModel_v2(config, networkname='PhaseRegressionModel'):
         #pre_flows, _ = zip(*sorted(zip(pre_flows, indicies), key=lambda tup: tup[1]))
         flows= [Conv_layer(vol) for vol in pre_flows]
 
-        flows = tf.stack(flows, axis=unet_axis, name='stack_flows')
+        flows_stacked = tf.stack(flows, axis=unet_axis, name='stack_flows')
         pre_flows = tf.stack(pre_flows, axis=unet_axis, name='stack_preflows')
 
-        inputs_spatial = tf.unstack(input_tensor, axis=1, name='split_into_3D_vols')
-        flows_unstacked = tf.unstack(flows, axis=1, name='split_flows_into_3D')
-        pre_flows_unstacked = tf.unstack(pre_flows, axis=1, name='split_preflows_into_3D')
-
         transformed = [st_layer([input_vol, flow]) for input_vol, flow in
-                       zip(inputs_spatial, flows_unstacked)]
-        #inputs_spatial = flows
-        print('Flowfield shape: {}'.format(inputs_spatial[0].shape))
+                       zip(tf.unstack(input_tensor, axis=1), flows)]
+        print('Flowfield shape: {}'.format(flows[0].shape))
 
         # add the magnitude as fourth channel
-        tensor_magnitude = [norm_lambda(vol) for vol in flows_unstacked]
-        inputs_spatial = [concat_lambda([flow,norm]) for flow,  norm in zip(flows_unstacked, tensor_magnitude)]
-        print('inkl norm shape: {}'.format(inputs_spatial[0].shape))
-        inputs_spatial = [downsample(vol) for vol in inputs_spatial]
+        tensor_magnitude = [norm_lambda(vol) for vol in flows]
+        flow_features = [concat_lambda([flow,norm]) for flow,  norm in zip(flows, tensor_magnitude)]
+        print('inkl norm shape: {}'.format(flow_features[0].shape))
+        flow_features = [downsample(vol) for vol in flow_features]
 
-        encode_flow=False
-        if encode_flow:# 36, 256
-            enc = [spatial_encoder(vol)[0] for vol in inputs_spatial]
-            print('shape after flow encoding: {}'.format(enc[0].shape))
-            inputs_spatial = [gap(vol) for vol in enc]
-
-        inputs_spatial = tf.stack(inputs_spatial, axis=1, name='merge_3D_into_4D')
-        inputs_spatial = tf.keras.layers.Reshape(target_shape=(inputs_spatial.shape[1],inputs_spatial.shape[-1]))(inputs_spatial)
-        inputs = inputs_spatial
+        flow_features = tf.stack(flow_features, axis=1, name='Stack_flow_features')
+        flow_features = tf.keras.layers.Reshape(target_shape=(flow_features.shape[1],flow_features.shape[-1]))(flow_features)
 
 
         if add_bilstm:
             print('add a bilstm layer with: {} lstm units'.format(lstm_units))
-            print('Shape before LSTM layers: {}'.format(inputs.shape))
+            print('Shape before LSTM layers: {}'.format(flow_features.shape))
             forward_layer = LSTM(lstm_units, return_sequences=True, name='forward_LSTM')
             backward_layer = LSTM(lstm_units, activation='tanh', return_sequences=True,
                                   go_backwards=True, name='backward_LSTM')  # maybe change to tanh
-            inputs = Bidirectional(forward_layer, backward_layer=backward_layer, input_shape=inputs.shape)(inputs)
-            print('Shape after bilstm layer: {}'.format(inputs.shape))
+            flow_features_temp = Bidirectional(forward_layer, backward_layer=backward_layer, input_shape=flow_features.shape)(flow_features)
+            print('Shape after bilstm layer: {}'.format(flow_features_temp.shape))
 
-        # 36,64
-        print('Shape after Bi-LSTM layer: {}'.format(inputs.shape))
         # input (36,encoding) output (36,5)
-        onehot = final_onehot_conv(inputs)
+        onehot = final_onehot_conv(flow_features_temp)
 
         # 36, 5
         print('Shape after final conv layer: {}'.format(onehot.shape))
@@ -366,7 +353,7 @@ def create_PhaseRegressionModel_v2(config, networkname='PhaseRegressionModel'):
 
         onehot = tf.keras.layers.Activation('linear', name='onehot')(onehot)
         transformed = tf.keras.layers.Activation('linear', name='transformed')(transformed)
-        flows = tf.keras.layers.Activation('linear', name='flows')(flows)
+        flows = tf.keras.layers.Activation('linear', name='flows')(flows_stacked)
 
         outputs = [onehot, transformed, flows]
 
