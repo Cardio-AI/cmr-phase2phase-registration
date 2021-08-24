@@ -1281,7 +1281,6 @@ class PhaseRegressionGenerator_v2(DataGenerator):
         # 𝜎(𝐳)𝑖=𝑧𝑖∑𝐾𝑗=1𝑧𝑗+𝜖 for 𝑖=1,…,𝐾 and 𝐳=(𝑧1,…,𝑧𝐾)∈ℝ𝐾
         # - The standard (unit) softmax function 𝜎:ℝ𝐾→ℝ𝐾 is defined by the formula
         # 𝜎(𝐳)𝑖=𝑒𝑧𝑖∑𝐾𝑗=1𝑒𝑧𝑗 for 𝑖=1,…,𝐾 and 𝐳=(𝑧1,…,𝑧𝐾)∈ℝ𝐾
-
         model_inputs = normalise_image(model_inputs, normaliser=self.SCALER)  # normalise per 4D
         # logging.debug('background: \n{}'.format(onehot))
 

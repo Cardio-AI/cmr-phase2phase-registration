@@ -127,7 +127,7 @@ def train_fold(config, in_memory=False):
     # write the model summary to a txt file
     with open(os.path.join(EXP_PATH, 'model_summary.txt'), 'w') as fh:
         # Pass the file handle in as a lambda function to make it callable
-        model.summary(print_fn=lambda x: fh.write(x + '\n'))
+        model.summary(line_length=140, print_fn=lambda x: fh.write(x + '\n'))
 
     tf.keras.utils.plot_model(
         model, show_shapes=False,

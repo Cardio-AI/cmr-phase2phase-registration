@@ -284,7 +284,7 @@ def create_PhaseRegressionModel_v2(config, networkname='PhaseRegressionModel'):
                     Conv(filters=filters_, kernel_size=(1, 3, 3), padding='same', strides=(1, 2, 2),
                          kernel_initializer=kernel_init,
                          activation=activation,
-                         name='downsample_{}'.format(i + 1)))
+                         name='downsample_{}'.format(i)))
             downsamples.append(BatchNormalization(axis=-1))
             filters_ = filters_*2
         #downsample.append(Dropout(d_rate))
@@ -302,6 +302,7 @@ def create_PhaseRegressionModel_v2(config, networkname='PhaseRegressionModel'):
         stack_axis = 1
         #inputs_spatial_stacked = input_tensor
         inputs_spatial_stacked = concat_layer([tf.roll(input_tensor, shift=1, axis=stack_axis), input_tensor, tf.roll(input_tensor, shift=-1, axis=stack_axis)])
+
         inputs_spatial_unstacked = tf.unstack(inputs_spatial_stacked, axis=unet_axis, name='split_into_2D_plus_t_vols')
         # first tests without shuffle, later we can add it, it seems to drop the train/val gap
         '''indicies = list(tf.range(len(inputs_spatial_unstacked)))
