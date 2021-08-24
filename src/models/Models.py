@@ -279,7 +279,6 @@ def create_PhaseRegressionModel_v2(config, networkname='PhaseRegressionModel'):
                          kernel_initializer=kernel_init,
                          activation=activation,
                          name='downsample_{}'.format(i)))
-
                 filters_ = filters_ * 2
             else: # 40,1,4,4
                 downsamples.append(
@@ -288,6 +287,7 @@ def create_PhaseRegressionModel_v2(config, networkname='PhaseRegressionModel'):
                          activation=activation,
                          name='downsample_{}'.format(i)))
             downsamples.append(BatchNormalization(axis=-1))
+        downsamples = downsamples[:-1] # remove last BN layer
 
         downsample = tf.keras.Sequential(layers=downsamples, name='downsample_inplane_and_spatial')
         final_onehot_conv = tf.keras.layers.Conv1D(filters=PHASES, kernel_size=1, strides=1, padding='same', kernel_initializer=kernel_init, activation=final_activation,
