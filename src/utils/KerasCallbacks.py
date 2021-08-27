@@ -813,35 +813,41 @@ class PhaseRegressionCallback(Callback):
                     predictions = self.model.predict(x)
                     if len(predictions) == 3:  # multi-output-model
                         onehot_predictions, movings, vects = predictions
-                        onehot_y =  y[0]
+                        onehot_y =  y[0] # batchsize = 2
 
-                        # slice the volumes
-                        b = 0
-                        for t in range(0,x[0][b].shape[0], 5):
-                            first_vol, second_vol = x[0][b][t], y[1][b][t]
-                            moved, vect = movings[b][t], vects[b][t]
-                            spatial_slices = first_vol.shape[0]
-                            # pick one upper, middle and lower slice as example
-                            picks = (np.array([1, 0.5, 0]) * spatial_slices).astype(int)
-                            picks = np.clip(picks, 0, spatial_slices-1)
-                            y_label = ['Basal', 'Mid', 'Apex']
-                            from src.utils.Metrics import MSE_
-                            mse_1 = MSE_().loss(second_vol,first_vol)
-                            mse_2 = MSE_().loss(second_vol, moved)
-                            col_titles = ['t1', 't2', 't1 moved', 'vect', 'magn', 't1-t2 \n {:6.4f}'.format(mse_1),
-                                          'moved-t2 \n {:6.4f}'.format(mse_2)]
+                        gt, gt_msk = onehot_y[:, 0, ...], onehot_y[:, 1, ...]
 
-                            fig = plot_displacement(col_titles=col_titles,
-                                                    first_m=np.zeros_like(first_vol),
-                                                    first_vol=first_vol,
-                                                    moved=moved, moved_m=np.zeros_like(moved),
-                                                    picks=picks,second_m=np.zeros_like(second_vol),
-                                                    second_vol=second_vol, vect=vect, y_label=y_label,
-                                                    plot_masks=False)
+                        # slice the volumes, we plot only the first patient (b) out of this batch
+                        for b in range(gt.shape[0]):
+                        #b = 0
+                            temp_y = gt[b] * gt_msk[b]
+                            # gt[idx][(gt_length),:] = 1 # draw a line at the gt length temporal position
+                            ind_gt = np.argmax(temp_y, axis=0)
+                            for t in ind_gt: # iterate over the 5 gt phases to plot the volume at these timesteps
+                                first_vol, second_vol = x[0][b][t], y[1][b][t]
+                                moved, vect = movings[b][t], vects[b][t]
+                                spatial_slices = first_vol.shape[0]
+                                # pick one upper, middle and lower slice as example
+                                picks = (np.array([1, 0.5, 0]) * spatial_slices).astype(int)
+                                picks = np.clip(picks, 0, spatial_slices-1)
+                                y_label = ['Basal', 'Mid', 'Apex']
+                                from src.utils.Metrics import MSE_
+                                mse_1 = MSE_().loss(second_vol,first_vol)
+                                mse_2 = MSE_().loss(second_vol, moved)
+                                col_titles = ['t1', 't2', 't1 moved', 'vect', 'magn', 't1-t2 \n {:6.4f}'.format(mse_1),
+                                              'moved-t2 \n {:6.4f}'.format(mse_2)]
 
-                            tensorflow.summary.image(name='plot/{}/batch_{}/{}/summary'.format(key, b, t),
-                                                     data=self.make_image(fig),
-                                                     step=epoch)
+                                fig = plot_displacement(col_titles=col_titles,
+                                                        first_m=np.zeros_like(first_vol),
+                                                        first_vol=first_vol,
+                                                        moved=moved, moved_m=np.zeros_like(moved),
+                                                        picks=picks,second_m=np.zeros_like(second_vol),
+                                                        second_vol=second_vol, vect=vect, y_label=y_label,
+                                                        plot_masks=False)
+
+                                tensorflow.summary.image(name='plot/{}/batch_{}/{}/summary'.format(key, b, t),
+                                                         data=self.make_image(fig),
+                                                         step=epoch)
 
                     # logging.info(predictions.shape)
                     # xs and ys have the shape n, x, y, 1, they are grouped by the key

@@ -202,6 +202,7 @@ def create_PhaseRegressionModel_v2(config, networkname='PhaseRegressionModel'):
         drop_1 = config.get('DROPOUT_MIN', 0.3)
         drop_3 = config.get('DROPOUT_MAX', 0.5)
         bn_first = config.get('BN_FIRST', False)
+        dim = config.get('DIM', [10, 224, 224])
         ndims = len(config.get('DIM', [10, 224, 224]))
         depth = config.get('DEPTH', 4)
         batchsize = config.get('BATCHSIZE', 8)
@@ -250,6 +251,10 @@ def create_PhaseRegressionModel_v2(config, networkname='PhaseRegressionModel'):
             lambda x: tf.norm(x, ord='euclidean', axis=-1, keepdims=True, name='flow2norm'), name='flow2norm')
         concat_lambda = tf.keras.layers.Lambda(lambda x: tf.concat(x, axis=-1, name='extend_flow_with_norm'),
                                                name='stack_flow_with_norm')
+        concat_lambda2 = tf.keras.layers.Lambda(lambda x: tf.concat(x, axis=-1, name='extend_flow_with_direction'),
+                                               name='stack_flow_with_direction')
+        flow2direction_lambda = tf.keras.layers.Lambda(
+            lambda x: get_angle_tf(x[0],x[1]), name='flow2direction')
 
         # How to downscale the in-plane and spatial resolution?
         # 1st idea: apply conv layers with a stride
@@ -271,16 +276,21 @@ def create_PhaseRegressionModel_v2(config, networkname='PhaseRegressionModel'):
         # two times conv with: n times 4,4,4 filters, valid/no border padding and a stride of 4
         # b, t, 1, 4, 4, n
         # conv with: n times 4,4,4 filters, valid/no border padding and a stride of 4
-        for i in range(6):
+        # how often can we downsample the inplane and spatial resolution until we reach 1
+        # n = ln(1/x)/ln0,5
+        import math
+        n = int(math.log(1/dim[-1])/math.log(0.5))
+        z = int(math.log(1/dim[0])/math.log(0.5))
+        for i in range(n):
             #downsamples.append(Dropout(d_rate))
-            if i < 4:
+            if i < z:
                 downsamples.append(
                     Conv(filters=filters_, kernel_size=3, padding='same', strides=2,
                          kernel_initializer=kernel_init,
                          activation=activation,
                          name='downsample_{}'.format(i)))
                 filters_ = filters_ * 2
-            else: # 40,1,4,4
+            else: # stop to downsample the spatial resolution
                 downsamples.append(
                     Conv(filters=filters_, kernel_size=(1, 3, 3), padding='same', strides=(1, 2, 2),
                          kernel_initializer=kernel_init,
@@ -316,7 +326,7 @@ def create_PhaseRegressionModel_v2(config, networkname='PhaseRegressionModel'):
         flows= [Conv_layer(vol) for vol in pre_flows]
 
         flows_stacked = tf.stack(flows, axis=unet_axis, name='stack_flows')
-        pre_flows = tf.stack(pre_flows, axis=unet_axis, name='stack_preflows')
+        pre_flows_stacked = tf.stack(pre_flows, axis=unet_axis, name='stack_preflows')
 
         transformed = [st_layer([input_vol, flow]) for input_vol, flow in
                        zip(tf.unstack(input_tensor, axis=1), flows)]
@@ -326,6 +336,50 @@ def create_PhaseRegressionModel_v2(config, networkname='PhaseRegressionModel'):
         tensor_magnitude = [norm_lambda(vol) for vol in flows]
         flow_features = [concat_lambda([flow,norm]) for flow,  norm in zip(flows, tensor_magnitude)]
         print('inkl norm shape: {}'.format(flow_features[0].shape))
+
+        #calculate the flowfield direction compared to a displacment field which always points to the center
+        def get_angle_tf(a, b):
+            # this should work for batches of n-dimensional vectors
+            # α = arccos[(a · b) / (|a| * |b|)]
+            # |v| = √(x² + y² + z²)
+            """
+            in 3D space
+            If vectors a = [xa, ya, za], b = [xb, yb, zb], then:
+            α = arccos[(xa * xb + ya * yb + za * zb) / (√(xa2 + ya2 + za2) * √(xb2 + yb2 + zb2))]
+            """
+            import tensorflow as tf
+            #a, b = tf.convert_to_tensor(a, dtype=tf.float32), tf.convert_to_tensor(b, dtype=tf.float32)
+            inner = tf.einsum('...i,...i->...', a, b)
+            norms = (tf.norm(a, axis=-1) * tf.norm(b, axis=-1))  # [...,None]
+            cos = inner / (norms + sys.float_info.epsilon)
+            rad = tf.math.acos(tf.clip_by_value(cos, -1.0, 1.0))
+            return rad[...,tf.newaxis]
+
+
+        get_idxs_tf = lambda x: tf.cast(
+            tf.einsum('cxyz->xyzc', tf.reshape(tf.transpose(tf.where(tf.ones((x[0], x[1], x[2]))), [1, 0]), (3, x[0], x[1], x[2]))),
+            tf.float32)
+        get_centers_tf = lambda x: tf.cast(
+            tf.tile(tf.convert_to_tensor([x[0] // 2, x[1] // 2, x[2] // 2])[None, None, None, ...], (x[0], x[1], x[2], 1)), tf.float32)
+
+        # get a tensor with vectors pointing to the center
+        # get idxs of one 3D
+        # get a tensor with the same shape as the flowfield with the repeated vector towar the center
+        # calculate the difference, which should yield a 3D tensor with vectors pointing to the center
+        # tile/repeat this v_center vol along the temporal and batch axis
+        # calculate the angle of each voxel between the tiled v_center tensor and the displacement tensor
+        # concat this tensor as additional feature to the last axis of flow_features
+        idx = get_idxs_tf(dim)
+        c = get_centers_tf(dim)
+        centers = c - idx
+        flow_shape = tf.shape(flows[0])
+        centers_tensor = tf.broadcast_to(centers, flow_shape)
+        directions = [flow2direction_lambda([flow, centers_tensor]) for flow in flows]
+        print('directions shape: {}'.format(directions[0].shape))
+
+        #flow_features = [concat_lambda2([flow_f, angles]) for flow_f, angles in zip(flow_features, directions)]
+        # calculate the direction between the flowfield and the centerflow
+        print('flow features inkl directions shape: {}'.format(flow_features[0].shape))
         flow_features = [downsample(vol) for vol in flow_features]
 
         flow_features = tf.stack(flow_features, axis=1, name='Stack_flow_features')
@@ -338,11 +392,11 @@ def create_PhaseRegressionModel_v2(config, networkname='PhaseRegressionModel'):
             forward_layer = LSTM(lstm_units, return_sequences=True, name='forward_LSTM')
             backward_layer = LSTM(lstm_units, activation='tanh', return_sequences=True,
                                   go_backwards=True, name='backward_LSTM')  # maybe change to tanh
-            flow_features_temp = Bidirectional(forward_layer, backward_layer=backward_layer, input_shape=flow_features.shape)(flow_features)
-            print('Shape after bilstm layer: {}'.format(flow_features_temp.shape))
+            flow_features = Bidirectional(forward_layer, backward_layer=backward_layer, input_shape=flow_features.shape)(flow_features)
+            print('Shape after bilstm layer: {}'.format(flow_features.shape))
 
         # input (36,encoding) output (36,5)
-        onehot = final_onehot_conv(flow_features_temp)
+        onehot = final_onehot_conv(flow_features)
 
         # 36, 5
         print('Shape after final conv layer: {}'.format(onehot.shape))
@@ -376,8 +430,8 @@ def create_PhaseRegressionModel_v2(config, networkname='PhaseRegressionModel'):
 
             weights = {
                 'onehot': 1,
-                'transformed': 10,
-                'flows': 0.001}
+                'transformed': 20,
+                'flows': 0.01}
 
         print('added loss: {}'.format(loss))
         model = Model(inputs=[input_tensor], outputs=outputs, name=networkname)
