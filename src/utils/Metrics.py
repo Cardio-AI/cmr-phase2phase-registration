@@ -370,8 +370,8 @@ class Grad:
         return df
 
     def loss(self, _, y_pred):
-        y_pred = tf.where(tf.math.is_nan(y_pred), tf.zeros_like(y_pred), y_pred)
-        return tf.norm(y_pred, axis=-1)
+        #y_pred = tf.where(tf.math.is_nan(y_pred), tf.zeros_like(y_pred), y_pred)
+        #return tf.norm(y_pred, axis=-1)
 
         #print(tf.reduce_sum(y_pred).numpy())
         if self.penalty == 'l1':

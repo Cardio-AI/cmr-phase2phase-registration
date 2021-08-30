@@ -524,7 +524,7 @@ def _create_aug_compose(p=1, border_mode=cv2.BORDER_CONSTANT, val=0, targets=Non
     val = config.get('BORDER_VALUE', val)
     augmentations = []
     if config.get('RANDOMROTATE', False):augmentations.append(RandomRotate90(p=0.2))
-    if config.get('SHIFTSCALEROTATE', False): augmentations.append(ShiftScaleRotate(p=prob, rotate_limit=45,shift_limit=0.025, scale_limit=0,value=val, border_mode=border_mode))
+    if config.get('SHIFTSCALEROTATE', False): augmentations.append(ShiftScaleRotate(p=prob, rotate_limit=0,shift_limit=0.025, scale_limit=0,value=val, border_mode=border_mode))
     if config.get('GRIDDISTORTION', False): augmentations.append(GridDistortion(p=prob, value=val,border_mode=border_mode))
     if config.get('DOWNSCALE', False): augmentations.append(Downscale(scale_min=0.9, scale_max=0.9, p=prob))
     return ReplayCompose(augmentations, p=p,
@@ -985,3 +985,91 @@ def pad_and_crop(ndarray, target_shape=(10, 10, 10)):
     cropped[pad] = ndarray[crop]
     return cropped
 
+
+from math import atan2, degrees
+def get_angle2x(p1, p2):
+    angle = 0
+    x1, y1, x2, y2 = p1[0], p1[1], p2[0], p2[1]
+    if y2 > y1:
+        angle = degrees(atan2(y2-y1, x2-x1))
+    else:
+        angle = degrees(atan2(y1-y2, x1-x2))
+    return angle
+
+def get_ip_from_mask_3d(msk_3d, debug=False):
+    first_ips = []
+    second_ips = []
+    for msk2d in msk_3d:
+        try:
+            first, second = get_ip_from_2dmask(msk2d, debug=debug)
+            if first and second:
+                first_ips.append(first)
+                second_ips.append(second)
+        except Exception as e:
+            print(str(e))
+            pass
+
+    return first_ips, second_ips
+
+def get_ip_from_2dmask(nda, debug=False):
+    if debug: print('msk shape: {}'.format(nda.shape))
+    # initialise some values
+    first, second = None, None
+    septum_visited = False
+    border_visited = False
+    memory_first = None
+    # find first and second insertion points
+    myo_msk = (nda == 2).astype(np.uint8)
+    comb_msk = ((nda == 1) | (nda == 2) | (nda == 3)).astype(np.uint8)
+    myo_contours, hierarchy = cv2.findContours(myo_msk, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
+    comb_contours, hierarchy = cv2.findContours(comb_msk, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
+    if len(myo_contours) > 0 and len(comb_contours) > 0: # we just need to search for IP if there are two contours
+        # some lambda helpers
+        # transform and describe contour lists to pythonic list which makes "elem in" syntax possible
+        clean_contour = lambda cont: list(map(lambda x: (x[0][0], x[0][1]), cont[0]))
+        descr_cont = lambda cont: print(
+            'len: {}, first elem: {}, type of one elem: {}'.format(len(cont), cont[0], type(cont[0])))
+
+        # clean/describe both contours
+        myo_clean = clean_contour(myo_contours)
+        if debug: descr_cont(myo_clean)
+        comb_clean = clean_contour(comb_contours)
+        if debug: descr_cont(comb_clean)
+
+        # initialise some values
+        first, second = None, None
+        septum_visited = False
+        border_visited = False
+        memory_first = None
+        for p in myo_clean:
+            if debug: print('p {} in {}'.format(p, p in comb_clean))
+            # we are at the border,
+            # moving anti-clockwise,
+            # we dont know if we are in the septum
+            # no second IP found so far.
+
+            if p in comb_clean:
+                border_visited = True
+                if septum_visited and not second:
+                    # take the first point after the septum as second IP
+                    # we are at the border
+                    # we have been at the septum
+                    # no second defined so far
+                    second = p
+                    if debug: print('second= {}'.format(second))
+
+                # we are at the border
+                if not first:
+                    # if we havent been at the septum, update/remember this point
+                    # use the last visited point before visiting the septum as first IP
+                    memory_first = p
+                    if debug: print('memory= {}'.format(memory_first))
+            else:
+                septum_visited = True  # no contour points matched --> we are at the septum
+                if border_visited and not first:
+                    first = memory_first
+        if second and not first: # if our contour started at the first IP
+            first = memory_first
+        #assert first and second, 'missed one insertion point: first: {}, second: {}'.format(first, second)
+        if debug: print('first IP: {}, second IP: {}'.format(first, second))
+    return first, second

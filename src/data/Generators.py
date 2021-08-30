@@ -960,6 +960,7 @@ class PhaseRegressionGenerator_v2(DataGenerator):
         self.AUGMENT_TEMP = config.get('AUGMENT_TEMP', False)
         self.AUGMENT_TEMP_RANGE = config.get('AUGMENT_TEMP_RANGE', (-5, 5))
         self.RESAMPLE_T = config.get('RESAMPLE_T', False)
+        self.ROTATE = config.get('ROTATE', False)
         self.IN_MEMORY = in_memory
         self.THREAD_POOL = concurrent.futures.ThreadPoolExecutor(max_workers=12)
         self.config = config
@@ -1121,14 +1122,14 @@ class PhaseRegressionGenerator_v2(DataGenerator):
 
         # Returns the indices in the following order: 'ED#', 'MS#', 'ES#', 'PF#', 'MD#'
         if self.ISACDC:
-            onehot = get_phases_as_onehot_acdc(x, temporal_sampling_factor, len(model_inputs),
+            onehot_orig = get_phases_as_onehot_acdc(x, temporal_sampling_factor, len(model_inputs),
                                                self.SMOOTHING_WEIGHT_CORRECT)
         else:
-            onehot = get_phases_as_onehot_gcn(x, self.DF_METADATA, temporal_sampling_factor, len(model_inputs),
+            onehot_orig = get_phases_as_onehot_gcn(x, self.DF_METADATA, temporal_sampling_factor, len(model_inputs),
                                               self.SMOOTHING_WEIGHT_CORRECT)
 
         logging.debug('onehot initialised:')
-        if self.DEBUG_MODE: plt.imshow(onehot); plt.show()
+        if self.DEBUG_MODE: plt.imshow(onehot_orig); plt.show()
 
         # Interpret the 4D CMR stack and the corresponding phase-one-hot-vect
         # as temporal ring, which could be shifted by a random starting idx along the T-axis
@@ -1136,7 +1137,7 @@ class PhaseRegressionGenerator_v2(DataGenerator):
         if self.AUGMENT_PHASES:
             lower, upper = self.AUGMENT_PHASES_RANGE
             rand = random.randint(lower, upper)
-            onehot = np.concatenate([onehot[:, rand:], onehot[:, :rand]], axis=1)
+            onehot = np.concatenate([onehot_orig[:, rand:], onehot_orig[:, :rand]], axis=1)
             # if we extend the list in one line the list will not be modified, that's why we use two steps
             first = model_inputs[rand:]
             first.extend(model_inputs[:rand])
@@ -1147,7 +1148,7 @@ class PhaseRegressionGenerator_v2(DataGenerator):
         # Fake a ring behaviour by first, tile along t
         # second smooth with a gausian Kernel,
         # third split+maximise element-wise on both matrices
-        onehot = np.tile(onehot, (1, reps * 2))
+        onehot = np.tile(onehot_orig, (1, reps * 2))
         logging.debug('onehot repeated {}:'.format(reps))
         if self.DEBUG_MODE: plt.imshow(onehot); plt.show()
         # logging.debug('one-hot: \n{}'.format(onehot))
@@ -1218,6 +1219,40 @@ class PhaseRegressionGenerator_v2(DataGenerator):
         # transform to nda for further processing
         # repeat the 3D volumes along t (we did the same with the onehot vector)
         model_inputs = np.stack(list(map(lambda x: sitk.GetArrayFromImage(x), model_inputs)), axis=0)
+
+        # get mask
+        # get IPs of one timestep
+        # calc mean IPs
+        # calc IP angle and rotation angle
+        # rotate 4D with mean rotation angle
+        if self.ROTATE:
+            try:
+                from src.data.Preprocess import get_ip_from_mask_3d, get_angle2x
+                msk_name = x.replace('clean', 'mask')
+                mask = sitk.GetArrayFromImage(sitk.ReadImage(msk_name))
+                for i, mask3d in enumerate(mask):
+                    # check if we have more than n = 3 slices labelled
+                    masked_slices = np.where(mask3d.sum(axis=(1,2))>0)[0] # this is a tuple, we need the first element
+                    if len(masked_slices)> 3:
+                        break
+
+                # this will fail for masks/patients with one slice per t labelled
+                #mask_given_idxs = np.where(mask.sum(axis=(1,2,3))>0)
+                mask3d = mask[i]
+                fips, sips = get_ip_from_mask_3d(mask3d)
+                fip = np.array(fips).mean(axis=0)
+                sip = np.array(sips).mean(axis=0)
+                ip_angle = get_angle2x(fip, sip)
+                rot_angle = ip_angle - 90
+                from scipy import ndimage
+                model_inputs = ndimage.rotate(model_inputs, angle=rot_angle, reshape=False, order=1,axes=(-2,-1))
+            except Exception as e:
+                PrintException()
+                print(e)
+                print(msk_name)
+                print(mask3d.shape)
+                print(i)
+
 
         if apply_hist_matching:
             model_inputs = match_hist(model_inputs, ref)

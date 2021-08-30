@@ -334,9 +334,9 @@ def create_PhaseRegressionModel_v2(config, networkname='PhaseRegressionModel'):
 
         # add the magnitude as fourth channel
         tensor_magnitude = [norm_lambda(vol) for vol in flows]
-        flow_features = [concat_lambda([flow,norm]) for flow,  norm in zip(flows, tensor_magnitude)]
+        flow_features = flows
+        #flow_features = [concat_lambda([flow,norm]) for flow,  norm in zip(flows, tensor_magnitude)]
         print('inkl norm shape: {}'.format(flow_features[0].shape))
-
         #calculate the flowfield direction compared to a displacment field which always points to the center
         def get_angle_tf(a, b):
             # this should work for batches of n-dimensional vectors
@@ -348,34 +348,43 @@ def create_PhaseRegressionModel_v2(config, networkname='PhaseRegressionModel'):
             α = arccos[(xa * xb + ya * yb + za * zb) / (√(xa2 + ya2 + za2) * √(xb2 + yb2 + zb2))]
             """
             import tensorflow as tf
+            import math as m
+            pi = tf.constant(m.pi)
             #a, b = tf.convert_to_tensor(a, dtype=tf.float32), tf.convert_to_tensor(b, dtype=tf.float32)
             inner = tf.einsum('...i,...i->...', a, b)
             norms = (tf.norm(a, axis=-1) * tf.norm(b, axis=-1))  # [...,None]
             cos = inner / (norms + sys.float_info.epsilon)
             rad = tf.math.acos(tf.clip_by_value(cos, -1.0, 1.0))
-            return rad[...,tf.newaxis]
+            # rad2deg conversion
+            deg = rad * (180.0/pi)
+            return deg[...,tf.newaxis]
 
-
+        # returns a matrix with the indicies as values, similar to np.indicies
         get_idxs_tf = lambda x: tf.cast(
-            tf.einsum('cxyz->xyzc', tf.reshape(tf.transpose(tf.where(tf.ones((x[0], x[1], x[2]))), [1, 0]), (3, x[0], x[1], x[2]))),
+            tf.reshape(tf.where(tf.ones((x[0], x[1], x[2]))), (x[0], x[1], x[2], 3)),
             tf.float32)
+        # returns a matrix with vectors pointing to the center
         get_centers_tf = lambda x: tf.cast(
-            tf.tile(tf.convert_to_tensor([x[0] // 2, x[1] // 2, x[2] // 2])[None, None, None, ...], (x[0], x[1], x[2], 1)), tf.float32)
+            tf.tile(tf.convert_to_tensor([x[0] // 2, x[1] // 2, x[2] // 2])[tf.newaxis, tf.newaxis, tf.newaxis, ...], (x[0], x[1], x[2], 1)), tf.float32)
 
         # get a tensor with vectors pointing to the center
         # get idxs of one 3D
-        # get a tensor with the same shape as the flowfield with the repeated vector towar the center
+        # get a tensor with the same shape as the flowfield with the repeated vector toward the center
         # calculate the difference, which should yield a 3D tensor with vectors pointing to the center
         # tile/repeat this v_center vol along the temporal and batch axis
         # calculate the angle of each voxel between the tiled v_center tensor and the displacement tensor
         # concat this tensor as additional feature to the last axis of flow_features
+        flow_shape = tf.shape(flows[0])
         idx = get_idxs_tf(dim)
         c = get_centers_tf(dim)
         centers = c - idx
-        flow_shape = tf.shape(flows[0])
-        centers_tensor = tf.broadcast_to(centers, flow_shape)
+
+        centers_tensor = tf.tile(centers[tf.newaxis,...], (flow_shape[0], 1,1,1,1))
+
         directions = [flow2direction_lambda([flow, centers_tensor]) for flow in flows]
         print('directions shape: {}'.format(directions[0].shape))
+
+        # make unit vectors
 
         #flow_features = [concat_lambda2([flow_f, angles]) for flow_f, angles in zip(flow_features, directions)]
         # calculate the direction between the flowfield and the centerflow
