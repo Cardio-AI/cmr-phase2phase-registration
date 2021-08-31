@@ -208,6 +208,7 @@ def create_PhaseRegressionModel_v2(config, networkname='PhaseRegressionModel'):
         batchsize = config.get('BATCHSIZE', 8)
         add_bilstm = config.get('ADD_BILSTM', False)
         lstm_units = config.get('BILSTM_UNITS', 64)
+        add_vect_norm = config.get('ADD_VECTOR_NORM')
         final_activation = config.get('FINAL_ACTIVATION', 'relu').lower()
         loss = config.get('LOSS', 'mse').lower()
         mask_loss = config.get('MASK_LOSS', False)
@@ -335,7 +336,7 @@ def create_PhaseRegressionModel_v2(config, networkname='PhaseRegressionModel'):
         # add the magnitude as fourth channel
         tensor_magnitude = [norm_lambda(vol) for vol in flows]
         flow_features = flows
-        #flow_features = [concat_lambda([flow,norm]) for flow,  norm in zip(flows, tensor_magnitude)]
+        if add_vect_norm: flow_features = [concat_lambda([flow,norm]) for flow,  norm in zip(flows, tensor_magnitude)]
         print('inkl norm shape: {}'.format(flow_features[0].shape))
         #calculate the flowfield direction compared to a displacment field which always points to the center
         def get_angle_tf(a, b):
