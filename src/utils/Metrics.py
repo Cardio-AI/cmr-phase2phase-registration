@@ -317,7 +317,6 @@ class MSE(tf.keras.losses.Loss):
             y_true, y_msk = tf.unstack(y_true, num=2, axis=1)
             y_pred, _ = tf.unstack(y_pred, num=2, axis=1)
 
-
             if self.masked:
                 y_msk = tf.cast(y_msk, tf.float32)  # weight the first area by 2
                 y_true = y_msk * y_true
@@ -379,12 +378,7 @@ class Grad:
         returns Tensor of size [bs]
         """
         # y_pred = tf.where(tf.math.is_nan(y_pred), tf.zeros_like(y_pred), y_pred)
-        # return tf.norm(y_pred, axis=-1)
-        tf.debugging.assert_all_finite(
-            y_pred,
-            'Nan in loss input with: {}'.format(tf.math.reduce_sum(tf.cast(tf.math.is_nan(y_pred), tf.float32))),
-            name=None
-        )
+        return tf.norm(y_pred, axis=-1)
 
         if self.penalty == 'l1':
             dif = [tf.abs(f) for f in self._diffs(y_pred)]

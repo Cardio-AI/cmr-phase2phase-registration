@@ -1220,39 +1220,36 @@ class PhaseRegressionGenerator_v2(DataGenerator):
         # repeat the 3D volumes along t (we did the same with the onehot vector)
         model_inputs = np.stack(list(map(lambda x: sitk.GetArrayFromImage(x), model_inputs)), axis=0)
 
+        # performance test, keep t, crop the other dimensions to 1.2 times the target shape
+        # This decreases the memory footprint and the computation time for further processing steps
+        model_inputs = pad_and_crop(model_inputs,
+                                    target_shape=(model_inputs.shape[0], *(np.array(self.DIM) * 1.2).astype(np.int)))
+
         # get mask
         # get IPs of one timestep
         # calc mean IPs
         # calc IP angle and rotation angle
         # rotate 4D with mean rotation angle
         if self.ROTATE:
-            try:
-                from src.data.Preprocess import get_ip_from_mask_3d, get_angle2x
-                msk_name = x.replace('clean', 'mask')
-                mask = sitk.GetArrayFromImage(sitk.ReadImage(msk_name))
-                for i, mask3d in enumerate(mask):
-                    # check if we have more than n = 3 slices labelled
-                    masked_slices = np.where(mask3d.sum(axis=(1,2))>0)[0] # this is a tuple, we need the first element
-                    if len(masked_slices)> 3:
-                        break
+            from src.data.Preprocess import get_ip_from_mask_3d, get_angle2x
+            msk_name = x.replace('clean', 'mask')
+            mask = sitk.GetArrayFromImage(sitk.ReadImage(msk_name))
+            for i, mask3d in enumerate(mask):
+                # check if we have more than n = 3 slices labelled
+                masked_slices = np.where(mask3d.sum(axis=(1,2))>0)[0] # this is a tuple, we need the first element
+                if len(masked_slices)> 3:
+                    break
 
-                # this will fail for masks/patients with one slice per t labelled
-                #mask_given_idxs = np.where(mask.sum(axis=(1,2,3))>0)
-                mask3d = mask[i]
-                fips, sips = get_ip_from_mask_3d(mask3d)
-                fip = np.array(fips).mean(axis=0)
-                sip = np.array(sips).mean(axis=0)
-                ip_angle = get_angle2x(fip, sip)
-                rot_angle = ip_angle - 90
-                from scipy import ndimage
-                model_inputs = ndimage.rotate(model_inputs, angle=rot_angle, reshape=False, order=1,axes=(-2,-1))
-            except Exception as e:
-                PrintException()
-                print(e)
-                print(msk_name)
-                print(mask3d.shape)
-                print(i)
-
+            # this will fail for masks/patients with one slice per t labelled
+            #mask_given_idxs = np.where(mask.sum(axis=(1,2,3))>0)
+            mask3d = mask[i]
+            fips, sips = get_ip_from_mask_3d(mask3d)
+            fip = np.array(fips).mean(axis=0)
+            sip = np.array(sips).mean(axis=0)
+            ip_angle = get_angle2x(fip, sip)
+            rot_angle = ip_angle - 90
+            from scipy import ndimage
+            model_inputs = ndimage.rotate(model_inputs, angle=rot_angle, reshape=False, order=1,axes=(-2,-1))
 
         if apply_hist_matching:
             model_inputs = match_hist(model_inputs, ref)

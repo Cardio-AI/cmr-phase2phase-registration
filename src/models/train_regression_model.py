@@ -134,14 +134,14 @@ def train_fold(config, in_memory=False):
         # Pass the file handle in as a lambda function to make it callable
         model.summary(line_length=140, print_fn=lambda x: fh.write(x + '\n'))
 
-    tf.keras.utils.plot_model(
+    """tf.keras.utils.plot_model(
         model, show_shapes=False,
         to_file=os.path.join(EXP_PATH, 'model.png'),
         show_layer_names=True,
         rankdir='TB',
         expand_nested=False,
         dpi=96
-    )
+    )"""
 
     # training
     initial_epoch = 0
@@ -152,7 +152,7 @@ def train_fold(config, in_memory=False):
         epochs=EPOCHS,
         callbacks=get_callbacks(config, batch_generator, validation_generator),
         initial_epoch=initial_epoch,
-        max_queue_size=config.get('QUEUE_SIZE',2),
+        #max_queue_size=config.get('QUEUE_SIZE',2),
         # use_multiprocessing=False,
         # workers=12,
         verbose=1)
@@ -344,6 +344,7 @@ if __name__ == "__main__":
     print('given parameters: {}'.format(results))
 
     try:
+        print('running in-memory={}, watch for overflow!'.format(results.inmemory))
         main(results, in_memory=results.inmemory)
     except Exception as e:
         print(e)

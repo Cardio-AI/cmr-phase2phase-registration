@@ -413,11 +413,6 @@ def create_PhaseRegressionModel_v2(config, networkname='PhaseRegressionModel'):
 
         onehot = tf.keras.layers.Activation('linear', name='onehot')(onehot)
         transformed = tf.keras.layers.Activation('linear', name='transformed')(transformed)
-        """tf.debugging.assert_all_finite(
-            flows_stacked,
-            'Nan in flows stacked: {}'.format(tf.math.reduce_sum(tf.cast(tf.math.is_nan(flows_stacked), tf.float32))),
-            name=None
-        )"""
         flows = tf.keras.layers.Activation('linear', name='flows')(flows_stacked)
 
         outputs = [onehot, transformed, flows]
@@ -450,7 +445,6 @@ def create_PhaseRegressionModel_v2(config, networkname='PhaseRegressionModel'):
             optimizer=tf.keras.optimizers.Adam(learning_rate=config.get('LEARNING_RATE', 0.001)),
             loss=losses,
             loss_weights=weights,
-            # metrics=[own_metr.mse_wrapper, own_metr.ca_wrapper, own_metr.meandiff] #
             metrics={
                 'onehot': own_metr.meandiff,
                 'transformed': MSE_().loss,
