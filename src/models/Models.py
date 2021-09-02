@@ -208,7 +208,8 @@ def create_PhaseRegressionModel_v2(config, networkname='PhaseRegressionModel'):
         batchsize = config.get('BATCHSIZE', 8)
         add_bilstm = config.get('ADD_BILSTM', False)
         lstm_units = config.get('BILSTM_UNITS', 64)
-        add_vect_norm = config.get('ADD_VECTOR_NORM')
+        add_vect_norm = config.get('ADD_VECTOR_NORM', False)
+        add_vect_direction = config.get('ADD_VECTOR_DIRECTION', False)
         final_activation = config.get('FINAL_ACTIVATION', 'relu').lower()
         loss = config.get('LOSS', 'mse').lower()
         mask_loss = config.get('MASK_LOSS', False)
@@ -336,7 +337,9 @@ def create_PhaseRegressionModel_v2(config, networkname='PhaseRegressionModel'):
         # add the magnitude as fourth channel
         tensor_magnitude = [norm_lambda(vol) for vol in flows]
         flow_features = flows
-        if add_vect_norm: flow_features = [concat_lambda([flow,norm]) for flow,  norm in zip(flows, tensor_magnitude)]
+        if add_vect_norm:
+            flow_features = tensor_magnitude
+            #flow_features = [concat_lambda([flow,norm]) for flow,  norm in zip(flows, tensor_magnitude)]
         print('inkl norm shape: {}'.format(flow_features[0].shape))
         #calculate the flowfield direction compared to a displacment field which always points to the center
         def get_angle_tf(a, b):
@@ -351,14 +354,13 @@ def create_PhaseRegressionModel_v2(config, networkname='PhaseRegressionModel'):
             import tensorflow as tf
             import math as m
             pi = tf.constant(m.pi)
-            #a, b = tf.convert_to_tensor(a, dtype=tf.float32), tf.convert_to_tensor(b, dtype=tf.float32)
             inner = tf.einsum('...i,...i->...', a, b)
-            norms = (tf.norm(a, axis=-1) * tf.norm(b, axis=-1))  # [...,None]
+            norms = (tf.norm(a, ord='euclidean', axis=-1) * tf.norm(b, ord='euclidean',axis=-1))  # [...,None]
             cos = inner / (norms + sys.float_info.epsilon)
-            rad = tf.math.acos(tf.clip_by_value(cos, -1.0, 1.0))
+            #rad = tf.math.acos(tf.clip_by_value(cos, -1.0, 1.0))
             # rad2deg conversion
-            deg = rad * (180.0/pi)
-            return deg[...,tf.newaxis]
+            #deg = rad * (180.0/pi)
+            return cos[...,tf.newaxis]
 
         # returns a matrix with the indicies as values, similar to np.indicies
         get_idxs_tf = lambda x: tf.cast(
@@ -379,33 +381,27 @@ def create_PhaseRegressionModel_v2(config, networkname='PhaseRegressionModel'):
         idx = get_idxs_tf(dim)
         c = get_centers_tf(dim)
         centers = c - idx
-
         centers_tensor = tf.tile(centers[tf.newaxis,...], (flow_shape[0], 1,1,1,1))
-
+        # calculate the direction between the flowfield and the centerflow
         directions = [flow2direction_lambda([flow, centers_tensor]) for flow in flows]
         print('directions shape: {}'.format(directions[0].shape))
-
-        # make unit vectors
-
-        #flow_features = [concat_lambda2([flow_f, angles]) for flow_f, angles in zip(flow_features, directions)]
-        # calculate the direction between the flowfield and the centerflow
+        if add_vect_direction:
+            flow_features = [concat_lambda2([flow_f, angles]) for flow_f, angles in zip(flow_features, directions)]
         print('flow features inkl directions shape: {}'.format(flow_features[0].shape))
-        flow_features = [downsample(vol) for vol in flow_features]
 
+        flow_features = [downsample(vol) for vol in flow_features]
         flow_features = tf.stack(flow_features, axis=1, name='Stack_flow_features')
         flow_features = tf.keras.layers.Reshape(target_shape=(flow_features.shape[1],flow_features.shape[-1]))(flow_features)
-
 
         if add_bilstm:
             print('add a bilstm layer with: {} lstm units'.format(lstm_units))
             print('Shape before LSTM layers: {}'.format(flow_features.shape))
             forward_layer = LSTM(lstm_units, return_sequences=True, name='forward_LSTM')
-            backward_layer = LSTM(lstm_units, activation='tanh', return_sequences=True,
-                                  go_backwards=True, name='backward_LSTM')  # maybe change to tanh
-            flow_features = Bidirectional(forward_layer, backward_layer=backward_layer, input_shape=flow_features.shape)(flow_features)
+            backward_layer = LSTM(lstm_units, return_sequences=True,go_backwards=True, name='backward_LSTM')  # maybe change to tanh
+            flow_features = Bidirectional(forward_layer, backward_layer=backward_layer, merge_mode='ave', input_shape=flow_features.shape)(flow_features)
             print('Shape after bilstm layer: {}'.format(flow_features.shape))
 
-        # input (36,encoding) output (36,5)
+        # input (t,encoding) output (t,5)
         onehot = final_onehot_conv(flow_features)
 
         # 36, 5
@@ -417,6 +413,11 @@ def create_PhaseRegressionModel_v2(config, networkname='PhaseRegressionModel'):
 
         onehot = tf.keras.layers.Activation('linear', name='onehot')(onehot)
         transformed = tf.keras.layers.Activation('linear', name='transformed')(transformed)
+        """tf.debugging.assert_all_finite(
+            flows_stacked,
+            'Nan in flows stacked: {}'.format(tf.math.reduce_sum(tf.cast(tf.math.is_nan(flows_stacked), tf.float32))),
+            name=None
+        )"""
         flows = tf.keras.layers.Activation('linear', name='flows')(flows_stacked)
 
         outputs = [onehot, transformed, flows]

@@ -122,6 +122,11 @@ def train_fold(config, in_memory=False):
     validation_generator = PhaseRegressionGenerator_v2(x_val_sax, x_val_sax, config=val_config, in_memory=in_memory)
 
     # get model
+    """tf.debugging.experimental.enable_dump_debug_info(
+        'logs/tfdbg2_logdir',
+        tensor_debug_mode="FULL_HEALTH",
+        circular_buffer_size=-1)"""
+
     model = create_PhaseRegressionModel_v2(config)
 
     # write the model summary to a txt file
