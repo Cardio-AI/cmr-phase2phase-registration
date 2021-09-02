@@ -378,7 +378,7 @@ class Grad:
         returns Tensor of size [bs]
         """
         # y_pred = tf.where(tf.math.is_nan(y_pred), tf.zeros_like(y_pred), y_pred)
-        return tf.norm(y_pred, axis=-1)
+        #return tf.norm(y_pred, axis=-1)
 
         if self.penalty == 'l1':
             dif = [tf.abs(f) for f in self._diffs(y_pred)]

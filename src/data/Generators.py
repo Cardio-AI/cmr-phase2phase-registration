@@ -1222,8 +1222,9 @@ class PhaseRegressionGenerator_v2(DataGenerator):
 
         # performance test, keep t, crop the other dimensions to 1.2 times the target shape
         # This decreases the memory footprint and the computation time for further processing steps
-        model_inputs = pad_and_crop(model_inputs,
-                                    target_shape=(model_inputs.shape[0], *(np.array(self.DIM) * 1.2).astype(np.int)))
+        if not self.IN_MEMORY:
+            model_inputs = pad_and_crop(model_inputs,
+                                    target_shape=(model_inputs.shape[0], *(np.array(self.DIM) * 1.5).astype(np.int)))
 
         # get mask
         # get IPs of one timestep
