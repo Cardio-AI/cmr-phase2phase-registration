@@ -693,6 +693,40 @@ def plot_4d_vol(img_4d, timesteps=[0], save=False, path='temp/', mask_4d=None, f
         #fig.show()
 
 
+def create_violin_plot(df, cols, ax, scale='linear', unit='mm'):
+    """
+    Overlay a parallel plot, a scatterplot and a violinplot
+    Parameters
+    ----------
+    df : (pandas dataframe)
+    cols : (dict) with keys == df.column names and values == axis namings
+    ax : (matplotlib.axis) object,
+        could also be part of a bigger plot such as: fig, axes = plt.subplots(1,2,figsize=(15,6))
+    scale : (str) could be used to define a scaling of the y-axis (eg.: linear, log...)
+    unit : (str) units of the y-axis, such as ms or mm
+
+    Returns
+    -------
+
+    """
+    import seaborn as sb
+    from pandas.plotting import parallel_coordinates
+
+    ax.set_yscale(scale)
+    ax = parallel_coordinates(frame=df, class_column='idx', cols=cols.keys(), ax=ax)
+    ax = sb.violinplot(data=df[cols.keys()], ax=ax)
+    ax = sb.stripplot(data=df[cols.keys()],
+                      size=4, color=".3", linewidth=0, ax=ax)
+    ax.legend([])
+    ax.set_ylabel('size in {}'.format(unit))
+    ax.set_xticklabels(cols.values())
+    ax.grid(True)
+
+    # info(df[col].describe())
+    plt.tight_layout()
+
+
+
 def plot_3d_vol(img_3d, mask_3d=None, timestep=0, save=False, path='reports/figures/tetra/3D_vol/temp/',
                 fig_size=[25, 8], show=True, allow_slicing=True):
     """

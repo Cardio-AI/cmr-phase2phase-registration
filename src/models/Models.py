@@ -210,10 +210,11 @@ def create_PhaseRegressionModel_v2(config, networkname='PhaseRegressionModel'):
         lstm_units = config.get('BILSTM_UNITS', 64)
         add_vect_norm = config.get('ADD_VECTOR_NORM', False)
         add_vect_direction = config.get('ADD_VECTOR_DIRECTION', False)
+        add_flows = config.get('ADD_FLOW', False)
         final_activation = config.get('FINAL_ACTIVATION', 'relu').lower()
         loss = config.get('LOSS', 'mse').lower()
         mask_loss = config.get('MASK_LOSS', False)
-        pre_gap_conv = config.get('PRE_GAP_CONV', False)
+        downsample_flow_features = config.get('PRE_GAP_CONV', False)
         interp_method = 'linear'
         indexing = 'ij'
         # TODO: this parameter is also used by the generator to define the number of channels
@@ -324,11 +325,12 @@ def create_PhaseRegressionModel_v2(config, networkname='PhaseRegressionModel'):
         inputs_spatial_unstacked, indicies = zip(*zipped)'''
         # feed the T x 3D volumes into the spatial encoder (3D conv)
         pre_flows = [unet(vol) for vol in inputs_spatial_unstacked]
+
         #pre_flows, _ = zip(*sorted(zip(pre_flows, indicies), key=lambda tup: tup[1]))
         flows= [Conv_layer(vol) for vol in pre_flows]
-
         flows_stacked = tf.stack(flows, axis=unet_axis, name='stack_flows')
-        pre_flows_stacked = tf.stack(pre_flows, axis=unet_axis, name='stack_preflows')
+
+        #pre_flows_stacked = tf.stack(pre_flows, axis=unet_axis, name='stack_preflows')
 
         transformed = [st_layer([input_vol, flow]) for input_vol, flow in
                        zip(tf.unstack(input_tensor, axis=1), flows)]
@@ -336,12 +338,16 @@ def create_PhaseRegressionModel_v2(config, networkname='PhaseRegressionModel'):
 
         # add the magnitude as fourth channel
         tensor_magnitude = [norm_lambda(vol) for vol in flows]
-        flow_features = flows
-        if add_vect_norm:
+
+        if add_vect_norm and add_flows:
+            flow_features = [concat_lambda([flow,norm]) for flow,  norm in zip(flows, tensor_magnitude)]
+        elif add_vect_norm:
             flow_features = tensor_magnitude
-            #flow_features = [concat_lambda([flow,norm]) for flow,  norm in zip(flows, tensor_magnitude)]
+        elif add_flows:
+            flow_features = flows
         print('inkl norm shape: {}'.format(flow_features[0].shape))
         #calculate the flowfield direction compared to a displacment field which always points to the center
+
         def get_angle_tf(a, b):
             # this should work for batches of n-dimensional vectors
             # α = arccos[(a · b) / (|a| * |b|)]
@@ -351,11 +357,10 @@ def create_PhaseRegressionModel_v2(config, networkname='PhaseRegressionModel'):
             If vectors a = [xa, ya, za], b = [xb, yb, zb], then:
             α = arccos[(xa * xb + ya * yb + za * zb) / (√(xa2 + ya2 + za2) * √(xb2 + yb2 + zb2))]
             """
-            import tensorflow as tf
-            import math as m
-            pi = tf.constant(m.pi)
+            #import math as m
+            #pi = tf.constant(m.pi)
             inner = tf.einsum('...i,...i->...', a, b)
-            norms = (tf.norm(a, ord='euclidean', axis=-1) * tf.norm(b, ord='euclidean',axis=-1))  # [...,None]
+            norms = tf.norm(a, ord='euclidean', axis=-1) * tf.norm(b, ord='euclidean',axis=-1)  # [...,None]
             cos = inner / (norms + sys.float_info.epsilon)
             #rad = tf.math.acos(tf.clip_by_value(cos, -1.0, 1.0))
             # rad2deg conversion
@@ -389,7 +394,11 @@ def create_PhaseRegressionModel_v2(config, networkname='PhaseRegressionModel'):
             flow_features = [concat_lambda2([flow_f, angles]) for flow_f, angles in zip(flow_features, directions)]
         print('flow features inkl directions shape: {}'.format(flow_features[0].shape))
 
-        flow_features = [downsample(vol) for vol in flow_features]
+        if downsample_flow_features:
+            flow_features = [downsample(vol) for vol in flow_features]
+        else:
+            flow_features = [gap(vol) for vol in flow_features]
+
         flow_features = tf.stack(flow_features, axis=1, name='Stack_flow_features')
         flow_features = tf.keras.layers.Reshape(target_shape=(flow_features.shape[1],flow_features.shape[-1]))(flow_features)
 
@@ -398,7 +407,8 @@ def create_PhaseRegressionModel_v2(config, networkname='PhaseRegressionModel'):
             print('Shape before LSTM layers: {}'.format(flow_features.shape))
             forward_layer = LSTM(lstm_units, return_sequences=True, name='forward_LSTM')
             backward_layer = LSTM(lstm_units, return_sequences=True,go_backwards=True, name='backward_LSTM')  # maybe change to tanh
-            flow_features = Bidirectional(forward_layer, backward_layer=backward_layer, merge_mode='ave', input_shape=flow_features.shape)(flow_features)
+            flow_features = Bidirectional(forward_layer, backward_layer=backward_layer, input_shape=flow_features.shape)(flow_features)
+            # , merge_mode='ave'
             print('Shape after bilstm layer: {}'.format(flow_features.shape))
 
         # input (t,encoding) output (t,5)
@@ -472,7 +482,6 @@ def create_RegistrationModel(config):
         image_loss_weight = config.get('IMAGE_LOSS_WEIGHT', 1)
         reg_loss_weight = config.get('REG_LOSS_WEIGHT', 0.001)
         learning_rate = config.get('LEARNING_RATE', 0.001)
-
 
         input_tensor = Input(shape=(T_SHAPE, *input_shape, config.get('IMG_CHANNELS', 1))) # input vol with timesteps, z, x, y, c -> =number of input timesteps
         input_tensor_empty = Input(shape=(T_SHAPE, *input_shape, 3)) # empty vector field

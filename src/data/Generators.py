@@ -941,7 +941,6 @@ class PhaseRegressionGenerator_v2(DataGenerator):
         if config is None:
             config = {}
         super().__init__(x=x, y=y, config=config)
-
         self.AUGMENT_PHASES = config.get('AUGMENT_PHASES', False)
         self.AUGMENT_PHASES_RANGE = config.get('AUGMENT_PHASES_RANGE', (-3, 3))
         self.T_SHAPE = config.get('T_SHAPE', 10)
@@ -997,6 +996,7 @@ class PhaseRegressionGenerator_v2(DataGenerator):
         # in memory preprocessing for the cluster
         # in memory training for the cluster
         if self.IN_MEMORY:
+            print('in memory preprocessing')
             zipped = list()
             futures = [self.THREAD_POOL.submit(self.__fix_preprocessing__,i,i) for i in range(len(self.IMAGES))]
             for i, future in enumerate(as_completed(futures)):
@@ -1220,7 +1220,7 @@ class PhaseRegressionGenerator_v2(DataGenerator):
         # repeat the 3D volumes along t (we did the same with the onehot vector)
         model_inputs = np.stack(list(map(lambda x: sitk.GetArrayFromImage(x), model_inputs)), axis=0)
 
-        # performance test, keep t, crop the other dimensions to 1.2 times the target shape
+        # performance test, keep t, crop the other dimensions to 1.5 times the target shape
         # This decreases the memory footprint and the computation time for further processing steps
         if not self.IN_MEMORY:
             model_inputs = pad_and_crop(model_inputs,

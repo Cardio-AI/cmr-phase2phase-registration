@@ -111,7 +111,6 @@ def train_fold(config, in_memory=False):
     info('Done!')
 
     # instantiate the batchgenerators
-
     batch_generator = PhaseRegressionGenerator_v2(x_train_sax, x_train_sax, config=config, in_memory=in_memory)
     val_config = config.copy()
     val_config['AUGMENT'] = False
@@ -121,12 +120,12 @@ def train_fold(config, in_memory=False):
     # val_config['RESAMPLE_T'] = False # this could yield phases which does not fit into the given dim
     validation_generator = PhaseRegressionGenerator_v2(x_val_sax, x_val_sax, config=val_config, in_memory=in_memory)
 
-    # get model
+
     """tf.debugging.experimental.enable_dump_debug_info(
         'logs/tfdbg2_logdir',
         tensor_debug_mode="FULL_HEALTH",
         circular_buffer_size=-1)"""
-
+    # get model
     model = create_PhaseRegressionModel_v2(config)
 
     # write the model summary to a txt file
@@ -134,14 +133,14 @@ def train_fold(config, in_memory=False):
         # Pass the file handle in as a lambda function to make it callable
         model.summary(line_length=140, print_fn=lambda x: fh.write(x + '\n'))
 
-    """tf.keras.utils.plot_model(
+    tf.keras.utils.plot_model(
         model, show_shapes=False,
         to_file=os.path.join(EXP_PATH, 'model.png'),
         show_layer_names=True,
         rankdir='TB',
         expand_nested=False,
         dpi=96
-    )"""
+    )
 
     # training
     initial_epoch = 0
@@ -344,8 +343,10 @@ if __name__ == "__main__":
     print('given parameters: {}'.format(results))
 
     try:
-        print('running in-memory={}, watch for overflow!'.format(results.inmemory))
-        main(results, in_memory=results.inmemory)
+        import distutils.util
+        in_memory = distutils.util.strtobool(results.inmemory)
+        print('running in-memory={}, watch for overflow!'.format(in_memory))
+        main(results, in_memory=in_memory)
     except Exception as e:
         print(e)
     exit()
