@@ -20,7 +20,7 @@ from src.data.Dataset import describe_sitk, split_one_4d_sitk_in_list_of_3d_sitk
     get_n_windows_between_phases_from_single4D, get_phases_as_idx_dmd
 from src.data.Preprocess import resample_3D, clip_quantile, normalise_image, grid_dissortion_2D_or_3D, \
     transform_to_binary_mask, load_masked_img, random_rotate90_2D_or_3D, \
-    augmentation_compose_2d_3d_4d, pad_and_crop, resample_t_of_4d, load_msk
+    augmentation_compose_2d_3d_4d, pad_and_crop, resample_t_of_4d, load_msk, get_first_idx
 from src.visualization.Visualize import show_2D_or_3D
 
 
@@ -1226,31 +1226,15 @@ class PhaseRegressionGenerator_v2(DataGenerator):
             model_inputs = pad_and_crop(model_inputs,
                                     target_shape=(model_inputs.shape[0], *(np.array(self.DIM) * 1.5).astype(np.int)))
 
-        # get mask
+        # get idx of valid mask
         # get IPs of one timestep
         # calc mean IPs
         # calc IP angle and rotation angle
         # rotate 4D with mean rotation angle
         if self.ROTATE:
-            from src.data.Preprocess import get_ip_from_mask_3d, get_angle2x
+            from src.data.Preprocess import align_inplane_with_ip
             msk_name = x.replace('clean', 'mask')
-            mask = sitk.GetArrayFromImage(sitk.ReadImage(msk_name))
-            for i, mask3d in enumerate(mask):
-                # check if we have more than n = 3 slices labelled
-                masked_slices = np.where(mask3d.sum(axis=(1,2))>0)[0] # this is a tuple, we need the first element
-                if len(masked_slices)> 3:
-                    break
-
-            # this will fail for masks/patients with one slice per t labelled
-            #mask_given_idxs = np.where(mask.sum(axis=(1,2,3))>0)
-            mask3d = mask[i]
-            fips, sips = get_ip_from_mask_3d(mask3d)
-            fip = np.array(fips).mean(axis=0)
-            sip = np.array(sips).mean(axis=0)
-            ip_angle = get_angle2x(fip, sip)
-            rot_angle = ip_angle - 90
-            from scipy import ndimage
-            model_inputs = ndimage.rotate(model_inputs, angle=rot_angle, reshape=False, order=1,axes=(-2,-1))
+            model_inputs = align_inplane_with_ip(model_inputs, msk_file_name=msk_name)
 
         if apply_hist_matching:
             model_inputs = match_hist(model_inputs, ref)
@@ -1260,6 +1244,7 @@ class PhaseRegressionGenerator_v2(DataGenerator):
         self.__plot_state_if_debug__(img=model_inputs[len(model_inputs) // 2], start_time=t1, step='resampled')
         model_inputs = clip_quantile(model_inputs, .9999)
         return model_inputs, onehot, reps, gt_length
+
 
 
     def __preprocess_one_image__(self, i, ID):

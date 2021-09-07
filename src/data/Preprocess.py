@@ -3,6 +3,7 @@ from logging import info, debug
 import sys
 import os
 import SimpleITK as sitk
+from scipy import ndimage
 
 from sklearn.preprocessing import RobustScaler
 from sklearn.preprocessing import StandardScaler
@@ -988,6 +989,17 @@ def pad_and_crop(ndarray, target_shape=(10, 10, 10)):
 
 from math import atan2, degrees
 def get_angle2x(p1, p2):
+    '''
+    Calc the angle between two points and the x-axis
+    Parameters
+    ----------
+    p1 : tuple x,y
+    p2 : tuple x,y
+
+    Returns angle in degree
+    -------
+
+    '''
     angle = 0
     x1, y1, x2, y2 = p1[0], p1[1], p2[0], p2[1]
     if y2 > y1:
@@ -997,6 +1009,19 @@ def get_angle2x(p1, p2):
     return angle
 
 def get_ip_from_mask_3d(msk_3d, debug=False):
+    '''
+    Returns two lists of RV insertion points
+    For a standard SAX orientation:
+    the first list belongs to the upper IP and the second to the lower
+    Parameters
+    ----------
+    msk_3d : (np.ndarray)
+    debug : bool
+
+    Returns tuple of lists
+    -------
+
+    '''
     first_ips = []
     second_ips = []
     for msk2d in msk_3d:
@@ -1011,13 +1036,61 @@ def get_ip_from_mask_3d(msk_3d, debug=False):
 
     return first_ips, second_ips
 
+def align_inplane_with_ip(model_inputs, msk_file_name):
+    '''
+    Rotate a 4d SAX CMR stack according to the RV insertion points of a corresponding mask
+    Returns the same 4d SAX stack but in-plane rotated to
+    a 90 degree angle between the mean RV insertion points and the x-axis
+    Parameters
+    ----------
+    model_inputs : (np.ndarray) with t,z,x,y,c
+    msk_file_name : (str) full filename to a 4d mask with 0=background, 1=RV, 2=MYO, 3=LV
+
+    Returns the 4d SAX CMR stack in-plane rotated
+    -------
+
+    '''
+
+    mask = sitk.GetArrayFromImage(sitk.ReadImage(msk_file_name))
+    # Find the first labelled time step, could also be done for all labelled time steps
+    i = get_first_idx(mask)
+    mask3d = mask[i]
+    # Get the first and second insertion points for all valid slices
+    fips, sips = get_ip_from_mask_3d(mask3d)
+    # average both points to find the mean fip and sip
+    fip = np.array(fips).mean(axis=0)
+    sip = np.array(sips).mean(axis=0)
+    # Calc the angle to the x-axis
+    ip_angle = get_angle2x(fip, sip)
+    # How much do we want to rotate
+    rot_angle = ip_angle - 90
+    # Rotate the 4D volume in-plane (x,y-axis)
+    model_inputs = ndimage.rotate(model_inputs, angle=rot_angle, reshape=False, order=1, axes=(-2, -1))
+    return model_inputs
+
+
+def get_first_idx(mask, min_slices_labelled=3):
+    '''
+    Get the index of the first labelled timestep of a 4D mask
+    Parameters
+    ----------
+    mask : np.ndarray with t,z,x,y,c
+
+    Returns (int) idx of the first labelled t
+    -------
+
+    '''
+    for i, mask3d in enumerate(mask):
+        # check if we have more than n = 3 slices labelled
+        masked_slices = np.where(mask3d.sum(axis=(1, 2)) > 0)[0]  # this is a tuple, we need the first element
+        if len(masked_slices) > min_slices_labelled:
+            break
+    return i
+
 def get_ip_from_2dmask(nda, debug=False):
     if debug: print('msk shape: {}'.format(nda.shape))
     # initialise some values
     first, second = None, None
-    septum_visited = False
-    border_visited = False
-    memory_first = None
     # find first and second insertion points
     myo_msk = (nda == 2).astype(np.uint8)
     comb_msk = ((nda == 1) | (nda == 2) | (nda == 3)).astype(np.uint8)
@@ -1060,7 +1133,7 @@ def get_ip_from_2dmask(nda, debug=False):
 
                 # we are at the border
                 if not first:
-                    # if we havent been at the septum, update/remember this point
+                    # if we haven't been at the septum, update/remember this point
                     # use the last visited point before visiting the septum as first IP
                     memory_first = p
                     if debug: print('memory= {}'.format(memory_first))
