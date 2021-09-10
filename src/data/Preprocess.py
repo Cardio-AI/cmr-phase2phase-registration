@@ -1008,15 +1008,16 @@ def get_angle2x(p1, p2):
         angle = degrees(atan2(y1-y2, x1-x2))
     return angle
 
-def get_ip_from_mask_3d(msk_3d, debug=False):
+def get_ip_from_mask_3d(msk_3d, debug=False, keepdim=False):
     '''
     Returns two lists of RV insertion points
     For a standard SAX orientation:
     the first list belongs to the upper IP and the second to the lower
     Parameters
     ----------
-    msk_3d : (np.ndarray)
-    debug : bool
+    msk_3d : (np.ndarray) with z,x,y
+    debug : (bool) print additional info
+    keepdim: (bool) returns two lists of the same length as z, slices where no RV IPs were found are represented by an tuple of None
 
     Returns tuple of lists
     -------
@@ -1027,7 +1028,7 @@ def get_ip_from_mask_3d(msk_3d, debug=False):
     for msk2d in msk_3d:
         try:
             first, second = get_ip_from_2dmask(msk2d, debug=debug)
-            if first and second:
+            if (first and second) or keepdim:
                 first_ips.append(first)
                 second_ips.append(second)
         except Exception as e:
