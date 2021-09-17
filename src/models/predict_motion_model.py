@@ -96,9 +96,14 @@ def pred_fold(config, debug=True):
         pred_mask_config['MSK_INTERPOLATION'] = sitk.sitkNearestNeighbor
         pred_myo_mask_generator = PhaseWindowGenerator(x_train_sax_masks, x_train_sax_masks, config=pred_mask_config,
                                                    yield_masks=True)
-        pred_mask_config['MASKING_VALUES'] = [3]
+        '''pred_mask_config['MASKING_VALUES'] = [3]
         pred_lv_mask_generator = PhaseWindowGenerator(x_train_sax_masks, x_train_sax_masks, config=pred_mask_config,
-                                                   yield_masks=True)
+                                                   yield_masks=True)'''
+        pred_mask_config['MASKING_IMAGE'] = False
+        pred_mask_config['IMG_CHANNELS'] = 1
+        pred_mask_config['TARGET_CHANNELS'] = 1
+        pred_lv_mask_generator = PhaseWindowGenerator(x_train_sax_masks, x_train_sax_masks, config=pred_mask_config,
+                                                      yield_masks=True)
 
         # mask the vetorfield
         from scipy import ndimage
@@ -109,7 +114,7 @@ def pred_fold(config, debug=True):
         kernel_small = np.ones((1, 1, 3, 3, 3, 1))
         prediction_tuple = x_train_sax, pred_generator, pred_myo_mask_generator, pred_lv_mask_generator, full_image_generator
 
-        for filename, pred_batch, myo_mask_b, lv_mask_b, full_cmr in zip(prediction_tuple):
+        for filename, pred_batch, myo_mask_b, lv_mask_b, full_cmr in zip(*prediction_tuple):
 
             # first_vols shape:
             # Batch, Z, X, Y, Channels --> three timesteps - t_n-1, t_n, t_n+1
@@ -123,7 +128,8 @@ def pred_fold(config, debug=True):
             first_mask, second_mask = first_vols_[1], second_vols_[1]  # pick batch 0
             first_lvmask, second_lvmask = first_lvmask[0], second_lvmask[0]
             first_mask, second_mask = (first_mask>=0.5).astype(np.uint8), (second_mask>0.5).astype(np.uint8)
-            first_lvmask, second_lvmask = (first_lvmask >= 0.5).astype(np.uint8), (second_lvmask > 0.5).astype(np.uint8)
+            # first_lvmask, second_lvmask = (first_lvmask >= 0.5).astype(np.uint8), (second_lvmask > 0.5).astype(np.uint8)
+            first_lvmask, second_lvmask = (first_lvmask).astype(np.uint8), (second_lvmask).astype(np.uint8)
             first_vols_full, second_vols_full = first_vols_full[0], second_vols_full[0]  # pick batch 0
 
             first_vols = first_vols[..., INPUT_T_ELEM][..., np.newaxis]  # select the transformed source vol

@@ -135,31 +135,28 @@ def meandiff_loss( y_true, y_pred, apply_sum=True, apply_average=True, as_loss=F
 
     """
     # split gt mask and onehot
+    # b, 2, t, phases
     y_true, y_len_msk = tf.unstack(y_true,2,axis=1)
     y_pred, _ = tf.unstack(y_pred,2,axis=1)
-
     # convert to tensor
     y_true = tf.cast(tf.convert_to_tensor(y_true), tf.float32)
     y_pred = tf.cast(tf.convert_to_tensor(y_pred), tf.float32)
     y_len_msk = tf.cast(tf.convert_to_tensor(y_len_msk), tf.float32)
-
     # multiply with mask,
     # we are interested in the time step per phase within the gt length
     # b, 36, 5
+    #temp_pred = tf.boolean_mask(y_pred, y_len_msk)
+    #temp_gt = tf.boolean_mask(y_true,y_len_msk)
     temp_pred = y_pred * y_len_msk
     temp_gt = y_true * y_len_msk
-
     # make sure axis 1 sums up to one
     #temp_pred = tf.keras.activations.softmax(temp_pred, axis=1)
     #temp_gt = tf.keras.activations.softmax(temp_gt, axis=1)
-
     #temp_pred = y_pred
     #temp_gt = y_true
-
     # get the original lengths of each mask in the current batch
     # b, 1
     y_len = tf.cast(tf.reduce_sum(y_len_msk[:,:,0], axis=1),dtype=tf.float32)#
-
     ############################################ naive test, this works in eager, but not in the loss (line: tf.tile...)
     """@tf.function
     def helper_max(temp):
@@ -178,23 +175,20 @@ def meandiff_loss( y_true, y_pred, apply_sum=True, apply_average=True, as_loss=F
     gt_idx = helper_max(temp_gt)
     pred_idx = helper_max(temp_pred)"""
     ################################################
-
     gt_idx = tf.cast(DifferentiableArgmax(temp_gt, axis=1), dtype=tf.float32)#
     pred_idx = tf.cast(DifferentiableArgmax(temp_pred, axis=1), dtype=tf.float32)
     filled_length = tf.repeat(tf.expand_dims(y_len,axis=1),5,axis=1)
     #print('gt_idx shape: {}'.format(gt_idx.shape))
     #print('pred_idx shape: {}'.format(pred_idx.shape))
     #print('filled shape: {}'.format(filled_length.shape))
-
     # b, 5, 3
     stacked = tf.stack([gt_idx, pred_idx, filled_length], axis=-1)
-
     # sum the error per entity, and calc the mean over the batches
-    # for each batch ==> 5, 3 in stacked
+    # for each entity in batch ==> 5, 3 in stacked
     diffs = tf.map_fn(lambda x: get_min_dist_for_list_loss(x), stacked, dtype=tf.float32)
     if apply_sum: diffs = tf.cast(tf.reduce_sum(diffs, axis=1),tf.float32)
     if apply_average: diffs = tf.reduce_mean(diffs)
-    #tf.math.greater_equal(diffs, 0.), 'distance cant be smaller than 0'
+    #tf.math.greater_equal(diffs, 0.), 'distance cant be negative'
     return diffs
 
 @tf.function
@@ -204,11 +198,9 @@ def get_min_dist_for_list_loss(vals):
     return tf.map_fn(lambda x :get_min_distance_loss(x),vals, dtype=tf.float32)
 @tf.function
 def get_min_distance_loss(vals):
-
     smaller = tf.reduce_min(vals[0:2], keepdims=True)
     bigger = tf.reduce_max(vals[0:2], keepdims=True)
     mod = vals[2]
-
     diff = bigger - smaller
     diff_ring = tf.math.abs(mod - bigger + smaller)# we need to use the abs to avoid 0 - 0
     min_diff = tf.reduce_min(tf.stack([diff, diff_ring]))
@@ -291,15 +283,15 @@ class CCE(tf.keras.losses.Loss):
             y_true = tf.transpose(y_true, perm=[0,2,1,3]),
             y_pred = tf.transpose(y_pred, perm=[0,2,1,3])
 
-        y_true = tf.nn.softmax(y_true, axis=-1)
-        y_pred = tf.nn.softmax(y_pred, axis=-1)
+        '''y_true = tf.nn.softmax(y_true, axis=1)
+        y_pred = tf.nn.softmax(y_pred, axis=1)'''
 
-        loss = tf.keras.losses.CategoricalCrossentropy(label_smoothing=self.smooth, reduction=tf.keras.losses.Reduction.NONE)(y_true, y_pred)
+        loss = tf.keras.losses.CategoricalCrossentropy(label_smoothing=self.smooth)(y_true, y_pred)
         if self.transposed:
             #loss = tf.transpose(loss, perm=[0,2,1])
             pass
 
-        return loss
+        return tf.reduce_mean(loss)
 
 
 
@@ -377,7 +369,7 @@ class Grad:
         """
         returns Tensor of size [bs]
         """
-        # y_pred = tf.where(tf.math.is_nan(y_pred), tf.zeros_like(y_pred), y_pred)
+        #y_pred = tf.where(tf.math.is_nan(y_pred), tf.zeros_like(y_pred), y_pred)
         #return tf.norm(y_pred, axis=-1)
 
         if self.penalty == 'l1':

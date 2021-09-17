@@ -1111,7 +1111,6 @@ def get_ip_from_2dmask(nda, debug=False):
         if debug: descr_cont(comb_clean)
 
         # initialise some values
-        first, second = None, None
         septum_visited = False
         border_visited = False
         memory_first = None

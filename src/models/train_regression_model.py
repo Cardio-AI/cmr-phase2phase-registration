@@ -6,6 +6,7 @@ def train_fold(config, in_memory=False):
     # if not set them with default values
     import tensorflow as tf
     tf.get_logger().setLevel('FATAL')
+    #tf.compat.v1.disable_eager_execution()
     from src.utils.Tensorflow_helper import choose_gpu_by_id
     # ------------------------------------------define GPU id/s to use
     GPU_IDS = config.get('GPU_IDS', '0,1')
