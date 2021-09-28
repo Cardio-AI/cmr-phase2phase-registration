@@ -689,7 +689,9 @@ class WindowMotionCallback(Callback):
                         moved, moved_m, vect = movings[b][p], moving_m[b][p], vects[b][p]
                         spatial_slices = first_vol.shape[0]
                         # pick one upper, middle and lower slice as example
-                        picks = (np.array([0.6, 0.4, 0.2]) * spatial_slices).astype(int)
+                        masked_slices = np.where((second_m.sum(axis=(1, 2)) > 0.5))[0]
+                        most_basal, mid, most_apical =  masked_slices[1], masked_slices[len(masked_slices)//2], masked_slices[0]
+                        picks = (most_basal, mid, most_apical)
                         y_label = ['Basal', 'Mid', 'Apex']
                         from tensorflow.keras.metrics import mse
                         mse_1 = np.mean((first_vol - second_vol) ** 2)
