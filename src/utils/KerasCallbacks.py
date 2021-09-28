@@ -742,6 +742,7 @@ class PhaseRegressionCallback(Callback):
         self.writer = tensorflow.summary.create_file_writer(log_dir)
         self.xs, self.ys = zip(*self.feed_inputs_4_display.values())
         self.keys = self.feed_inputs_4_display.keys()
+        self.phases = ['ED', 'MS', 'ES', 'PF', 'MD']
 
         # reshape x to predict in one step
         x_ = np.stack(self.xs, axis=0)
@@ -823,7 +824,7 @@ class PhaseRegressionCallback(Callback):
                             temp_y = gt[b] * gt_msk[b]
                             # gt[idx][(gt_length),:] = 1 # draw a line at the gt length temporal position
                             ind_gt = np.argmax(temp_y, axis=0)
-                            for t in ind_gt: # iterate over the 5 gt phases to plot the volume at these timesteps
+                            for t_idx,t in enumerate(ind_gt): # iterate over the 5 gt phases to plot the volume at these timesteps
                                 first_vol, second_vol = x[0][b][t], y[1][b][t]
                                 moved, vect = movings[b][t], vects[b][t]
                                 spatial_slices = first_vol.shape[0]
@@ -845,7 +846,7 @@ class PhaseRegressionCallback(Callback):
                                                         second_vol=second_vol, vect=vect, y_label=y_label,
                                                         plot_masks=False)
 
-                                tensorflow.summary.image(name='plot/{}/batch_{}/{}/summary'.format(key, b, t),
+                                tensorflow.summary.image(name='plot/{}/batch_{}/{}_{}/summary'.format(key, b, t, self.phases[t_idx]),
                                                          data=self.make_image(fig),
                                                          step=epoch)
 
@@ -855,7 +856,6 @@ class PhaseRegressionCallback(Callback):
                     tensorflow.summary.image(name='plot/{}/_pred'.format(key, pred_i),
                                              data=self.make_image(show_phases(onehot_y, onehot_predictions)),
                                              step=epoch)
-
 
 class ImageSaver(Callback):
 
