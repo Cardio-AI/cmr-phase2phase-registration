@@ -701,7 +701,7 @@ class WindowMotionCallback(Callback):
                         fig = plot_displacement(col_titles, first_m, first_vol, moved, moved_m, picks,
                                                second_m, second_vol, vect, y_label)
                         # fig.tight_layout()
-                        tensorflow.summary.image(name='plot/{}/batch_{}/{}/summary'.format(key, b, phases[p]),
+                        tensorflow.summary.image(name='plot/{}/batch_{}/{}_{}/summary'.format(key, b, p, phases[p]),
                                                  data=self.make_image(fig),
                                                  step=epoch)
 
