@@ -4,8 +4,7 @@ from tensorflow.python.keras.layers import LSTM, Bidirectional
 
 from src.models.KerasLayers import ConvEncoder, get_angle_tf, get_idxs_tf, get_centers_tf, ComposeTransform, \
     conv_layer_fn, ConvBlock
-import tensorlayer
-from tensorlayer.layers import DeformableConv2d
+
 import sys
 import numpy as np
 import tensorflow
