@@ -3,7 +3,9 @@ import logging
 from tensorflow.python.keras.layers import LSTM, Bidirectional
 
 from src.models.KerasLayers import ConvEncoder, get_angle_tf, get_idxs_tf, get_centers_tf, ComposeTransform, \
-    conv_layer_fn, ConvBlock, DeformableConvLayer
+    conv_layer_fn, ConvBlock
+import tensorlayer
+from tensorlayer.layers import DeformableConv2d
 import sys
 import numpy as np
 import tensorflow
@@ -265,18 +267,17 @@ def create_PhaseRegressionModel_v2(config, networkname='PhaseRegressionModel'):
         c = get_centers_tf(dim)
         centers = c - idx
         centers_tensor = centers[tf.newaxis, ...]
-        print('centers: tensor shape: {}'.format(centers_tensor.shape))
         flow2direction_lambda = tf.keras.layers.Lambda(
             lambda x: get_angle_tf(x, centers_tensor), name='flow2direction')
 
-        forward_conv_lstm_layer = tf.keras.layers.ConvLSTM2D(filters=8,
+        forward_conv_lstm_layer = tf.keras.layers.ConvLSTM2D(filters=conv_lstm_units,
                                                              kernel_size=3,
                                                              strides=1,
                                                              padding='valid',
                                                              return_sequences=True,
                                                              dropout=0.5,
                                                              name='forward_conv_LSTM')
-        backward_conv_lstm_layer = tf.keras.layers.ConvLSTM2D(filters=8,
+        backward_conv_lstm_layer = tf.keras.layers.ConvLSTM2D(filters=conv_lstm_units,
                                                               kernel_size=3,
                                                               strides=1,
                                                               padding='valid',
@@ -286,8 +287,8 @@ def create_PhaseRegressionModel_v2(config, networkname='PhaseRegressionModel'):
                                                               name='backward_conv_LSTM')
         bi_conv_lstm_layer = Bidirectional(forward_conv_lstm_layer, backward_layer=backward_conv_lstm_layer)
 
-        forward_layer = LSTM(8, return_sequences=True, dropout=0.3, name='forward_LSTM')
-        backward_layer = LSTM(8, return_sequences=True, dropout=0.3, go_backwards=True,
+        forward_layer = LSTM(lstm_units, return_sequences=True, dropout=0.3, name='forward_LSTM')
+        backward_layer = LSTM(lstm_units, return_sequences=True, dropout=0.3, go_backwards=True,
                               name='backward_LSTM')  # maybe change to tanh
         bi_lstm_layer = Bidirectional(forward_layer, backward_layer=backward_layer)
 
@@ -313,21 +314,26 @@ def create_PhaseRegressionModel_v2(config, networkname='PhaseRegressionModel'):
         n = int(math.log(1 / dim[-1]) / math.log(0.5))
         z = int(math.log(1 / dim[0]) / math.log(0.5))
         for i in range(n):
-            # downsamples.append(Dropout(d_rate))
             if i < z:
+                #downsamples.append(Dropout(d_rate))
                 downsamples.append(
-                    Conv(filters=filters_, kernel_size=3, padding='same', strides=2,
+                    # Deformable conv
+                    Conv(filters=filters_, kernel_size=3, padding='same', strides=1,
                          kernel_initializer=kernel_init,
                          activation=activation,
                          name='downsample_{}'.format(i)))
+                downsamples.append(tf.keras.layers.MaxPool3D(pool_size=2,padding='same'))
                 filters_ = filters_ * 2
             else:  # stop to down-sample the spatial resolution, continue with 2D conv
                 downsamples.append(
-                    tf.keras.layers.Conv2D(filters=filters_, kernel_size=(3, 3), padding='same', strides=(2, 2),
+                    tf.keras.layers.Conv2D(filters=filters_, kernel_size=(3, 3), padding='same', strides=1,
                                            kernel_initializer=kernel_init,
                                            activation=activation,
-                                           name='downsample_{}'.format(i)))
+                                           name='downsample_{}'.format(i))
+                )
+                downsamples.append(tf.keras.layers.MaxPool3D(pool_size=(1,2,2), padding='same'))
             downsamples.append(BatchNormalization(axis=-1))
+
         downsamples = downsamples[:-1]  # remove last BN layer
 
         downsample = tf.keras.Sequential(layers=downsamples, name='downsample_inplane_and_spatial')
@@ -349,34 +355,40 @@ def create_PhaseRegressionModel_v2(config, networkname='PhaseRegressionModel'):
         print('Flowfield shape: {}'.format(flows.shape))
         transformed = TimeDistributed(st_lambda_layer)(tf.keras.layers.Concatenate(axis=-1)([input_tensor, flows]))
         print('Transformed shape : {}'.format(transformed.shape))
-        # add the magnitude as fourth channel
-        tensor_magnitude = TimeDistributed(norm_lambda)(flows)
 
         if add_vect_norm and add_flows:
+            # add the magnitude as fourth channel
+            tensor_magnitude = TimeDistributed(norm_lambda)(flows)
             flow_features = tf.keras.layers.Concatenate(axis=-1)([flows, tensor_magnitude])
         elif add_vect_norm:
+            # add the magnitude as fourth channel
+            tensor_magnitude = TimeDistributed(norm_lambda)(flows)
             flow_features = tensor_magnitude
         elif add_flows:
             flow_features = flows
         print('Inkl norm shape: {}'.format(flow_features.shape))
 
-        directions = TimeDistributed(flow2direction_lambda)(flows)
-        print('directions shape: {}'.format(directions.shape))
         if add_vect_direction:
-            flow_features = tf.keras.layers.Concatenate(axis=-1)([flow_features, directions])
+            directions = TimeDistributed(flow2direction_lambda)(flows)
+            print('directions shape: {}'.format(directions.shape))
+            flow_features = tf.keras.layers.Concatenate(axis=-1)([flow_features, directions]) # encode the spatial location of each vector
+            # add the location tensor as further channel
+            #flow_features = tf.keras.layers.Concatenate(axis=-1)([flow_features, tf.tile(centers_tensor[tf.newaxis,...],multiples=[1,flow_features.shape[1],1,1,1,1])])
         print('flow features inkl directions shape: {}'.format(flow_features.shape))
-        flow_features = tf.transpose(flow_features, perm=[0, 2, 1, 3, 4, 5])
-        print('transposed: {}'.format(flow_features.shape))
 
-        # Tests with conv lstm layers before downsampling
-        if add_conv_bilstm: flow_features = TimeDistributed(bi_conv_lstm_layer)(flow_features)
-        flow_features = tf.transpose(flow_features, perm=[0, 2, 1, 3, 4, 5])
+        # Apply an Bidirectional convLstm layer before downsampling
+        if add_conv_bilstm:
+            flow_features = tf.transpose(flow_features, perm=[0, 2, 1, 3, 4, 5])
+            print('transposed: {}'.format(flow_features.shape))
+            flow_features = TimeDistributed(bi_conv_lstm_layer)(flow_features)
+            flow_features = tf.transpose(flow_features, perm=[0, 2, 1, 3, 4, 5])
         print('flow features after conv lstm: {}'.format(flow_features.shape))
 
-        # Use either strided conv layers or a gap layer to down-sample the flow in-plane
+        # down-sample the flow in-plane
+        # Build an encoder with n times conv+relu+maxpool+bn-blocks
         if downsample_flow_features:
             flow_features = TimeDistributed(downsample)(flow_features)
-        else:
+        else: # use a gap3D layer
             flow_features = TimeDistributed(gap)(flow_features)
         flow_features = tf.keras.layers.Reshape(target_shape=(flow_features.shape[1], flow_features.shape[-1]))(
             flow_features)
@@ -421,7 +433,6 @@ def create_PhaseRegressionModel_v2(config, networkname='PhaseRegressionModel'):
                 'onehot': own_metr.MSE(masked=mask_loss),
                 'transformed': MSE_().loss,
                 'flows': Grad('l2').loss}
-
             weights = {
                 'onehot': phase_loss_weight,
                 'transformed': image_loss_weight,

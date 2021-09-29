@@ -81,11 +81,11 @@ def pred_fold(config, debug=True):
         pred_config['HIST_MATCHING'] = False
         pred_config['ISTRAINING'] = False
         INPUT_T_ELEM = config.get('INPUT_T_ELEM', 0)
-        pred_generator = PhaseMaskWindowGenerator(x_train_sax, x_train_sax, config=pred_config)
+        pred_generator = PhaseMaskWindowGenerator(x_val_sax, x_val_sax, config=pred_config)
         full_pred_config = pred_config.copy()
         full_pred_config['MASKING_IMAGE'] = False
-        full_image_generator = PhaseWindowGenerator(x_train_sax, x_train_sax, config=full_pred_config)
-        x_train_sax_masks = [f.replace('clean', 'mask') for f in x_train_sax]
+        full_image_generator = PhaseWindowGenerator(x_val_sax, x_val_sax, config=full_pred_config)
+        x_train_sax_masks = [f.replace('clean', 'mask') for f in x_val_sax]
         '''pred_mask_generator = PhaseWindowGenerator(x_train_sax_masks, x_train_sax_masks, config=pred_config,
                                                    yield_masks=True)'''
         import SimpleITK as sitk
@@ -112,7 +112,7 @@ def pred_fold(config, debug=True):
         kernel = np.ones((1, 1, 5, 5, 5, 1))
         kernel_ = np.ones((1, 5, 5, 5, 1))
         kernel_small = np.ones((1, 1, 3, 3, 3, 1))
-        prediction_tuple = x_train_sax, pred_generator, pred_myo_mask_generator, pred_lv_mask_generator, full_image_generator
+        prediction_tuple = x_val_sax, pred_generator, pred_myo_mask_generator, pred_lv_mask_generator, full_image_generator
 
         for filename, pred_batch, myo_mask_b, lv_mask_b, full_cmr in zip(*prediction_tuple):
 

@@ -59,7 +59,7 @@ def predict(cfg_file, data_root, c2l=False):
     logging.info('loaded model weights as h5 file')
 
     # predict on the validation generator
-    preds, _, _ = model.predict(validation_generator)
+    preds, moved, vects = model.predict(validation_generator)
     logging.info('Shape of the predictions: {}'.format(preds.shape))
 
     # get all ground truth vectors
@@ -67,7 +67,9 @@ def predict(cfg_file, data_root, c2l=False):
     logging.info('Shape of GT: {}'.format(gts.shape))
 
     pred_path = os.path.join(config['EXP_PATH'], 'pred')
+    moved_path = os.path.join(config['EXP_PATH'], 'moved')
     ensure_dir(pred_path)
+    ensure_dir(moved_path)
     pred_filename = os.path.join(pred_path, 'gtpred_fold{}.npy'.format(config['FOLD']))
     np.save(pred_filename, np.stack([gts, preds], axis=0))
     logging.info('saved as: \n{} \ndone!'.format(pred_filename))

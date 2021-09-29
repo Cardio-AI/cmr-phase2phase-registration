@@ -449,7 +449,7 @@ def plot_displacement(col_titles, first_m, first_vol, moved, moved_m, picks, sec
         j = j + 1
         # moved t0 and marks for the moved areas
         axes[i, j].imshow(normalise_image(mov), 'gray',vmin=0, vmax=0.8)
-        if plot_masks: [i, j].imshow(moved_m[z], alpha=0.6)
+        if plot_masks: axes[i, j].imshow(moved_m[z], alpha=0.6)
         axes[i, j].imshow(np.abs(f_vol - mov), cmap=cmap, alpha=0.6)
         axes[i, j].set_xticks([])
         axes[i, j].set_yticks([])
@@ -459,7 +459,7 @@ def plot_displacement(col_titles, first_m, first_vol, moved, moved_m, picks, sec
         axes[i, j].imshow(normalise_image(f_vol), 'gray', vmin=0, vmax=0.8)
         axes[i, j].imshow(normalise_image(temp), alpha=0.6)
         axes[i, j].set_xticks([])
-        axes[i, j].set_yticks([]);
+        axes[i, j].set_yticks([])
         j = j + 1
 
         # magnitude
