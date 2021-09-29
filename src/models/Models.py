@@ -543,8 +543,8 @@ def create_RegistrationModel_inkl_mask(config):
         reg_loss_weight = config.get('REG_LOSS_WEIGHT', 0.001)
         learning_rate = config.get('LEARNING_RATE', 0.001)
 
-        input_tensor = Input(shape=(T_SHAPE, *input_shape, config.get('IMG_CHANNELS',
-                                                                      1)))  # input vol with timesteps, z, x, y, c -> =number of input timesteps
+        # input vol with timesteps, z, x, y, c -> =number of input timesteps
+        input_tensor = Input(shape=(T_SHAPE, *input_shape, config.get('IMG_CHANNELS',1)))
         input_mask_tensor = Input(shape=(T_SHAPE, *input_shape, config.get('IMG_CHANNELS', 1)))
         input_tensor_empty = Input(shape=(T_SHAPE, *input_shape, 3))  # empty vector field
         # define standard values according to the convention over configuration paradigm
@@ -578,15 +578,26 @@ def create_RegistrationModel_inkl_mask(config):
         flows = [Conv_layer(vol) for vol in pre_flows]
         flows, _ = zip(*sorted(zip(flows, indicies), key=lambda tup: tup[1]))
 
+        # Each CMR input vol has CMR data from three timesteps stacked as channel: t1,t1+t2/2,t2
         # transform only one timestep, mostly the first one
         transformed = [st_layer([input_vol[..., take_t_elem][..., tf.newaxis], flow]) for input_vol, flow in
                        zip(input_vols, flows)]
-        transformed = tf.stack(transformed, axis=1)
-        transformed_mask = [st_mask_layer([input_vol[..., take_t_elem][..., tf.newaxis], flow]) for input_vol, flow in
-                            zip(input_mask_vols, flows)]
-        transformed_mask = tf.stack(transformed_mask, axis=1)
 
+        # Remove the Z flow when transforming the masks, as we provide only spare masks,
+        # moving a mask in z results in a transformed mask at Z where we dont have a mask in the GT
+        # The dice loss, will than backpropagate not to move in Z at all, as this will reduce the dice loss
+        empty_z_flow = tf.zeros_like(flows[0])
+        mod_mask_flows = [tf.concat([empty_z_flow[...,0:1], flow[...,1:]], axis=-1) for flow in flows]
+        transformed_mask = [st_mask_layer([input_vol[..., take_t_elem][..., tf.newaxis], flow]) for input_vol, flow in
+                            zip(input_mask_vols, mod_mask_flows)]
+
+        transformed = tf.stack(transformed, axis=1)
+        transformed_mask = tf.stack(transformed_mask, axis=1)
         flow = tf.stack(flows, axis=1)
+
+        flow = tf.keras.layers.Lambda(lambda x : x, name='flowfield')(flow)
+        transformed_mask = tf.keras.layers.Lambda(lambda x: x, name='transformed_mask')(transformed_mask)
+        transformed = tf.keras.layers.Lambda(lambda x: x, name='transformed')(transformed)
 
         outputs = [transformed, transformed_mask, flow]
 
