@@ -1010,16 +1010,16 @@ def get_angle2x(p1, p2):
 
 def get_ip_from_mask_3d(msk_3d, debug=False, keepdim=False):
     '''
-    Returns two lists of RV insertion points
+    Returns two lists of RV insertion points (y,x)-coordinates
     For a standard SAX orientation:
-    the first list belongs to the upper IP and the second to the lower
+    the first list belongs to the anterior IP and the second to the inferior IP
     Parameters
     ----------
-    msk_3d : (np.ndarray) with z,x,y
+    msk_3d : (np.ndarray) with z,y,x
     debug : (bool) print additional info
     keepdim: (bool) returns two lists of the same length as z, slices where no RV IPs were found are represented by an tuple of None
 
-    Returns tuple of lists
+    Returns tuple of lists with points (y,x)-coordinates
     -------
 
     '''
@@ -1044,7 +1044,7 @@ def align_inplane_with_ip(model_inputs, msk_file_name):
     a 90 degree angle between the mean RV insertion points and the x-axis
     Parameters
     ----------
-    model_inputs : (np.ndarray) with t,z,x,y,c
+    model_inputs : (np.ndarray) with t,z,y,x,c
     msk_file_name : (str) full filename to a 4d mask with 0=background, 1=RV, 2=MYO, 3=LV
 
     Returns the 4d SAX CMR stack in-plane rotated

@@ -1564,7 +1564,24 @@ def get_n_windows_between_phases_from_single4D(nda4d, idx):
     # define the motion window --> [t-window,t+window] one of [1,2,3] depending on the temporal resolution/temporal resampling
     idxs_phases = idx
     idxs_shift_to_left = np.roll(idx, -1) # roll to the left side
-    idx = (idxs_phases + idxs_shift_to_left)//2
+
+    # We add a volume from t/2, which should lie between both phases, for the cycle overflow we need
+    # to handle a special case
+    """
+    [ 2  4  8 10 14]
+    [ 4  8 10 14  2]
+    divide by 2 and than mod by length --> last index with "8" is wrong
+    [ 3  6  9 12  8]
+    mod by length and than divide by 2 --> third and fourth index with "1" and "4" are wrong.
+    [3 6 1 4 0]
+    we need a different operation for the cycle case:
+    
+    array([ 3,  6,  9, 12,  0])
+    """
+    idx = np.where(idxs_shift_to_left > idxs_phases, np.mod((idxs_phases + idxs_shift_to_left) // 2, y_len), np.mod((idxs_phases + idxs_shift_to_left), y_len) // 2)
+
+    # this is a buggy cycle overflow version, compare example above
+    #idx = (idxs_phases + idxs_shift_to_left)//2
 
     debug('idx: {}'.format(idx))
     # fake ring functionality with mod

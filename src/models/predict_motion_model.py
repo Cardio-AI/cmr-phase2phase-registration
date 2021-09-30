@@ -216,6 +216,9 @@ def pred_fold(config, debug=True):
     # free as much memory as possible
     del pred_generator
     del model
+    del full_image_generator
+    del pred_myo_mask_generator
+    del pred_lv_mask_generator
     gc.collect()
 
     logging.info('pred on fold {} finished after {:0.3f} sec'.format(FOLD, time() - t0))
