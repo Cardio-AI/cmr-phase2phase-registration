@@ -1546,7 +1546,7 @@ def get_n_windows_between_phases_from_single4D(nda4d, idx):
     idx : np.array of a list of int
     window_size : define the window size idx[n]-window_size --> idx[n]+window_size
 
-    Returns
+    Returns [vol[t+1], vol[t+0.5], vol[t]]
     -------
 
     """

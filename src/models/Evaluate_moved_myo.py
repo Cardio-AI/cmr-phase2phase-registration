@@ -33,11 +33,12 @@ def calc_dice(gt_path, pred_path, export_path):
     g = sns.violinplot(x='phase', y='hd', data=results_df[['patient', 'phase', 'hd']])
     g.set(ylim=(0, 25))
     plt.savefig(exp_path + '/hd.png')
+    print('Evaluation done: \n{}'.format(exp_path))
 
 
 if __name__ == "__main__":
     import os
-    exp_path = '/mnt/ssd/git/dynamic-cmr-models/exp/temp/phase2phase/v3/64_128_128/window1/reg0_001/dmd/NOmask_f0/2021-07-14_20_37'
+    exp_path = '/mnt/ssd/git/dynamic-cmr-models/exp/temp/phase2phase/v3/64_128_128/window1/reg0_001/dmd/NOmask_inkl_img_f0/2021-09-30_14_17'
     gt_path = os.path.join(exp_path, 'gt_m')
     pred_path = os.path.join(exp_path, 'pred_m')
     export_path = exp_path

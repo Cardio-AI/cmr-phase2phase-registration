@@ -1933,7 +1933,7 @@ class PhaseMaskWindowGenerator(DataGenerator):
             combined = clip_quantile(combined, .9999)
             logging.debug('quantile clipping took: {:0.3f} s'.format(time() - t1))
             t1 = time()
-
+            #combined = normalise_image(combined, normaliser='minmax')  # normalise per 4D
             combined = normalise_image(combined, normaliser=self.SCALER)  # normalise per 4D
             logging.debug('normalisation took: {:0.3f} s'.format(time() - t1))
             t1 = time()
