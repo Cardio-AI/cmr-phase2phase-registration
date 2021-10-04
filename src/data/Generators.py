@@ -1868,7 +1868,7 @@ class PhaseMaskWindowGenerator(DataGenerator):
                                                 spacing=target_spacing,
                                                 interpolate=self.IMG_INTERPOLATION),  # sitk.sitkLinear
                                     zip(model_inputs, new_size_inputs)))
-
+            # CHANGED
             model_m_inputs = list(map(lambda x:
                                       resample_3D(sitk_img=x[0],
                                                   size=x[1],
