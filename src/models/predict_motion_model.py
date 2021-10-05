@@ -32,6 +32,11 @@ def pred_fold(config, debug=True):
     # import external libs
     import pandas as pd
     from time import time
+    import SimpleITK as sitk
+    from scipy import ndimage
+    from src.models.Models import create_dense_compose
+    from src.data.Dataset import save_all_3d_vols
+    import os
 
     # make all config params known to the local namespace
     locals().update(config)
@@ -50,7 +55,6 @@ def pred_fold(config, debug=True):
     EPOCHS = config.get('EPOCHS', 100)
 
     Console_and_file_logger(path=EXPERIMENT, log_lvl=logging.INFO)
-
     # get kfolded data from DATA_ROOT and subdirectories
     # Load SAX volumes
     x_train_sax, y_train_sax, x_val_sax, y_val_sax = get_trainings_files(data_path=DATA_PATH_SAX,
@@ -60,17 +64,16 @@ def pred_fold(config, debug=True):
     logging.info('SAX val CMR: {}, SAX val masks: {}'.format(len(x_val_sax), len(y_val_sax)))
 
     t0 = time()
-
     try:
-
         # load the model, to make sure we use the same as later for the evaluations
         model = create_RegistrationModel_inkl_mask(config)
         model.load_weights(os.path.join(config['MODEL_PATH'], 'model.h5'))
         logging.info('loaded model weights as h5 file')
 
-        fixed_transformer = create_affine_transformer_fixed(config=config,networkname='fixed_transformer', fill_value=0, interp_method='linear')
+        pred_path = os.path.join(config.get('EXP_PATH'), 'pred')
+        ensure_dir(pred_path)
 
-        # create a generator with idemptent behaviour (no shuffle etc.)
+        # create a generator with idempotent behaviour (no shuffle etc.)
         # make sure we save always the same patient
         pred_config = config.copy()
         pred_config['SHUFFLE'] = False
@@ -82,143 +85,78 @@ def pred_fold(config, debug=True):
         pred_config['ISTRAINING'] = True
         INPUT_T_ELEM = config.get('INPUT_T_ELEM', 0)
         pred_generator = PhaseMaskWindowGenerator(x_val_sax, x_val_sax, config=pred_config)
-        full_pred_config = pred_config.copy()
-        full_pred_config['MASKING_IMAGE'] = False
-        full_image_generator = PhaseWindowGenerator(x_val_sax, x_val_sax, config=full_pred_config)
         x_train_sax_masks = [f.replace('clean', 'mask') for f in x_val_sax]
-        '''pred_mask_generator = PhaseWindowGenerator(x_train_sax_masks, x_train_sax_masks, config=pred_config,
-                                                   yield_masks=True)'''
-        import SimpleITK as sitk
         pred_mask_config = pred_config.copy()
-        pred_mask_config['MASKING_VALUES']=[2]
-        pred_mask_config['MASKING_IMAGE']=True
         pred_mask_config['IMG_INTERPOLATION'] = sitk.sitkNearestNeighbor
         pred_mask_config['MSK_INTERPOLATION'] = sitk.sitkNearestNeighbor
-        pred_myo_mask_generator = PhaseWindowGenerator(x_train_sax_masks, x_train_sax_masks, config=pred_mask_config,
-                                                   yield_masks=True)
-        '''pred_mask_config['MASKING_VALUES'] = [3]
-        pred_lv_mask_generator = PhaseWindowGenerator(x_train_sax_masks, x_train_sax_masks, config=pred_mask_config,
-                                                   yield_masks=True)'''
         pred_mask_config['MASKING_IMAGE'] = False
         pred_mask_config['IMG_CHANNELS'] = 1
         pred_mask_config['TARGET_CHANNELS'] = 1
-        pred_lv_mask_generator = PhaseWindowGenerator(x_train_sax_masks, x_train_sax_masks, config=pred_mask_config,
+        masks_all_labels_generator = PhaseWindowGenerator(x_train_sax_masks, x_train_sax_masks, config=pred_mask_config,
                                                       yield_masks=True)
+        # new version
+        x, y = zip(*[masks_all_labels_generator.__getitem__(i) for i in range(len(pred_generator))])
+        fullmsk_target, _  = zip(*y)
+        fullmsk_target = np.concatenate(fullmsk_target, axis=0)
+        x, y = zip(*[pred_generator.__getitem__(i) for i in range(len(pred_generator))])
+        cmr_moving, msk_moving, _ = zip(*x)
+        cmr_target, msk_target, _ = zip(*y)
+        cmr_moving, msk_moving, cmr_target, msk_target = map(np.concatenate, [cmr_moving, msk_moving,cmr_target, msk_target])
+        pred = model.predict(pred_generator)
+        cmr_moved, msk_moved, flows = pred
+        comp = create_dense_compose(config)
+        vects_composed = comp.predict(flows)
+        # mask the vector field
 
-        # mask the vetorfield
-        from scipy import ndimage
-        # combined_mask = second_binary
-        # combined_mask = first_binary + second_binary
-        kernel = np.ones((1, 1, 5, 5, 5, 1))
-        kernel_ = np.ones((1, 5, 5, 5, 1))
-        kernel_small = np.ones((1, 1, 3, 3, 3, 1))
-        prediction_tuple = x_val_sax, pred_generator, pred_myo_mask_generator, pred_lv_mask_generator, full_image_generator
+        # iterate over the patients and
+        for i in range(len(x_val_sax)):
+            filename = x_val_sax[i]
+            cmr_mov = cmr_moving[i]
+            cmr_t = cmr_target[i]
+            cmr_m = cmr_moved[i]
+            msk_mov = msk_moving[i]
+            msk_t = msk_target[i]
+            msk_m = msk_moved[i]
+            flow = flows[i]
+            flow_c = vects_composed[i]
+            fullmsk_t = fullmsk_target[i]
+            flow_masked = flow.copy()
+            msk_myo = np.squeeze(fullmsk_t==2)
+            for dim in range(flow.shape[-1]):
+                flow_masked[...,dim][~msk_myo] = 0
 
-        for filename, pred_batch, myo_mask_b, lv_mask_b, full_cmr in zip(*prediction_tuple):
-
-            # first_vols shape:
-            # Batch, Z, X, Y, Channels --> three timesteps - t_n-1, t_n, t_n+1
-
-            first_vols_, second_vols_ = pred_batch
-            first_mask, second_mask = myo_mask_b
-            first_lvmask, second_lvmask = lv_mask_b
-            first_vols_full, second_vols_full= full_cmr
-
-            first_vols, second_vols = first_vols_[0], second_vols_[0]  # pick batch 0
-            first_mask, second_mask = first_vols_[1], second_vols_[1]  # pick batch 0
-            first_lvmask, second_lvmask = first_lvmask[0], second_lvmask[0]
-            first_mask, second_mask = (first_mask>=0.5).astype(np.uint8), (second_mask>0.5).astype(np.uint8)
-            # first_lvmask, second_lvmask = (first_lvmask >= 0.5).astype(np.uint8), (second_lvmask > 0.5).astype(np.uint8)
-            first_lvmask, second_lvmask = (first_lvmask).astype(np.uint8), (second_lvmask).astype(np.uint8)
-            first_vols_full, second_vols_full = first_vols_full[0], second_vols_full[0]  # pick batch 0
-
-            first_vols = first_vols[..., INPUT_T_ELEM][..., np.newaxis]  # select the transformed source vol
-            first_vols_full = first_vols_full[..., INPUT_T_ELEM][..., np.newaxis]  # select the transformed source vol
-            first_mask = first_mask[..., INPUT_T_ELEM][..., np.newaxis]
-            first_lvmask = first_lvmask[..., INPUT_T_ELEM][..., np.newaxis]
-
-            preds = model.predict_on_batch(pred_batch)
-            if len(preds) == 2:
-                moved, vects = preds
-                # if our model does not transform the mask, do it separately
-                moved_m, _ = fixed_transformer.predict(x=[first_mask, vects])
-            else:
-                moved, moved_m, vects = preds
-            moved = tf.cast(moved, tf.float32)
-            # compose vectors
-
-            from src.models.Models import create_dense_compose
-            comp = create_dense_compose(config)
-            vects_composed = comp.predict(vects)
-
-            moved_m = tf.cast(moved_m > 0.5, tf.uint8)
-            moved_m = ndimage.binary_closing(moved_m, structure=kernel, iterations=1)
-            #moved_m = ndimage.binary_opening(moved_m, structure=kernel_small, iterations=1)
-
-            moved_m = tf.cast(moved_m,tf.uint8)
-
-            first_binary = first_mask > 0.5
-            second_binary = second_mask > 0.5
-            #first_binary = ndimage.binary_closing(first_binary, structure=kernel, iterations=1)
-
-
-            #first_binary = ndimage.median_filter(first_mask, size=3, mode='nearest')
-            #combined_mask = combined_mask.astype(np.float32)
-            #second_binary = ndimage.convolve(second_binary, weights=kernel)
-            #second_binary = second_binary>=0.2
-            second_mask = tf.cast(second_binary, tf.uint8)
-            first_mask = tf.cast(first_binary, tf.uint8)
-            vects_full = np.copy(vects)
-            second_binary = ndimage.binary_dilation(second_binary, structure=kernel_small, iterations=1)
-
-            second_binary = second_binary[...,0]
-            for dim in range(vects.shape[-1]):
-                vects[...,dim][~second_binary] = 0
-
-            # TODO: refactor?
-            from src.data.Dataset import save_all_3d_vols
-            pred_path = os.path.join(config.get('EXP_PATH'), 'pred')
+            # save all files of this patient
             p = os.path.basename(filename).split('_volume')[0].lower()
-            ensure_dir(pred_path)
+            volumes = [cmr_mov,cmr_t,cmr_m,msk_mov,msk_t,msk_m,flow,flow_c,flow_masked,fullmsk_t]
 
-            volumes = [first_vols[0],
-                       second_vols[0],
-                       moved[0],
-                       moved_m[0],
-                       vects[0],
-                       vects_full[0],
-                       vects_composed[0],
-                       first_mask[0],
-                       second_mask[0],
-                       first_lvmask[0],
-                       second_lvmask[0],
-                       first_vols_full[0],
-                       second_vols[0]]
-
-            suffixes = ['_cmr.nii', '_targetcmr.nii', '_movedcmr.nii', '_movedmask.nii',
-                        '_flow.nii', '_flow_full.nii', '_flow_comp.nii', '_mask.nii', '_targetmask.nii', '_lvmask.nii',
-                         '_lvtargetmask.nii',
-                         '_cmr_full.nii', '_targetcmr_full.nii'  ]
-
+            suffixes = ['cmr_moving.nii', 'cmr_target.nii', 'cmr_moved.nii',
+                        'myo_moving.nii', 'myo_target.nii', 'myo_moved.nii',
+                        'flow.nii', 'flow_composed.nii', 'flow_masked.nii',
+                        'fullmask_target.nii']
             if debug:
                 save_all_3d_vols_new(volumes, vol_suffixes=suffixes,
-                                 EXP_PATH=pred_path, exp=p)
+                                     EXP_PATH=pred_path, exp=p)
 
-            save_gt_and_pred(gt=second_mask[0], pred=moved_m[0], exp_path=config.get('EXP_PATH'), patient=p)
+            save_gt_and_pred(gt=msk_t, pred=msk_mov, exp_path=config.get('EXP_PATH'), patient=p)
+        # end new version
 
     except Exception as e:
         logging.error(e)
-        logging.error(first_vols.shape)
-        logging.error(second_vols.shape)
-        logging.error(vects.shape)
-        logging.error(moved_m.shape)
 
     # free as much memory as possible
     del pred_generator
     del model
-    del full_image_generator
-    del pred_myo_mask_generator
-    del pred_lv_mask_generator
+    del masks_all_labels_generator
+    del fullmsk_target
+    del cmr_moving
+    del msk_moving
+    del cmr_target
+    del msk_target
+    del pred
+    del cmr_moved
+    del msk_moved
+    del flows
+    del vects_composed
     gc.collect()
 
     logging.info('pred on fold {} finished after {:0.3f} sec'.format(FOLD, time() - t0))
