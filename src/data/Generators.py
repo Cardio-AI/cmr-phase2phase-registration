@@ -12,6 +12,7 @@ import SimpleITK as sitk
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+import scipy
 import tensorflow.keras
 from scipy.ndimage import gaussian_filter1d
 
@@ -1668,7 +1669,7 @@ class PhaseMaskWindowGenerator(DataGenerator):
         self.TARGET_CHANNELS = 1
         self.IN_MEMORY = in_memory
         self.THREAD_POOL = concurrent.futures.ThreadPoolExecutor(max_workers=12)
-        self.ISTRAINING = config.get('ISTRAINING', True)
+        self.ISTRAINING = config.get('ISTRAINING', True) # true == sparse myo mask for displacement
 
         self.X_SHAPE = np.empty((self.BATCHSIZE, self.PHASES, *self.DIM, self.IMG_CHANNELS), dtype=np.float32)
         self.X2_SHAPE = np.empty((self.BATCHSIZE, self.PHASES, *self.DIM, self.IMG_CHANNELS), dtype=np.float32)
@@ -1914,6 +1915,11 @@ class PhaseMaskWindowGenerator(DataGenerator):
         logging.debug('pad/crop took: {:0.3f} s'.format(time() - t1))
         t1 = time()
 
+        # Added mask smoothness, do it before
+        for t in range(model_m_inputs.shape[0]):
+            if model_m_inputs[t].sum()>0: # we only need to smooth time steps with a mask
+                model_m_inputs[t] = scipy.ndimage.binary_closing(model_m_inputs[t], iterations=5)
+
         if self.BETWEEN_PHASES:
             combined = get_n_windows_between_phases_from_single4D(model_inputs, idx)
             combined_m = get_n_windows_between_phases_from_single4D(model_m_inputs, idx)
@@ -1969,7 +1975,6 @@ class PhaseMaskWindowGenerator(DataGenerator):
 
 
 
-
         if self.IMG_CHANNELS == 1:
             model_inputs = combined[...,self.INPUT_T_ELEM]
             model_targets = combined[...,-1][..., np.newaxis]
@@ -1984,6 +1989,8 @@ class PhaseMaskWindowGenerator(DataGenerator):
 
             #self.__plot_state_if_debug__(img=model_inputs[len(model_inputs) // 2], start_time=t1,
             #                             step='clipped cropped and pad')
+
+
 
         assert not np.any(np.isnan(model_inputs))
         assert not np.any(np.isnan(model_targets))

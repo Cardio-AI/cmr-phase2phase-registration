@@ -82,7 +82,7 @@ def pred_fold(config, debug=True):
         pred_config['AUGMENT_TEMP'] = False
         pred_config['BATCHSIZE'] = 1
         pred_config['HIST_MATCHING'] = False
-        pred_config['ISTRAINING'] = True
+        pred_config['ISTRAINING'] = False
         INPUT_T_ELEM = config.get('INPUT_T_ELEM', 0)
         pred_generator = PhaseMaskWindowGenerator(x_val_sax, x_val_sax, config=pred_config)
         x_train_sax_masks = [f.replace('clean', 'mask') for f in x_val_sax]

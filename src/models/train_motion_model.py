@@ -115,6 +115,7 @@ def train_fold(config, in_memory=False):
     val_config['AUGMENT'] = False
     val_config['HIST_MATCHING'] = False
     val_config['AUGMENT_TEMP'] = False
+    val_config['ISTRAINING'] = False
     # val_config['RESAMPLE_T'] = False # this could yield phases which does not fit into the given dim
     validation_generator = PhaseMaskWindowGenerator(x_val_sax, x_val_sax, config=val_config, in_memory=in_memory)
 
