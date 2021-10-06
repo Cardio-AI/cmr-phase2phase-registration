@@ -585,10 +585,10 @@ def create_RegistrationModel_inkl_mask(config):
         # Remove the Z flow when transforming the masks, as we provide only spare masks,
         # moving a mask in z results in a transformed mask at Z where we dont have a mask in the GT
         # The dice loss, will than backpropagate not to move in Z at all, as this will reduce the dice loss
-        empty_z_flow = tf.zeros_like(flows[0])
-        mod_mask_flows = [tf.concat([empty_z_flow[...,0:1], flow[...,1:]], axis=-1) for flow in flows]
+        #empty_z_flow = tf.zeros_like(flows[0])
+        #mod_mask_flows = [tf.concat([empty_z_flow[...,0:1], flow[...,1:]], axis=-1) for flow in flows]
         transformed_mask = [st_mask_layer([input_vol[..., take_t_elem][..., tf.newaxis], flow]) for input_vol, flow in
-                            zip(input_mask_vols, mod_mask_flows)]
+                            zip(input_mask_vols, flows)]
 
         transformed = tf.stack(transformed, axis=1)
         transformed_mask = tf.stack(transformed_mask, axis=1)

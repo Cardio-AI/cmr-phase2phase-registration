@@ -109,7 +109,7 @@ def train_fold(config, in_memory=False):
     '''n = 10
     x_train_sax = x_train_sax[:n]
     x_val_sax = x_val_sax[:n]'''
-    #config['BATCHSIZE'] = 1
+    config['ISTRAINING'] = False
     batch_generator = PhaseMaskWindowGenerator(x_train_sax, x_train_sax, config=config, in_memory=in_memory)
     val_config = config.copy()
     val_config['AUGMENT'] = False

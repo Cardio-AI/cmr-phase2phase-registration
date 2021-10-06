@@ -121,7 +121,7 @@ def pred_fold(config, debug=True):
             flow_c = vects_composed[i]
             fullmsk_t = fullmsk_target[i]
             flow_masked = flow.copy()
-            msk_myo = np.squeeze(fullmsk_t==2)
+            msk_myo = np.squeeze(msk_t.astype(np.bool))
             for dim in range(flow.shape[-1]):
                 flow_masked[...,dim][~msk_myo] = 0
 
