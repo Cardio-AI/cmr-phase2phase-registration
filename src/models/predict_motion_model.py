@@ -98,12 +98,20 @@ def pred_fold(config, debug=True):
         x, y = zip(*[masks_all_labels_generator.__getitem__(i) for i in range(len(masks_all_labels_generator))])
         fullmsk_target, _  = zip(*y)
         fullmsk_target = np.concatenate(fullmsk_target, axis=0)
+        # here we get a list of batches, each with a batchsize of 1
         x, y = zip(*[pred_generator.__getitem__(i) for i in range(len(pred_generator))])
         cmr_moving, msk_moving = zip(*x)
-        cmr_target, msk_target, _ = zip(*y)
+        if len(y[0]) == 4:
+            ed_repeated, cmr_target, msk_target, _ = zip(*y)
+        else:
+            cmr_target, msk_target, _ = zip(*y)
         cmr_moving, msk_moving, cmr_target, msk_target = map(np.concatenate, [cmr_moving, msk_moving,cmr_target, msk_target])
         pred = model.predict(pred_generator)
-        cmr_moved, msk_moved, flows = pred
+        if len(pred)==4:
+            comp_moved2ed, cmr_moved, msk_moved, flows = pred
+        else:
+            cmr_moved, msk_moved, flows = pred
+
         comp = create_dense_compose(config)
         vects_composed = comp.predict(flows)
         # mask the vector field
