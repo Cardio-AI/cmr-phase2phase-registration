@@ -158,6 +158,7 @@ def train_fold(config, in_memory=False):
         del model
         del cb
         gc.collect()
+
         from src.models.predict_motion_model import pred_fold
         pred_fold(config)
 

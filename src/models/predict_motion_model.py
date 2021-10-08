@@ -95,11 +95,11 @@ def pred_fold(config, debug=True):
         masks_all_labels_generator = PhaseWindowGenerator(x_train_sax_masks, x_train_sax_masks, config=pred_mask_config,
                                                       yield_masks=True)
         # new version
-        x, y = zip(*[masks_all_labels_generator.__getitem__(i) for i in range(len(pred_generator))])
+        x, y = zip(*[masks_all_labels_generator.__getitem__(i) for i in range(len(masks_all_labels_generator))])
         fullmsk_target, _  = zip(*y)
         fullmsk_target = np.concatenate(fullmsk_target, axis=0)
         x, y = zip(*[pred_generator.__getitem__(i) for i in range(len(pred_generator))])
-        cmr_moving, msk_moving, _ = zip(*x)
+        cmr_moving, msk_moving = zip(*x)
         cmr_target, msk_target, _ = zip(*y)
         cmr_moving, msk_moving, cmr_target, msk_target = map(np.concatenate, [cmr_moving, msk_moving,cmr_target, msk_target])
         pred = model.predict(pred_generator)
