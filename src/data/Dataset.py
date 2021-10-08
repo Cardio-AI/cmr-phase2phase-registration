@@ -459,9 +459,12 @@ def get_patient(filename_to_2d_nrrd_file):
         return '_'.join(os.path.basename(filename_to_2d_nrrd_file).split('_')[:2])
 
 
-def get_trainings_files(data_path, fold=0, path_to_folds_df='data/raw/gcn_05_2020_ax_sax_86/folds.csv'):
+def get_trainings_files(data_path, fold=0, path_to_folds_df=None):
     """
-    Load trainings and test files of a directory by a given folds-dataframe
+    Load CMR images and masks for a given data path according to different suffixes
+    If we path_to_folds (dataframe) is provided, use this dataframe and the parameter fold
+    to split our x and y into train, val.
+    If no path_to_folds is given use all files for train/validation (usually for inference with another dataset)
     :param data_path:
     :param fold:
     :param path_to_folds_df:
@@ -488,31 +491,40 @@ def get_trainings_files(data_path, fold=0, path_to_folds_df='data/raw/gcn_05_202
         if len(x) == 0:
             logging.error('no files found in: {}, try to list all files in this directory:'.format(data_path))
             logging.error(os.listdir(data_path))
+    if path_to_folds_df:
+        df = pd.read_csv(path_to_folds_df)
+        patients = df[df.fold.isin([fold])]
+        # make sure we count each patient only once
+        patients_train = patients[patients['modality'] == 'train']['patient'].str.lower().unique()
+        patients_test = patients[patients['modality'] == 'test']['patient'].str.lower().unique()
+        logging.info('Found {} images/masks in {}'.format(len(x), data_path))
+        logging.info('Patients train: {}'.format(len(patients_train)))
 
-    df = pd.read_csv(path_to_folds_df)
-    patients = df[df.fold.isin([fold])]
-    # make sure we count each patient only once
-    patients_train = patients[patients['modality'] == 'train']['patient'].str.lower().unique()
-    patients_test = patients[patients['modality'] == 'test']['patient'].str.lower().unique()
-    logging.info('Found {} images/masks in {}'.format(len(x), data_path))
-    logging.info('Patients train: {}'.format(len(patients_train)))
+        def filter_files_for_fold(list_of_filenames, list_of_patients):
+            """Helper to filter one list by a list of substrings"""
+            from src.data.Dataset import get_patient
+            return [str for str in list_of_filenames
+                    if get_patient(str).lower() in list_of_patients]
 
-    def filter_files_for_fold(list_of_filenames, list_of_patients):
-        """Helper to filter one list by a list of substrings"""
-        from src.data.Dataset import get_patient
-        return [str for str in list_of_filenames
-                if get_patient(str).lower() in list_of_patients]
+        x_train = sorted(filter_files_for_fold(x, patients_train))
+        y_train = sorted(filter_files_for_fold(y, patients_train))
+        x_test = sorted(filter_files_for_fold(x, patients_test))
+        y_test = sorted(filter_files_for_fold(y, patients_test))
+        logging.info('Selected {} of {} files with {} of {} patients for training fold {}'.format(len(x_train), len(x),
+                                                                                                  len(patients_train),
+                                                                                                  len(df.patient.unique()),
+                                                                                                  fold))
 
-    x_train = sorted(filter_files_for_fold(x, patients_train))
-    y_train = sorted(filter_files_for_fold(y, patients_train))
-    x_test = sorted(filter_files_for_fold(x, patients_test))
-    y_test = sorted(filter_files_for_fold(y, patients_test))
+    else: # no dataframe given for splitting
+        logging.info('no dataframe for splitting provided. Will use all files for train and validation')
+        x_train = sorted(x)
+        y_train = sorted(y)
+        x_test = sorted(x)
+        y_test = sorted(y)
+        logging.info('Selected {} of {} files'.format(len(x_train), len(x)))
 
     assert (len(x_train) == len(y_train)), 'len(x_train != len(y_train))'
-    logging.info('Selected {} of {} files with {} of {} patients for training fold {}'.format(len(x_train), len(x),
-                                                                                              len(patients_train),
-                                                                                              len(df.patient.unique()),
-                                                                                              fold))
+
 
     return x_train, y_train, x_test, y_test
 
@@ -1332,7 +1344,7 @@ def get_phases_as_idx_dmd(file_path, df, temporal_sampling_factor, length):
     # Returns the indices in the following order: 'ED#', 'MS#', 'ES#', 'PF#', 'MD#'
     # Reduce the indices of the excel sheet by one, as the indexes start at 0, the excel-sheet at 1
     # Transform them into an one-hot representation
-    indices = df[df.patient.str.contains(patient_str)][
+    indices = df[df.patient.str.contains(patient_str, case=False)][
         ['ED#', 'MS#', 'ES#', 'PF#', 'MD#']]
     indices = indices.values[0].astype(int) - 1 # the excel sheet starts with 1, indices needs to start with 0
     # scale the idx as we resampled along t (we need to resample the indicies in the same way)

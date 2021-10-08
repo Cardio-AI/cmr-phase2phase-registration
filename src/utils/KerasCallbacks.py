@@ -114,7 +114,7 @@ def get_callbacks(config=None, batch_generator=None, validation_generator=None, 
                              mode=config.get('MONITOR_MODE', 'min')
                              )
         )
-    else:  # no metrics given, use early stopping callback to stop the training after 20 epochs
+    else:  # no metrics given, use early stopping callback to stop the training after n epochs
         callbacks.append(
             EarlyStopping(patience=config.get('EARLY_STOPPING_PATIENCE', 10),
                           verbose=1,
@@ -146,7 +146,8 @@ def feed_inputs_4_tensorboard(config, batch_generator=None, validation_generator
         x_t, y_t = batch_generator.__getitem__(0)
 
         if y_t is not None:
-            x_t, y_t = x_t[0:samples], y_t[0:samples]
+            pass
+            #x_t, y_t = x_t[0:samples], y_t[0:samples]
         else:
             x_t, y_t = x_t[0:samples], []
 
@@ -154,7 +155,7 @@ def feed_inputs_4_tensorboard(config, batch_generator=None, validation_generator
 
     if validation_generator is not None:
         x_v, y_v = validation_generator.__getitem__(0)
-        x_v, y_v = x_v[0:samples], y_v[0:samples]
+        #x_v, y_v = x_v[0:samples], y_v[0:samples]
 
         feed['gen_val'] = (x_v, y_v)
 
@@ -661,12 +662,16 @@ class WindowMotionCallback(Callback):
             # create one tensorboard entry per key in feed_inputs_display
             pred_i = 0
             with self.writer.as_default():
-
+                # iterate over 2 keys --> train, val
+                # each x,y has the shape of: x == 2,b,shape, y == 4,b,shape
+                # x and y are lists of input batches, as our inputs have a different shape
                 for key, x, y in zip(self.keys, self.xs, self.ys):
 
                     pred_ = self.model.predict(x)
                     if len(pred_) == 2:
                         movings, vects = pred_
+                    elif len(pred_) == 4:
+                        _, movings, moving_m, vects = pred_
                     else:
                         movings, moving_m, vects = pred_
                     # logging.info(predictions.shape)
@@ -674,19 +679,28 @@ class WindowMotionCallback(Callback):
                     # count the samples provided by each key to sort them
 
                     phases = ['ED#', 'MS#', 'ES#', 'PF#', 'MD#']
-                    b = 0
+                    elem_in_b = 0 # take the first elem/patient of the batch, batchsize == 2
                     # one plot per phase
                     for p in range(len(phases)):
 
-
                         # Slice the volumes
-                        first_vol, second_vol = x[b][0][p], y[b][0][p]
-                        first_m, second_m = x[1][0][p], y[1][0][p]
+                        if len(y) == 4: # comp_cmr, target_cmr, target_msk, zeros
+                            idx_moving_cmr = 0
+                            idy_target_cmr = 1
+                            idx_moving_msk = 1
+                            idy_target_msk = 2
+                        else: # target_cmr, target_msk, zeros
+                            idx_moving_cmr = 0
+                            idy_target_cmr = 0
+                            idx_moving_msk = 1
+                            idy_target_msk = 1
+                        first_vol, second_vol = x[idx_moving_cmr][elem_in_b][p], y[idy_target_cmr][elem_in_b][p]
+                        first_m, second_m = x[idx_moving_msk][elem_in_b][p], y[idy_target_msk][elem_in_b][p]
                         if first_vol.shape[-1] == 3:
                             first_vol = first_vol[..., self.take_t_elem][..., np.newaxis]
                         if first_m.shape[-1] == 3:
                             first_m = first_m[..., self.take_t_elem]
-                        moved, moved_m, vect = movings[b][p], moving_m[b][p], vects[b][p]
+                        moved, moved_m, vect = movings[elem_in_b][p], moving_m[elem_in_b][p], vects[elem_in_b][p]
                         spatial_slices = first_vol.shape[0]
                         # pick one upper, middle and lower slice as example
                         masked_slices = np.where((second_m.sum(axis=(1, 2)) > 0.5))[0]
@@ -701,7 +715,7 @@ class WindowMotionCallback(Callback):
                         fig = plot_displacement(col_titles, first_m, first_vol, moved, moved_m, picks,
                                                second_m, second_vol, vect, y_label)
                         # fig.tight_layout()
-                        tensorflow.summary.image(name='plot/{}/batch_{}/{}_{}/summary'.format(key, b, p, phases[p]),
+                        tensorflow.summary.image(name='plot/{}/batch_{}/{}_{}/summary'.format(key, elem_in_b, p, phases[p]),
                                                  data=self.make_image(fig),
                                                  step=epoch)
 

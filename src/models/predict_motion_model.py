@@ -27,7 +27,7 @@ def pred_fold(config, debug=True):
 
     from src.data.Dataset import save_gt_and_pred
     from src.data.Generators import PhaseMaskWindowGenerator
-    from src.models.Models import create_affine_transformer_fixed, create_RegistrationModel_inkl_mask
+    from src.models.Models import create_RegistrationModel_inkl_mask
 
     # import external libs
     import pandas as pd
@@ -205,8 +205,17 @@ def main(args=None):
     if args.data:
         data_root = args.data
         config['DATA_PATH_SAX'] = os.path.join(data_root, 'sax')
-        config['DF_FOLDS'] = os.path.join(data_root, 'df_kfold.csv')
-        config['DF_META'] = os.path.join(data_root, 'SAx_3D_dicomTags_phase.csv')
+        df_folds = os.path.join(data_root, 'df_kfold.csv')
+        if os.path.isfile(df_folds) :
+            config['DF_FOLDS'] = df_folds
+        else :
+            config['DF_FOLDS'] = None
+
+        df_meta = os.path.join(data_root, 'SAx_3D_dicomTags_phase.csv')
+        if os.path.isfile(df_meta):
+            config['DF_META'] = df_meta
+        else:
+            config['DF_META'] = None
 
 
 

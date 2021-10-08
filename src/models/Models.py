@@ -541,6 +541,7 @@ def create_RegistrationModel_inkl_mask(config):
         dice_loss_weight = config.get('MASK_LOSS_WEIGHT', 0.1)
         reg_loss_weight = config.get('REG_LOSS_WEIGHT', 0.001)
         learning_rate = config.get('LEARNING_RATE', 0.001)
+        COMPOSE_CONSISTENCY = config.get('COMPOSE_CONSISTENCY', False)
 
         # input vol with timesteps, z, x, y, c -> =number of input timesteps
         input_tensor = Input(shape=(T_SHAPE, *input_shape, config.get('IMG_CHANNELS',1)))
@@ -594,11 +595,26 @@ def create_RegistrationModel_inkl_mask(config):
         transformed_mask = tf.stack(transformed_mask, axis=1)
         flow = tf.stack(flows, axis=1)
 
+        if COMPOSE_CONSISTENCY:
+            # composed flowfield should move ED to ED
+            comp = create_dense_compose(config)
+            flows_composed = comp(flow)
+            flows_composed = tf.unstack(flows_composed, axis=1)
+            # they should transform each timestep to ED
+            comp_transformed = [st_layer([input_vol[..., take_t_elem][..., tf.newaxis], flow]) for input_vol, flow in
+                           zip(input_vols, flows_composed)]
+            comp_transformed = tf.stack(comp_transformed, axis=1)
+
+
+
         flow = tf.keras.layers.Lambda(lambda x : x, name='flowfield')(flow)
         transformed_mask = tf.keras.layers.Lambda(lambda x: x, name='transformed_mask')(transformed_mask)
         transformed = tf.keras.layers.Lambda(lambda x: x, name='transformed')(transformed)
+        comp_transformed = tf.keras.layers.Lambda(lambda x: x, name='comp_transformed')(comp_transformed)
 
         outputs = [transformed, transformed_mask, flow]
+        if COMPOSE_CONSISTENCY: outputs = [comp_transformed] + outputs
+
 
         model = Model(name='simpleregister', inputs=[input_tensor, input_mask_tensor, input_tensor_empty],
                       outputs=outputs)
@@ -608,7 +624,9 @@ def create_RegistrationModel_inkl_mask(config):
         from src.utils.Metrics import dice_coef_loss
 
         losses = [MSE_().loss, dice_coef_loss, Grad('l2').loss]
+        if COMPOSE_CONSISTENCY: losses = [MSE_().loss] + losses
         weights = [image_loss_weight, dice_loss_weight, reg_loss_weight]
+        if COMPOSE_CONSISTENCY: weights = [image_loss_weight] + weights
         model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=learning_rate), loss=losses,
                       loss_weights=weights)
 
@@ -648,7 +666,13 @@ def create_affine_transformer_fixed(config, networkname='affine_transformer_fixe
 
 def create_dense_compose(config, networkname='dense_compose_displacement'):
     """
-    Apply a learned transformation matrix to an input image, no training possible
+    Compose a single transform from a series of transforms.
+    Supports both dense and affine transforms, and returns a dense transform unless all
+    inputs are affine. The list of transforms to compose should be in the order in which
+    they would be individually applied to an image. For example, given transforms A, B,
+    and C, to compose a single transform T, where T(x) = C(B(A(x))), the appropriate
+    function call is:
+    T = compose([A, B, C])
     :param config:  Key value pairs for image size and other network parameters
     :param networkname: string, name of this model scope
     :param fill_value:
@@ -663,14 +687,21 @@ def create_dense_compose(config, networkname='dense_compose_displacement'):
     with strategy.scope():
 
         inputs = Input((5, *config.get('DIM', [10, 224, 224]), 3))
-        input_displacement = Input((*config.get('DIM', [10, 224, 224]), 3))
         indexing = config.get('INDEXING', 'ij')
 
         # warp the source with the flow
         flows = tf.unstack(inputs, axis=1)
 
+        # we need to reverse the transforms as we register from t+1 to t.
+        # we need to provide the order in which we would apply the compose transforms
+        # ED, MS, ES, PF, MD
+        # flows:
+        # 0= MS->ED, 1=ES->MS, 2=PF->ES, 3=MD->PF, 4=ED->MD
+        #e.g. for compose:
+        # MS->ED = [0]
+        # ES->ED = [1,0]
         y = [ComposeTransform(interp_method='linear', shift_center=True, indexing=indexing,
-                              name='Compose_transform{}'.format(i))(flows[:i]) for i in range(2, len(flows) + 1)]
+                              name='Compose_transform{}'.format(i))(list(reversed(flows[:i]))) for i in range(2, len(flows) + 1)]
         y = tf.stack([flows[0], *y], axis=1)
 
         model = Model(inputs=[inputs], outputs=[y], name=networkname)

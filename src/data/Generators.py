@@ -1670,6 +1670,7 @@ class PhaseMaskWindowGenerator(DataGenerator):
         self.IN_MEMORY = in_memory
         self.THREAD_POOL = concurrent.futures.ThreadPoolExecutor(max_workers=12)
         self.ISTRAINING = config.get('ISTRAINING', True) # true == sparse myo mask for displacement
+        self.COMPOSE_CONSISTENCY = config.get('COMPOSE_CONSISTENCY', False)
 
         self.X_SHAPE = np.empty((self.BATCHSIZE, self.PHASES, *self.DIM, self.IMG_CHANNELS), dtype=np.float32)
         self.X2_SHAPE = np.empty((self.BATCHSIZE, self.PHASES, *self.DIM, self.IMG_CHANNELS), dtype=np.float32)
@@ -1769,9 +1770,14 @@ class PhaseMaskWindowGenerator(DataGenerator):
                     'mask:\n'
                     '{}'.format(str(e), self.IMAGES[ID], self.LABELS[ID]))
 
+        # repeat the ED vol, compose transform will register each time step to this phase
+        comp_transformed = np.repeat(y[:,0:1,...], 5,axis=1)
         logging.debug('Batchsize: {} preprocessing took: {:0.3f} sec'.format(self.BATCHSIZE, time() - t0))
         zeros = np.zeros((*x.shape[:-1], 3), dtype=np.float32)
-        return tuple([[x,x2,zeros], [y, y2, zeros]])
+        if self.COMPOSE_CONSISTENCY:
+            return tuple([[x,x2], [comp_transformed,y, y2, zeros]])
+        else:
+            return tuple([[x, x2], [y, y2, zeros]])
 
     def __pre_load_one_image__(self, i, ID):
 
