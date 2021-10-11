@@ -604,17 +604,16 @@ def create_RegistrationModel_inkl_mask(config):
             comp_transformed = [st_layer([input_vol[..., take_t_elem][..., tf.newaxis], flow]) for input_vol, flow in
                            zip(input_vols, flows_composed)]
             comp_transformed = tf.stack(comp_transformed, axis=1)
+            comp_transformed = tf.keras.layers.Lambda(lambda x: x, name='comp_transformed')(comp_transformed)
 
 
 
         flow = tf.keras.layers.Lambda(lambda x : x, name='flowfield')(flow)
         transformed_mask = tf.keras.layers.Lambda(lambda x: x, name='transformed_mask')(transformed_mask)
         transformed = tf.keras.layers.Lambda(lambda x: x, name='transformed')(transformed)
-        comp_transformed = tf.keras.layers.Lambda(lambda x: x, name='comp_transformed')(comp_transformed)
 
         outputs = [transformed, transformed_mask, flow]
         if COMPOSE_CONSISTENCY: outputs = [comp_transformed] + outputs
-
 
         model = Model(name='simpleregister', inputs=[input_tensor, input_mask_tensor, input_tensor_empty],
                       outputs=outputs)

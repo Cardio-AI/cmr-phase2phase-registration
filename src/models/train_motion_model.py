@@ -160,7 +160,14 @@ def train_fold(config, in_memory=False):
         gc.collect()
 
         from src.models.predict_motion_model import pred_fold
+        from src.models.Evaluate_moved_myo import  calc_dice
         pred_fold(config)
+        import os
+        exp_path = config.get('EXP_PATH')
+        gt_path = os.path.join(exp_path, 'gt_m')
+        pred_path = os.path.join(exp_path, 'pred_m')
+        export_path = exp_path
+        calc_dice(gt_path, pred_path, exp_path)
 
     except Exception as e:
         logging.error(e)

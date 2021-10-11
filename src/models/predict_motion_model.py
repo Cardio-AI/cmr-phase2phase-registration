@@ -119,10 +119,10 @@ def pred_fold(config, debug=True):
         # iterate over the patients and
         for i in range(len(x_val_sax)):
             filename = x_val_sax[i]
-            cmr_mov = cmr_moving[i]
+            cmr_mov = cmr_moving[i][...,0:1]
             cmr_t = cmr_target[i]
             cmr_m = cmr_moved[i]
-            msk_mov = msk_moving[i]
+            msk_mov = msk_moving[i][...,0:1]
             msk_t = msk_target[i]
             msk_m = msk_moved[i]
             flow = flows[i]
@@ -145,7 +145,7 @@ def pred_fold(config, debug=True):
                 save_all_3d_vols_new(volumes, vol_suffixes=suffixes,
                                      EXP_PATH=pred_path, exp=p)
 
-            save_gt_and_pred(gt=msk_t, pred=msk_mov, exp_path=config.get('EXP_PATH'), patient=p)
+            save_gt_and_pred(gt=msk_t, pred=msk_m, exp_path=config.get('EXP_PATH'), patient=p)
         # end new version
 
     except Exception as e:
