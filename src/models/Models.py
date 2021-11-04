@@ -687,6 +687,7 @@ def create_dense_compose(config, networkname='dense_compose_displacement'):
 
         inputs = Input((5, *config.get('DIM', [10, 224, 224]), 3))
         indexing = config.get('INDEXING', 'ij')
+        reverse = config.get('REVERSE_COMPOSE', False)
 
         # warp the source with the flow
         flows = tf.unstack(inputs, axis=1)
@@ -699,8 +700,13 @@ def create_dense_compose(config, networkname='dense_compose_displacement'):
         #e.g. for compose:
         # MS->ED = [0]
         # ES->ED = [1,0]
-        y = [ComposeTransform(interp_method='linear', shift_center=True, indexing=indexing,
-                              name='Compose_transform{}'.format(i))(list(reversed(flows[:i]))) for i in range(2, len(flows) + 1)]
+        # list(reversed())
+        if reverse:
+            y = [ComposeTransform(interp_method='linear', shift_center=True, indexing=indexing,
+                                  name='Compose_transform{}'.format(i))(list(reversed(flows[:i]))) for i in range(2, len(flows) + 1)]
+        else:
+            y = [ComposeTransform(interp_method='linear', shift_center=True, indexing=indexing,
+                              name='Compose_transform{}'.format(i))(flows[:i]) for i in range(2, len(flows) + 1)]
         y = tf.stack([flows[0], *y], axis=1)
 
         model = Model(inputs=[inputs], outputs=[y], name=networkname)

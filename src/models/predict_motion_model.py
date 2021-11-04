@@ -1,4 +1,4 @@
-from src.data.Dataset import save_all_3d_vols_new
+
 
 
 def pred_fold(config, debug=True):
@@ -28,6 +28,7 @@ def pred_fold(config, debug=True):
     from src.data.Dataset import save_gt_and_pred
     from src.data.Generators import PhaseMaskWindowGenerator
     from src.models.Models import create_RegistrationModel_inkl_mask
+    from src.data.Dataset import save_all_3d_vols_new
 
     # import external libs
     import pandas as pd
@@ -123,7 +124,8 @@ def pred_fold(config, debug=True):
             cmr_t = cmr_target[i]
             cmr_m = cmr_moved[i]
             msk_mov = msk_moving[i][...,0:1]
-            msk_t = msk_target[i]
+            msk_t = msk_target[i] # target mask of each pair-wise p2p
+            msk_ed = msk_target[0] # ED Mask
             msk_m = msk_moved[i]
             flow = flows[i]
             flow_c = vects_composed[i]
@@ -133,9 +135,14 @@ def pred_fold(config, debug=True):
             for dim in range(flow.shape[-1]):
                 flow_masked[...,dim][~msk_myo] = 0
 
+            # mask the compose flow field
+            flow_comp_masked = flow_c.copy()
+            msk_myo_ed = np.squeeze(msk_ed.astype(np.bool))
+            for dim in range(flow_c.shape[-1]):
+                flow_comp_masked[..., dim][~msk_myo_ed] = 0
             # save all files of this patient
             p = os.path.basename(filename).split('_volume')[0].lower()
-            volumes = [cmr_mov,cmr_t,cmr_m,msk_mov,msk_t,msk_m,flow,flow_c,flow_masked,fullmsk_t]
+            volumes = [cmr_mov,cmr_t,cmr_m,msk_mov,msk_t,msk_m,flow,flow_comp_masked,flow_masked,fullmsk_t]
 
             suffixes = ['cmr_moving.nii', 'cmr_target.nii', 'cmr_moved.nii',
                         'myo_moving.nii', 'myo_target.nii', 'myo_moved.nii',
@@ -214,6 +221,8 @@ def main(args=None):
         data_root = args.data
         config['DATA_PATH_SAX'] = os.path.join(data_root, 'sax')
         df_folds = os.path.join(data_root, 'df_kfold.csv')
+        # this part is necessary if we try to predict on files that are not in the df folds file
+        # meaning dta which we did not use in the cv (e.g. dmd control)
         if os.path.isfile(df_folds) :
             config['DF_FOLDS'] = df_folds
         else :

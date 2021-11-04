@@ -422,8 +422,6 @@ def create_2d_slices_from_3d_volume_files(img_f, mask_f, export_path):
     mask_3d_sitk = sitk.ReadImage(mask_f)
     img_3d_sitk = sitk.ReadImage(img_f)
 
-    # filter 4d image nda according to given mask nda
-
     mask_3d = sitk.GetArrayFromImage(mask_3d_sitk)
     img_3d = sitk.GetArrayFromImage(img_3d_sitk)
 

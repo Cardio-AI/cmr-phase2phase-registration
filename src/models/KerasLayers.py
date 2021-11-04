@@ -10,7 +10,7 @@ import numpy as np
 import sys
 
 __all__ = ['UpSampling2DInterpol', 'UpSampling3DInterpol', 'Euler2Matrix', 'ScaleLayer',
-           'UnetWrapper', 'ConvEncoder', 'DeformableConvLayer', 'conv_layer_fn', 'downsampling_block_fn',
+           'UnetWrapper', 'ConvEncoder', 'conv_layer_fn', 'downsampling_block_fn',
            'upsampling_block_fn','Inverse3DMatrix', 'ConvDecoder', 'ConvEncoder', 'get_centers_tf',
            'get_idxs_tf', 'get_angle_tf', 'ComposeTransform', 'ConvBlock']
 

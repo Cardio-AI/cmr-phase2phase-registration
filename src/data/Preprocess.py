@@ -92,76 +92,6 @@ def load_msk(f_name, valid_labels=None):
     msk_b_sitk.SetOrigin(msk_sitk.GetOrigin())
     return msk_b_sitk
 
-
-def filter_small_vectors_batch(flowfield_3d, normalize=True, thresh_z=(-0.5, 0.5), thresh_x=(-2.5, 1.5),
-                               thresh_y=(-1.5, 1.0)):
-    """
-    wrapper to detect input shape, works with 3d volume of flows
-    Expect a numpy array with shape z,x,y,c, return the same shape
-    All vector smaller or bigger than the given thresholds (tuples) will be set to the flowfield minimum
-    :param flowfield_3d:
-    :return:
-    """
-
-    if flowfield_3d.ndim == 4:
-        # traverse through the z axis and filter each 2d slice independently
-        filtered = [
-            filter_small_vectors_2d(f, normalize=normalize, thresh_z=thresh_z, thresh_x=thresh_x, thresh_y=thresh_y)
-            for f in flowfield_3d]
-        return np.stack(filtered, axis=0)
-
-    elif flowfield_3d.ndim == 3:  # 2d slice with 3d vectors
-        return filter_small_vectors_2d(flowfield_3d, normalize=normalize, thresh_z=thresh_z, thresh_x=thresh_x,
-                                       thresh_y=thresh_y)
-
-    else:
-        # returns the input without changes
-        logging.error('dimension: {} not supported'.format(flowfield_3d.ndim))
-        return flowfield_3d
-
-
-def filter_small_vectors_2d(flowfield_2d, normalize=True, thresh_z=(-0.7, 0.7), thresh_x=(-2.5, 1.5),
-                            thresh_y=(-1.5, 1.0)):
-    """
-    Expect a numpy array with shape z,x,y,c, return the same shape
-    All vector smaller or bigger than the given thresholds (tuples) will be set to the flowfield minimum
-    :param flowfield_3d:
-    :return:
-    """
-    flow_min = flowfield_2d.min()
-
-    if not normalize:
-        flow_min = 0
-
-    if flowfield_2d.shape[-1] == 3:  # 3d vectors
-        flow_z = flowfield_2d[..., 0].copy()
-        flow_x = flowfield_2d[..., 1].copy()
-        flow_y = flowfield_2d[..., 2].copy()
-    elif flowfield_2d.shape[-1] == 2:
-        flow_x = flowfield_2d[..., 0].copy()
-        flow_y = flowfield_2d[..., 1].copy()
-        # create a fake 3rd dimension to work with rgb, set value to minimal flowfield value
-        flow_z = np.full_like(flow_x, flow_min)
-
-    else:
-        logging.error('vector shape not supported')
-        return flowfield_2d
-
-    # filter small z movements
-    flow_z[(flow_z > thresh_z[0]) & (flow_z < thresh_z[1])] = flow_min
-    # filter small x movements
-    flow_x[(flow_x > thresh_x[0]) & (flow_x < thresh_x[1])] = flow_min
-    # filter small y movements
-    flow_y[(flow_y > thresh_y[0]) & (flow_y < thresh_y[1])] = flow_min
-    flow_ = np.stack([flow_z, flow_x, flow_y], axis=-1)
-
-    if normalize:
-        # normalize values in the scale of 0 -1 small values will result as 0
-        return normalise_image(flow_)
-    else:
-        return flow_
-
-
 def resample_t_of_4d(sitk_img, t_spacing=20, interpolation=sitk.sitkLinear, ismask=False):
     '''
 
@@ -365,7 +295,7 @@ def random_rotate90_2D_or_3D(img, mask, probabillity=0.8):
 
     return augmented['image'], augmented['mask']
 
-def augmentation_compose_2d_3d_4d(img, mask, probabillity=1, config={}):
+def augmentation_compose_2d_3d_4d(img, mask, probabillity=1, config=None):
     """
     Apply an compisition of different augmentation steps,
     either on 2D or 3D image/mask pairs,
@@ -376,6 +306,8 @@ def augmentation_compose_2d_3d_4d(img, mask, probabillity=1, config={}):
     :return: augmented image, mask
     """
     #logging.debug('random rotate for: {}'.format(img.shape))
+    if config is None:
+        config = {}
     return_image_and_mask = True
     img_given = True
     mask_given = True
@@ -531,338 +463,6 @@ def _create_aug_compose(p=1, border_mode=cv2.BORDER_CONSTANT, val=0, targets=Non
     return ReplayCompose(augmentations, p=p,
         additional_targets=targets)
 
-def random_rotate_2D_or_3D(img, mask, probabillity=0.8, shift_limit=0.0625, scale_limit=0.0, rotate_limit=0):
-
-    """
-    Rotate, shift and scale an image within a given range
-    :param img: numpy.ndarray
-    :param mask: numpy.ndarray
-    :param probabillity: float, will be interpreted as %-value
-    :param shift_limit:
-    :param scale_limit:
-    :param rotate_limit:
-    :return:
-    """
-
-    logging.debug('random rotate for: {}'.format(img.shape))
-    augmented = {'image': None, 'mask': None}
-
-    if isinstance(img, sitk.Image):
-        img = sitk.GetArrayFromImage(img).astype(np.float32)
-
-    if isinstance(mask, sitk.Image):
-        mask = sitk.GetArrayFromImage(mask).astype(np.float32)
-
-    # dont print anything if no images nor masks are given
-    if img is None and mask is None:
-        logging.error('No image data given')
-        raise ('No image data given in grid dissortion')
-
-    # replace mask with empty slice if none is given
-    if mask is None:
-        mask = np.zeros(img.shape)
-
-    # replace image with empty slice if none is given
-    if img is None:
-        img = np.zeros(mask.shape)
-
-    if img.ndim == 2:
-
-        aug = ShiftScaleRotate(shift_limit=shift_limit, scale_limit=scale_limit, rotate_limit=rotate_limit,
-                               border_mode=cv2.BORDER_REFLECT_101, p=probabillity)
-
-        params = aug.get_params()
-        image_aug = aug.apply(img, interpolation=cv2.INTER_LINEAR, **params)
-        mask_aug = aug.apply(mask, interpolation=cv2.INTER_NEAREST, **params)
-
-        # apply shift-scale and rotation augmentation on 2d data
-        augmented['image'] = image_aug
-        augmented['mask'] = mask_aug
-
-    elif img.ndim == 3:
-        # apply shif-scale and rotation on 3d data, apply the same transform to all slices
-        images = []
-        masks = []
-
-        aug = ShiftScaleRotate(shift_limit=shift_limit, scale_limit=scale_limit, rotate_limit=rotate_limit,
-                               border_mode=cv2.BORDER_REFLECT_101, p=probabillity)
-        params = aug.get_params()
-        for z in range(img.shape[0]):
-            images.append(aug.apply(img[z, ...], interpolation=cv2.INTER_LINEAR, **params))
-            masks.append(aug.apply(mask[z, ...], interpolation=cv2.INTER_NEAREST, **params))
-
-        augmented['image'] = np.stack(images, axis=0)
-        augmented['mask'] = np.stack(masks, axis=0)
-
-    else:
-        logging.error('Unsupported dim: {}, shape: {}'.format(img.ndim, img.shape))
-        raise ('Wrong shape Exception in: {}'.format('show_2D_or_3D()'))
-
-    return augmented['image'], augmented['mask']
-
-
-def grid_dissortion_2D_or_3D(img, mask, probabillity=0.8, border_mode=cv2.BORDER_REFLECT_101, is_y_mask=True):
-    """
-    Apply grid dissortion
-    :param img:
-    :param mask:
-    :return:
-    """
-    logging.debug('grid dissortion for: {}'.format(img.shape))
-    augmented = {'image': None, 'mask': None}
-
-    if is_y_mask:
-        y_interpolation = cv2.INTER_NEAREST
-    else:
-        y_interpolation = cv2.INTER_LINEAR
-
-    if isinstance(img, sitk.Image):
-        img = sitk.GetArrayFromImage(img).astype(np.float32)
-
-    if isinstance(mask, sitk.Image):
-        mask = sitk.GetArrayFromImage(mask).astype(np.float32)
-
-    # dont print anything if no images nor masks are given
-    if img is None and mask is None:
-        logging.error('No image data given')
-        raise ('No image data given in grid dissortion')
-
-    # replace mask with empty slice if none is given
-    if mask is None:
-        mask = np.zeros(img.shape)
-
-    # replace image with empty slice if none is given
-    if img is None:
-        img = np.zeros(mask.shape)
-
-    if img.ndim == 2:
-        # apply grid augmentation on 2d data
-        aug = GridDistortion(p=probabillity,border_mode=border_mode,mask_value=0, value=0)
-        if is_y_mask:
-            augmented = aug(image=img, mask=mask)
-        else:
-            steps = aug.get_params()
-            augmented['image'] = aug.apply(img, steps['stepsx'], steps['stepsy'], interpolation=cv2.INTER_LINEAR)
-            augmented['mask'] = aug.apply(mask, steps['stepsx'], steps['stepsy'], interpolation=cv2.INTER_LINEAR)
-    elif img.ndim == 3:
-
-        # apply grid augmentation on 3d data, apply the same transform to all slices
-        images = []
-        masks = []
-
-        aug = GridDistortion(p=probabillity,border_mode=border_mode)
-        steps = aug.get_params()
-        for z in range(img.shape[0]):
-            images.append(aug.apply(img[z,...], steps['stepsx'], steps['stepsy'], interpolation=y_interpolation))
-            masks.append(aug.apply(mask[z,...], steps['stepsx'], steps['stepsy'], interpolation=y_interpolation))
-
-        augmented['image'] = np.stack(images, axis=0)
-        augmented['mask'] = np.stack(masks, axis=0)
-
-    else:
-        logging.error('Unsupported dim: {}, shape: {}'.format(img.ndim, img.shape))
-        raise ('Wrong shape Exception in: {}'.format('show_2D_or_3D()'))
-
-    return augmented['image'], augmented['mask']
-
-def elastic_transoform_2D_or_3D(img, mask, probabillity=0.8):
-    """
-    Apply grid dissortion
-    :param img:
-    :param mask:
-    :return:
-    """
-    logging.debug('grid dissortion for: {}'.format(img.shape))
-    augmented = {'image': None, 'mask': None}
-
-    if isinstance(img, sitk.Image):
-        img = sitk.GetArrayFromImage(img).astype(np.float32)
-
-    if isinstance(mask, sitk.Image):
-        mask = sitk.GetArrayFromImage(mask).astype(np.float32)
-
-    # dont print anything if no images nor masks are given
-    if img is None and mask is None:
-        logging.error('No image data given')
-        raise ('No image data given in grid dissortion')
-
-    # replace mask with empty slice if none is given
-    if mask is None:
-        mask = np.zeros(img.shape)
-
-    # replace image with empty slice if none is given
-    if img is None:
-        img = np.zeros(mask.shape)
-
-    if img.ndim == 2:
-
-        # apply grid augmentation on 2d data
-        aug = ElasticTransform(p=1, alpha=120, sigma=120 * 0.09, alpha_affine=120 * 0.08,border_mode=cv2.BORDER_CONSTANT, value=0, mask_value=0)
-        augmented = aug(image=img, mask=mask)
-
-    elif img.ndim == 3:
-
-        # apply grid augmentation on 3d data, apply the same transform to all slices
-        images = []
-        masks = []
-
-        aug = ElasticTransform(p=1, alpha=120, sigma=120 * 0.09, alpha_affine=120 * 0.08,border_mode=cv2.BORDER_CONSTANT, value=0, mask_value=0)
-        steps = aug.get_params()
-        for z in range(img.shape[0]):
-            images.append(aug.apply(img[z,...], steps['stepsx'], steps['stepsy'], interpolation=cv2.INTER_LINEAR))
-            masks.append(aug.apply(mask[z,...], steps['stepsx'], steps['stepsy'], interpolation=cv2.INTER_NEAREST))
-
-        augmented['image'] = np.stack(images, axis=0)
-        augmented['mask'] = np.stack(masks, axis=0)
-
-    else:
-        logging.error('Unsupported dim: {}, shape: {}'.format(img.ndim, img.shape))
-        raise ('Wrong shape Exception in: {}'.format('show_2D_or_3D()'))
-
-    return augmented['image'], augmented['mask']
-
-
-
-def crop_to_square_2d_or_3d(img_nda, mask_nda, image_type='nda'):
-    """
-    Wrapper for 2d and 3d image/mask support
-    :param img_nda:
-    :param mask_nda:
-    :return:
-    """
-
-    if isinstance(img_nda, sitk.Image):
-        image_type = 'sitk'
-        reference_img = img_nda
-        img_nda = sitk.GetArrayFromImage(img_nda).astype(np.float32)
-
-    if isinstance(mask_nda, sitk.Image):
-        mask_nda = sitk.GetArrayFromImage(mask_nda).astype(np.float32)
-
-    # dont print anything if no images nor masks are given
-    if img_nda is None and mask_nda is None:
-        logging.error('No image data given')
-        raise ('No image data given in grid dissortion')
-
-    # replace mask with empty slice if none is given
-    if mask_nda is None:
-        mask_nda = np.zeros(img_nda.shape)
-
-    # replace image with empty slice if none is given
-    if img_nda is None:
-        img_nda = np.zeros(mask_nda.shape)
-
-    if img_nda.ndim == 2:
-        crop = crop_to_square_2d
-
-    elif img_nda.ndim == 3:
-        crop = crop_to_square_3d
-
-    if image_type == 'sitk':
-        # return a sitk.Image with all metadata as the uncroped image
-        img, msk = crop(img_nda, mask_nda)
-        return copy_meta(img,reference_img), copy_meta(msk, reference_img)
-
-    return crop(img_nda, mask_nda)
-
-
-def crop_to_square_3d(img_nda, mask_nda):
-    """
-    crop 3d numpy image/mask to square, croptthe longer side
-    individual square cropping for image pairs such as used for ax2sax transformation
-    :param img_nda:
-    :param mask_nda:
-    :return:
-    """
-    h, w = img_nda.shape[-2:]  # numpy shape has different order than sitk
-    logging.debug('shape: {}'.format(img_nda.shape))
-    if h != w:
-        margin = (h - w) // 2
-
-        # crop width if width > height
-        if margin > 0:  # height is bigger than width, crop height
-            logging.debug('margin: {}'.format(margin))
-            img_nda = img_nda[:, margin:-margin, :]
-            img_nda = img_nda[:, :w, :]  # make sure no ceiling errors
-
-        elif margin < 0:  # width is bigger than height, crop width
-            margin = -margin
-            img_nda = img_nda[..., margin:-margin]
-            img_nda = img_nda[..., :h]
-
-    h, w = mask_nda.shape[-2:]  # numpy shape has different order than sitk
-    logging.debug('shape: {}'.format(img_nda.shape))
-    if h != w:
-        margin = (h - w) // 2
-
-        # crop width if width > height
-        if margin > 0:  # height is bigger than width, crop height
-            logging.debug('margin: {}'.format(margin))
-            mask_nda = mask_nda[:, margin:-margin, :]
-            mask_nda = mask_nda[:, :w, :]
-
-        elif margin < 0:  # width is bigger than height, crop width
-            margin = -margin
-            mask_nda = mask_nda[..., margin:-margin]
-            mask_nda = mask_nda[..., :h]
-
-    return img_nda, mask_nda
-
-def crop_to_square_3d_same_shape(img_nda, mask_nda):
-    """
-    crop 3d numpy image/mask to square, croptthe longer side
-    Works only if img and mask have the same shape
-    :param img_nda:
-    :param mask_nda:
-    :return:
-    """
-    h, w = img_nda.shape[-2:]  # numpy shape has different order than sitk
-    logging.debug('shape: {}'.format(img_nda.shape))
-    if h != w:
-        margin = (h - w) // 2
-
-        # crop width if width > height
-        if margin > 0:  # height is bigger than width, crop height
-            logging.debug('margin: {}'.format(margin))
-            img_nda = img_nda[:, margin:-margin, :]
-            img_nda = img_nda[:, :w, :]  # make sure no rounding errors
-            mask_nda = mask_nda[:, margin:-margin, :]
-            mask_nda = mask_nda[:, :w, :]
-
-        elif margin < 0:  # width is bigger than height, crop width
-            margin = -margin
-            img_nda = img_nda[..., margin:-margin]
-            mask_nda = mask_nda[..., margin:-margin]
-            img_nda = img_nda[..., :h]
-            mask_nda = mask_nda[..., :h]
-
-    return img_nda, mask_nda
-
-
-def crop_to_square_2d(img_nda, mask_nda):
-    """
-    center crop image and mask to square
-    :param img_nda:
-    :param mask_nda:
-    :return:
-    """
-
-    w, h = mask_nda.shape[:2]
-    # identify if width or height is bigger
-    if h != w:
-        margin = (h - w) // 2
-        # crop width if width > height
-        if margin > 0: # height > width, crop height
-            img_nda = img_nda[margin:-margin, :]
-            mask_nda = mask_nda[margin:-margin, :]
-        elif margin < 0: # width > height, crop width
-            margin = -margin
-            img_nda = img_nda[:, margin:-margin]
-            mask_nda = mask_nda[:, margin:-margin]
-
-    return img_nda, mask_nda
-
-
 def transform_to_binary_mask(mask_nda, mask_values=[0, 1, 2, 3]):
     """
     Transform from a value-based representation to a binary channel based representation
@@ -1008,7 +608,7 @@ def get_angle2x(p1, p2):
         angle = degrees(atan2(y1-y2, x1-x2))
     return angle
 
-def get_ip_from_mask_3d(msk_3d, debug=False, keepdim=False):
+def get_ip_from_mask_3d(msk_3d, debug=False, keepdim=False, rev=False):
     '''
     Returns two lists of RV insertion points (y,x)-coordinates
     For a standard SAX orientation:
@@ -1018,6 +618,7 @@ def get_ip_from_mask_3d(msk_3d, debug=False, keepdim=False):
     msk_3d : (np.ndarray) with z,y,x
     debug : (bool) print additional info
     keepdim: (bool) returns two lists of the same length as z, slices where no RV IPs were found are represented by an tuple of None
+    rev: (bool), return the coordinates as x,y tuples (for comparison with matrix based indexing)
 
     Returns tuple of lists with points (y,x)-coordinates
     -------
@@ -1027,7 +628,7 @@ def get_ip_from_mask_3d(msk_3d, debug=False, keepdim=False):
     second_ips = []
     for msk2d in msk_3d:
         try:
-            first, second = get_ip_from_2dmask(msk2d, debug=debug)
+            first, second = get_ip_from_2dmask(msk2d, debug=debug, rev=rev)
             if (first and second) or keepdim:
                 first_ips.append(first)
                 second_ips.append(second)
@@ -1088,7 +689,20 @@ def get_first_idx(mask, min_slices_labelled=3):
             break
     return i
 
-def get_ip_from_2dmask(nda, debug=False):
+def get_ip_from_2dmask(nda, debug=False, rev=False):
+    """
+    Find the RVIP on a 2D mask with the following labels
+    RV (0), LVMYO (1) and LV (2) mask
+
+    Parameters
+    ----------
+    nda : numpy ndarray with one hot encoded labels
+    debug :
+
+    Returns a tuple of two points anterior IP, inferior IP, each with (y,x)-coordinates
+    -------
+
+    """
     if debug: print('msk shape: {}'.format(nda.shape))
     # initialise some values
     first, second = None, None
@@ -1145,4 +759,6 @@ def get_ip_from_2dmask(nda, debug=False):
             first = memory_first
         #assert first and second, 'missed one insertion point: first: {}, second: {}'.format(first, second)
         if debug: print('first IP: {}, second IP: {}'.format(first, second))
+    if rev: first, second = (first[1], first[0]), (second[1], second[0])
+
     return first, second

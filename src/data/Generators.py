@@ -19,8 +19,7 @@ from scipy.ndimage import gaussian_filter1d
 from src.data.Dataset import describe_sitk, split_one_4d_sitk_in_list_of_3d_sitk, get_phases_as_onehot_gcn, \
     get_phases_as_onehot_acdc, get_n_windows_from_single4D, get_phases_as_idx_gcn, get_phases_as_idx_acdc, match_hist, \
     get_n_windows_between_phases_from_single4D, get_phases_as_idx_dmd
-from src.data.Preprocess import resample_3D, clip_quantile, normalise_image, grid_dissortion_2D_or_3D, \
-    transform_to_binary_mask, load_masked_img, random_rotate90_2D_or_3D, \
+from src.data.Preprocess import resample_3D, clip_quantile, normalise_image, transform_to_binary_mask, load_masked_img, \
     augmentation_compose_2d_3d_4d, pad_and_crop, resample_t_of_4d, load_msk, get_first_idx
 from src.visualization.Visualize import show_2D_or_3D
 
@@ -384,14 +383,6 @@ class DataGenerator(BaseGenerator):
             # mask_nda = normalise_image(mask_nda, normaliser=self.SCALER)
 
         self.__plot_state_if_debug__(img_nda, mask_nda, t1, '{} normalized image:'.format(self.SCALER))
-
-        if self.AUGMENT_GRID:  # augment with grid transform from albumenation
-            # apply grid augmentation
-            img_nda, mask_nda = grid_dissortion_2D_or_3D(img_nda, mask_nda, probabillity=0.8, is_y_mask=self.MASKS)
-            img_nda, mask_nda = random_rotate90_2D_or_3D(img_nda, mask_nda, probabillity=0.1)
-
-            self.__plot_state_if_debug__(img_nda, mask_nda, t1, 'grid_augmented')
-            t1 = time()
 
         if self.AUGMENT:  # augment data with albumentation
             # use albumentation to apply random rotation scaling and shifts
@@ -1921,7 +1912,7 @@ class PhaseMaskWindowGenerator(DataGenerator):
         logging.debug('pad/crop took: {:0.3f} s'.format(time() - t1))
         t1 = time()
 
-        # Added mask smoothness, do it before
+        # Added mask smoothness
         for t in range(model_m_inputs.shape[0]):
             if model_m_inputs[t].sum()>0: # we only need to smooth time steps with a mask
                 model_m_inputs[t] = scipy.ndimage.binary_closing(model_m_inputs[t], iterations=5)
