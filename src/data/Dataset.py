@@ -1631,7 +1631,10 @@ def get_n_windows_between_phases_from_single4D(nda4d, idx):
                                                        copy_direction = True),[t_phases, t_middle, t_shift_to_left]))
 
     else:
-        return [t_shift_to_left, t_middle, t_phases]
+        # INVERTED REGISTRATION TEST
+        # original:
+        # return [t_shift_to_left, t_middle, t_phases]
+        return [t_phases, t_middle, t_shift_to_left]
 
 
 def save_3d(nda, fname, isVector=False):
