@@ -1554,8 +1554,12 @@ def get_n_windows_between_phases_from_single4D(nda4d, idx):
     ----------
     nda4d : 4D nda
     idx : np.array of a list of int
-    window_size : define the window size idx[n]-window_size --> idx[n]+window_size
 
+    idxs (ED,MS,ES,PF,MD)
+    idxs_middle
+    idx_shift_to_left (MS,ES,PF,MD,ED)
+
+    returns [nda[idx_shift_to_left], nda[idx_middle], nda[idxs]]
     Returns [vol[t+1], vol[t+0.5], vol[t]]
     -------
 
@@ -1571,8 +1575,9 @@ def get_n_windows_between_phases_from_single4D(nda4d, idx):
     debug('idx shape: {}'.format(idx.shape))
     y_len = nda4d.shape[0]
 
-    # define the motion window --> [t-window,t+window] one of [1,2,3] depending on the temporal resolution/temporal resampling
-    idxs_phases = idx
+    #
+    idxs_phases = idx.copy()
+
     idxs_shift_to_left = np.roll(idx, -1) # roll to the left side
 
     # We add a volume from t/2, which should lie between both phases, for the cycle overflow we need
@@ -1584,19 +1589,19 @@ def get_n_windows_between_phases_from_single4D(nda4d, idx):
     [ 3  6  9 12  8]
     mod by length and than divide by 2 --> third and fourth index with "1" and "4" are wrong.
     [3 6 1 4 0]
-    we need a different operation for the cycle case:
+    we need a different operation for the cycle case (cf. np.where function below):
     
     array([ 3,  6,  9, 12,  0])
     """
-    idx = np.where(idxs_shift_to_left > idxs_phases, np.mod((idxs_phases + idxs_shift_to_left) // 2, y_len), np.mod((idxs_phases + idxs_shift_to_left), y_len) // 2)
+    idxs_middle = np.where(idxs_shift_to_left > idxs_phases, np.mod((idxs_phases + idxs_shift_to_left) // 2, y_len), np.mod((idxs_phases + idxs_shift_to_left), y_len) // 2)
 
     # this is a buggy cycle overflow version, compare example above
     #idx = (idxs_phases + idxs_shift_to_left)//2
 
-    debug('idx: {}'.format(idx))
+    debug('idx: {}'.format(idxs_phases))
     # fake ring functionality with mod
-    idx = np.mod(idx, y_len)
-    idxs_phases = np.mod(idxs_phases, y_len) # this is faster in the generator, than the tf functions
+    idxs_phases = np.mod(idxs_phases, y_len)  # this is faster in the generator, than the tf functions
+    idxs_middle = np.mod(idxs_middle, y_len)
     idxs_shift_to_left = np.mod(idxs_shift_to_left, y_len)
 
     debug('idx lower: {}'.format(idxs_phases))
@@ -1612,7 +1617,7 @@ def get_n_windows_between_phases_from_single4D(nda4d, idx):
     # we need to fill the dimensions from behind by [...,tf.newaxis]
     # and define the number of leading batch dimensions
 
-    t_middle = np.squeeze(np.take(nda4d, indices=idx[..., np.newaxis], axis=0))
+    t_middle = np.squeeze(np.take(nda4d, indices=idxs_middle[..., np.newaxis], axis=0))
     t_phases = np.squeeze(np.take(nda4d, indices=idxs_phases[..., np.newaxis], axis=0))
     t_shift_to_left = np.squeeze(np.take(nda4d, indices=idxs_shift_to_left[..., np.newaxis], axis=0))
     logging.debug('first vols shape: {}'.format(t_phases.shape))

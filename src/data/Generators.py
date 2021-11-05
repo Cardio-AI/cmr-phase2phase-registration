@@ -1904,9 +1904,8 @@ class PhaseMaskWindowGenerator(DataGenerator):
             logging.debug('hist matching took: {:0.3f} s'.format(time() - t1))
             t1 = time()
 
-        # --------------- SLICE PAIRS OF INPUT AND TARGET VOLUMES ACCORDING TO CARDIAC PHASE IDX -------------
-        # get the volumes of each phase window
-        # combined --> t-w, t, t+w, We can use this window in different combinations as input and target
+        # crop before smoothing, this improves the speed of the following steps
+        # and reduces the memory footprint
         model_inputs = pad_and_crop(model_inputs, target_shape=(model_inputs.shape[0], *self.DIM))
         model_m_inputs = pad_and_crop(model_m_inputs, target_shape=(model_m_inputs.shape[0], *self.DIM))
         logging.debug('pad/crop took: {:0.3f} s'.format(time() - t1))
@@ -1917,16 +1916,23 @@ class PhaseMaskWindowGenerator(DataGenerator):
             if model_m_inputs[t].sum()>0: # we only need to smooth time steps with a mask
                 model_m_inputs[t] = scipy.ndimage.binary_closing(model_m_inputs[t], iterations=5)
 
+        # --------------- SLICE PAIRS OF INPUT AND TARGET VOLUMES ACCORDING TO CARDIAC PHASE IDX -------------
+        # get the volumes of each phase window
+        # register from phase to phase (p2p), here combined:
+        # [nda[idx_shift_to_left], nda[idx_middle], nda[idxs]] each with 5,z,x,y
+        # in other words: [vol[t+1], vol[t+0.5], vol[t]]
         if self.BETWEEN_PHASES:
             combined = get_n_windows_between_phases_from_single4D(model_inputs, idx)
             combined_m = get_n_windows_between_phases_from_single4D(model_m_inputs, idx)
-        else:
+        else: # Extract he motion at each phase, defined by the window size
+            # combined --> t-w, t, t+w, We can use this window in different combinations as input and target
             combined = get_n_windows_from_single4D(model_inputs, idx, window_size=self.WINDOW_SIZE)
 
         logging.debug('windowing slicing took: {:0.3f} s'.format(time() - t1))
         t1 = time()
 
-        # clip, pad/crop and normalise
+        # results in: 5,z,x,y,c with c==3
+        # temporal order of these channels: [nda[idx_shift_to_left], nda[idx_middle], nda[idxs]]
         combined = np.stack(combined, axis=-1)
         combined_m = np.stack(combined_m, axis=-1)
         logging.debug('stacking took: {:0.3f} s'.format(time() - t1))
@@ -1947,6 +1953,8 @@ class PhaseMaskWindowGenerator(DataGenerator):
         t0 = time()
         t1 = time()
         # --------------- LOAD THE MODEL INPUT--------------
+        # combined: 5,z,x,y,c with c==3
+        # temporal order of these channels: [nda[idx_shift_to_left], nda[idx_middle], nda[idxs]]
         if self.IN_MEMORY:
             combined, combined_m = self.IMAGES_SITK[ID], self.MASKS_SITK[ID]
         else:

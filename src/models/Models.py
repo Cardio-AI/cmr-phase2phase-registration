@@ -596,7 +596,7 @@ def create_RegistrationModel_inkl_mask(config):
         flow = tf.stack(flows, axis=1)
 
         if COMPOSE_CONSISTENCY:
-            # composed flowfield should move ED to ED
+            # composed flowfield should move each phase to ED
             comp = create_dense_compose(config)
             flows_composed = comp(flow)
             flows_composed = tf.unstack(flows_composed, axis=1)
@@ -605,8 +605,6 @@ def create_RegistrationModel_inkl_mask(config):
                            zip(input_vols, flows_composed)]
             comp_transformed = tf.stack(comp_transformed, axis=1)
             comp_transformed = tf.keras.layers.Lambda(lambda x: x, name='comp_transformed')(comp_transformed)
-
-
 
         flow = tf.keras.layers.Lambda(lambda x : x, name='flowfield')(flow)
         transformed_mask = tf.keras.layers.Lambda(lambda x: x, name='transformed_mask')(transformed_mask)
@@ -688,7 +686,6 @@ def create_dense_compose(config, networkname='dense_compose_displacement'):
         inputs = Input((5, *config.get('DIM', [10, 224, 224]), 3))
         indexing = config.get('INDEXING', 'ij')
         reverse = config.get('REVERSE_COMPOSE', False)
-
         # warp the source with the flow
         flows = tf.unstack(inputs, axis=1)
 
@@ -700,6 +697,7 @@ def create_dense_compose(config, networkname='dense_compose_displacement'):
         #e.g. for compose:
         # MS->ED = [0]
         # ES->ED = [1,0]
+        # PF->ED = [2,1,0]
         # list(reversed())
         if reverse:
             y = [ComposeTransform(interp_method='linear', shift_center=True, indexing=indexing,

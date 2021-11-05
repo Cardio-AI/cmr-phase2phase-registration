@@ -125,7 +125,7 @@ def pred_fold(config, debug=True):
             cmr_m = cmr_moved[i]
             msk_mov = msk_moving[i][...,0:1]
             msk_t = msk_target[i] # target mask of each pair-wise p2p
-            msk_ed = msk_target[0] # ED Mask
+            msk_ed = np.repeat(msk_target[i][0:1],5,axis=0)# mask the compose flowfield with ED (fixed)
             msk_m = msk_moved[i]
             flow = flows[i]
             flow_c = vects_composed[i]
