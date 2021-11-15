@@ -1349,6 +1349,7 @@ class PhaseWindowGenerator(DataGenerator):
         self.yield_masks = yield_masks
         self.TARGET_CHANNELS = config.get('TARGET_CHANNELS', 1)
         self.IN_MEMORY = in_memory
+        self.REGISTER_BACKWARDS = config.get('REGISTER_BACKWARDS', False)
 
         """if self.yield_masks: # this is just for the case that we want to yield masks with the same pre-processing as applied to the images
             self.IMG_CHANNELS = 1
@@ -1570,7 +1571,7 @@ class PhaseWindowGenerator(DataGenerator):
         # combined --> t-w, t, t+w, We can use this window in different combinations as input and target
 
         if self.BETWEEN_PHASES:
-            combined = get_n_windows_between_phases_from_single4D(model_inputs, idx)
+            combined = get_n_windows_between_phases_from_single4D(model_inputs, idx, register_backwards=self.REGISTER_BACKWARDS)
         else:
             combined = get_n_windows_from_single4D(model_inputs, idx, window_size=self.WINDOW_SIZE)
 
@@ -1662,6 +1663,7 @@ class PhaseMaskWindowGenerator(DataGenerator):
         self.THREAD_POOL = concurrent.futures.ThreadPoolExecutor(max_workers=12)
         self.ISTRAINING = config.get('ISTRAINING', True) # true == sparse myo mask for displacement
         self.COMPOSE_CONSISTENCY = config.get('COMPOSE_CONSISTENCY', False)
+        self.REGISTER_BACKWARDS = config.get('REGISTER_BACKWARDS', False)
 
         self.X_SHAPE = np.empty((self.BATCHSIZE, self.PHASES, *self.DIM, self.IMG_CHANNELS), dtype=np.float32)
         self.X2_SHAPE = np.empty((self.BATCHSIZE, self.PHASES, *self.DIM, self.IMG_CHANNELS), dtype=np.float32)
@@ -1922,8 +1924,8 @@ class PhaseMaskWindowGenerator(DataGenerator):
         # [nda[idx_shift_to_left], nda[idx_middle], nda[idxs]] each with 5,z,x,y
         # in other words: [vol[t+1], vol[t+0.5], vol[t]]
         if self.BETWEEN_PHASES:
-            combined = get_n_windows_between_phases_from_single4D(model_inputs, idx)
-            combined_m = get_n_windows_between_phases_from_single4D(model_m_inputs, idx)
+            combined = get_n_windows_between_phases_from_single4D(model_inputs, idx, register_backwards=self.REGISTER_BACKWARDS)
+            combined_m = get_n_windows_between_phases_from_single4D(model_m_inputs, idx, register_backwards=self.REGISTER_BACKWARDS)
         else: # Extract he motion at each phase, defined by the window size
             # combined --> t-w, t, t+w, We can use this window in different combinations as input and target
             combined = get_n_windows_from_single4D(model_inputs, idx, window_size=self.WINDOW_SIZE)

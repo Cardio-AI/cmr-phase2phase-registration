@@ -113,9 +113,14 @@ def pred_fold(config, debug=True):
         else:
             cmr_moved, msk_moved, flows = pred
 
+        # mask the flow field with the target mask
+        # also necessary for the compose
+        flows_masked = flows.copy()
+        msk_t = np.squeeze(msk_target.astype(np.bool))
+        for dim in range(flows.shape[-1]):
+            flows_masked[..., dim][~msk_t] = 0
         comp = create_dense_compose(config)
-        vects_composed = comp.predict(flows)
-        # mask the vector field
+        flows_composed_masked = comp.predict(flows_masked)
 
         # iterate over the patients and
         for i in range(len(x_val_sax)):
@@ -125,24 +130,16 @@ def pred_fold(config, debug=True):
             cmr_m = cmr_moved[i]
             msk_mov = msk_moving[i][...,0:1]
             msk_t = msk_target[i] # target mask of each pair-wise p2p
-            msk_ed = np.repeat(msk_target[i][0:1],5,axis=0)# mask the compose flowfield with ED (fixed)
+            #msk_ed = np.repeat(msk_target[i][0:1],5,axis=0)# mask the compose flowfield with ED (fixed)
             msk_m = msk_moved[i]
             flow = flows[i]
-            flow_c = vects_composed[i]
+            flow_comp_m = flows_composed_masked[i]
+            flow_masked = flows_masked[i]
             fullmsk_t = fullmsk_target[i]
-            flow_masked = flow.copy()
-            msk_myo = np.squeeze(msk_t.astype(np.bool))
-            for dim in range(flow.shape[-1]):
-                flow_masked[...,dim][~msk_myo] = 0
 
-            # mask the compose flow field
-            flow_comp_masked = flow_c.copy()
-            msk_myo_ed = np.squeeze(msk_ed.astype(np.bool))
-            for dim in range(flow_c.shape[-1]):
-                flow_comp_masked[..., dim][~msk_myo_ed] = 0
             # save all files of this patient
             p = os.path.basename(filename).split('_volume')[0].lower()
-            volumes = [cmr_mov,cmr_t,cmr_m,msk_mov,msk_t,msk_m,flow,flow_comp_masked,flow_masked,fullmsk_t]
+            volumes = [cmr_mov,cmr_t,cmr_m,msk_mov,msk_t,msk_m,flow,flow_comp_m,flow_masked,fullmsk_t]
 
             suffixes = ['cmr_moving.nii', 'cmr_target.nii', 'cmr_moved.nii',
                         'myo_moving.nii', 'myo_target.nii', 'myo_moved.nii',
@@ -171,7 +168,6 @@ def pred_fold(config, debug=True):
     del cmr_moved
     del msk_moved
     del flows
-    del vects_composed
     gc.collect()
 
     logging.info('pred on fold {} finished after {:0.3f} sec'.format(FOLD, time() - t0))

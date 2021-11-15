@@ -557,7 +557,7 @@ def create_RegistrationModel_inkl_mask(config):
 
         # start with very small deformation
         Conv_layer = Conv(ndims, kernel_size=3, padding='same',
-                          kernel_initializer=tensorflow.keras.initializers.RandomNormal(mean=0.0, stddev=1e-5),
+                          kernel_initializer=tensorflow.keras.initializers.RandomNormal(mean=0.0, stddev=1e-10),
                           name='unet2flow')
         st_layer = nrn_layers.SpatialTransformer(interp_method=interp_method, indexing=indexing, ident=True,
                                                  name='deformable_layer')
@@ -688,7 +688,7 @@ def create_dense_compose(config, networkname='dense_compose_displacement'):
         reverse = config.get('REVERSE_COMPOSE', False)
         # warp the source with the flow
         flows = tf.unstack(inputs, axis=1)
-
+        #reverse=True
         # we need to reverse the transforms as we register from t+1 to t.
         # we need to provide the order in which we would apply the compose transforms
         # ED, MS, ES, PF, MD

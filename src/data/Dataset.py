@@ -1545,7 +1545,7 @@ def get_n_windows_from_single4D(nda4d, idx, window_size=1):
     logging.debug('gather nd took: {:0.3f} s'.format(time() - t1))
     return [t_lower, t, t_upper]
 
-def get_n_windows_between_phases_from_single4D(nda4d, idx):
+def get_n_windows_between_phases_from_single4D(nda4d, idx, register_backwards=True):
     """
     Split a 4D volume in two lists of 3D volumes
     With list1[n] - list2[n] two 3D ndas which shows the start and endpoint of a timepoint n
@@ -1554,6 +1554,7 @@ def get_n_windows_between_phases_from_single4D(nda4d, idx):
     ----------
     nda4d : 4D nda
     idx : np.array of a list of int
+    register_backwards: (bool), True = register T+1 --> T
 
     idxs (ED,MS,ES,PF,MD)
     idxs_middle
@@ -1582,21 +1583,22 @@ def get_n_windows_between_phases_from_single4D(nda4d, idx):
 
     # We add a volume from t/2, which should lie between both phases, for the cycle overflow we need
     # to handle a special case
-    """
-    [ 2  4  8 10 14]
-    [ 4  8 10 14  2]
-    divide by 2 and than mod by length --> last index with "8" is wrong
-    [ 3  6  9 12  8]
-    mod by length and than divide by 2 --> third and fourth index with "1" and "4" are wrong.
-    [3 6 1 4 0]
-    we need a different operation for the cycle case (cf. np.where function below):
-    
-    array([ 3,  6,  9, 12,  0])
-    """
-    idxs_middle = np.where(idxs_shift_to_left > idxs_phases, np.mod((idxs_phases + idxs_shift_to_left) // 2, y_len), np.mod((idxs_phases + idxs_shift_to_left), y_len) // 2)
 
-    # this is a buggy cycle overflow version, compare example above
-    #idx = (idxs_phases + idxs_shift_to_left)//2
+    # failure cases if we first divide or first apply modulo
+    # [ 2  4  8 10 14]
+    # [ 4  8 10 14  2]
+
+    # 1. divide by 2 and than mod by length --> last index with "8" is wrong
+    # [ 3  6  9 12  8]
+
+    # 2. mod by length and than divide by 2 --> third and fourth index with "1" and "4" are wrong.
+    # [3 6 1 4 0]
+
+    # we need a different operation for the cycle case (cf. np.where function below):
+    # which yields:
+    # array([ 3,  6,  9, 12,  0])
+
+    idxs_middle = np.where(idxs_shift_to_left > idxs_phases, np.mod((idxs_phases + idxs_shift_to_left) // 2, y_len), np.mod((idxs_phases + idxs_shift_to_left), y_len) // 2)
 
     debug('idx: {}'.format(idxs_phases))
     # fake ring functionality with mod
@@ -1624,17 +1626,22 @@ def get_n_windows_between_phases_from_single4D(nda4d, idx):
     logging.debug('gather nd took: {:0.3f} s'.format(time() - t1))
     if return_sitk: # return sitk images
         t_phases, t_middle, t_shift_to_left = sitk.GetImageFromArray(t_phases), sitk.GetImageFromArray(t_middle), sitk.GetImageFromArray(t_shift_to_left)
-        return list(map(lambda x: copy_meta_and_save(new_image=x,
+        windows = list(map(lambda x: copy_meta_and_save(new_image=x,
                                                        reference_sitk_img=sitk_save,
                                                        full_filename = None,
                                                        overwrite_spacing = None,
-                                                       copy_direction = True),[t_phases, t_middle, t_shift_to_left]))
+                                                       copy_direction = True),[t_shift_to_left, t_middle, t_phases]))
 
     else:
         # INVERTED REGISTRATION TEST
-        # original:
-        # return [t_shift_to_left, t_middle, t_phases]
-        return [t_phases, t_middle, t_shift_to_left]
+        # original: # T=fixed, T+1=moving
+        if register_backwards:
+            windows= [t_shift_to_left, t_middle, t_phases]
+        else:
+            windows = [t_phases, t_middle, t_shift_to_left]
+        return windows
+        # here: T=moving, T+1=fixed, seems to register worse, need to check compose
+        # return [t_phases, t_middle, t_shift_to_left]
 
 
 def save_3d(nda, fname, isVector=False):
