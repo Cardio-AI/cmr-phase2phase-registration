@@ -1612,6 +1612,7 @@ class PhaseWindowGenerator(DataGenerator):
         # We repeat/tile the 3D volume at this time, to avoid resampling/augmenting the same slices multiple times
         # Ideally this saves computation time and memory
 
+
         if not self.yield_masks:
             model_inputs = clip_quantile(model_inputs, .9999)
             model_targets = clip_quantile(model_targets, .9999)
@@ -1789,7 +1790,8 @@ class PhaseMaskWindowGenerator(DataGenerator):
         x = self.IMAGES[ID]
 
         # use the load_masked_img wrapper to enable masking of the images, currently not necessary, but nice to have
-        model_inputs = load_masked_img(sitk_img_f=x, mask=self.MASKING_IMAGE,
+        # Note replace mask = False with mask=sel.MASKING_IMAGE
+        model_inputs = load_masked_img(sitk_img_f=x, mask=False,
                                        masking_values=self.MASKING_VALUES, replace=self.REPLACE_WILDCARD, maskAll=False)
         model_m_inputs = load_msk(f_name=x.replace(self.REPLACE_WILDCARD[0], self.REPLACE_WILDCARD[1]),
                                   valid_labels=[2])
@@ -1939,6 +1941,12 @@ class PhaseMaskWindowGenerator(DataGenerator):
         combined_m = np.stack(combined_m, axis=-1)
         logging.debug('stacking took: {:0.3f} s'.format(time() - t1))
         t1 = time()
+
+        # A masked, non-isotrop cmr will have steps after it is resampled to isotrop resolution
+        # remove these steps with the smoothed myo mask
+        if self.MASKING_IMAGE:
+            combined[...,0][~(combined_m[...,0]>0.1)] = 0
+            combined[...,-1][~(combined_m[...,-1] > 0.1)] = 0
 
         if not self.yield_masks: # clip and normalisation is faster on cropped nda
             combined = clip_quantile(combined, .9999)
