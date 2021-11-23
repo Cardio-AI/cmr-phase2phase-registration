@@ -544,7 +544,7 @@ def create_RegistrationModel_inkl_mask(config):
         COMPOSE_CONSISTENCY = config.get('COMPOSE_CONSISTENCY', False)
 
         # input vol with timesteps, z, x, y, c -> =number of input timesteps
-        input_tensor = Input(shape=(T_SHAPE, *input_shape, config.get('IMG_CHANNELS',1)))
+        input_tensor_raw = Input(shape=(T_SHAPE, *input_shape, config.get('IMG_CHANNELS',1)))
         input_mask_tensor = Input(shape=(T_SHAPE, *input_shape, config.get('IMG_CHANNELS', 1)))
         input_tensor_empty = Input(shape=(T_SHAPE, *input_shape, 3))  # empty vector field
         # define standard values according to the convention over configuration paradigm
@@ -556,27 +556,46 @@ def create_RegistrationModel_inkl_mask(config):
         take_t_elem = config.get('INPUT_T_ELEM', 0)
 
         # start with very small deformation
-        Conv_layer = Conv(ndims, kernel_size=3, padding='same',
+        conv_layer_p2p = Conv(ndims, kernel_size=3, padding='same',
                           kernel_initializer=tensorflow.keras.initializers.RandomNormal(mean=0.0, stddev=1e-10),
-                          name='unet2flow')
+                          name='unet2flow_p2p')
+        conv_layer_p2ed = Conv(ndims, kernel_size=3, padding='same',
+                              kernel_initializer=tensorflow.keras.initializers.RandomNormal(mean=0.0, stddev=1e-10),
+                              name='unet2flow_p2ed')
         st_layer = nrn_layers.SpatialTransformer(interp_method=interp_method, indexing=indexing, ident=True,
                                                  name='deformable_layer')
+        st_layer_p2ed = nrn_layers.SpatialTransformer(interp_method=interp_method, indexing=indexing, ident=True,
+                                                 name='deformable_layer_p2ed')
         st_mask_layer = nrn_layers.SpatialTransformer(interp_method=interp_method, indexing=indexing, ident=True,
                                                       name='deformable_mask_layer')
 
+
+
+        if COMPOSE_CONSISTENCY:
+            ed = input_tensor_raw[:,-1:,...,-1:] # extract the ed phase as volume
+            print('ed shape:', ed.shape)
+            eds = tf.repeat(ed,input_tensor_raw.shape[1], axis=1) # repeat ED along the t-axis
+            print('eds shape:',eds.shape)
+            print('input shape:', input_tensor_raw.shape)
+            input_tensor = tf.concat([input_tensor_raw, eds], axis=-1) # add the ed phase as 4th channel to each phase
+            config['IMG_CHANNELS'] = config.get('IMG_CHANNELS',1) + 1 # extend the config, for the u-net creation
+        else:
+            input_tensor = input_tensor_raw
+
+        # we need to build the u-net after the compose concat path to make sure that our u-net input channels match the input
         unet = create_unet(config, single_model=False)
 
         input_vols = tf.unstack(input_tensor, axis=1)
         input_mask_vols = tf.unstack(input_mask_tensor, axis=1)
-        print(input_vols[0].shape)
+        #print(input_vols[0].shape)
 
         indicies = list(tf.range(len(input_vols)))
         zipped = list(zip(input_vols, indicies))
         # random.shuffle(zipped)
         input_vols_shuffled, indicies = zip(*zipped)
         pre_flows = [unet(vol) for vol in input_vols_shuffled]
-        flows = [Conv_layer(vol) for vol in pre_flows]
-        flows, _ = zip(*sorted(zip(flows, indicies), key=lambda tup: tup[1]))
+        flows_p2p = [conv_layer_p2p(vol) for vol in pre_flows]
+        flows, _ = zip(*sorted(zip(flows_p2p, indicies), key=lambda tup: tup[1]))
 
         # Each CMR input vol has CMR data from three timesteps stacked as channel: t1,t1+t2/2,t2
         # transform only one timestep, mostly the first one
@@ -597,14 +616,18 @@ def create_RegistrationModel_inkl_mask(config):
 
         if COMPOSE_CONSISTENCY:
             # composed flowfield should move each phase to ED
-            comp = create_dense_compose(config)
-            flows_composed = comp(flow)
-            flows_composed = tf.unstack(flows_composed, axis=1)
+            #comp = create_dense_compose(config)
+            #flows_composed = comp(flow)
+            #flows_composed = tf.unstack(flows_composed, axis=1)
+            flows_p2ed = [conv_layer_p2ed(vol) for vol in pre_flows]
+            flows_p2ed, _ = zip(*sorted(zip(flows_p2ed, indicies), key=lambda tup: tup[1]))
             # they should transform each timestep to ED
-            comp_transformed = [st_layer([input_vol[..., take_t_elem][..., tf.newaxis], flow]) for input_vol, flow in
-                           zip(input_vols, flows_composed)]
+            comp_transformed = [st_layer_p2ed([input_vol[..., take_t_elem][..., tf.newaxis], flow]) for input_vol, flow in
+                           zip(input_vols, flows_p2ed)]
+
             comp_transformed = tf.stack(comp_transformed, axis=1)
             comp_transformed = tf.keras.layers.Lambda(lambda x: x, name='comp_transformed')(comp_transformed)
+            print('comp transformed:', comp_transformed.shape)
 
         flow = tf.keras.layers.Lambda(lambda x : x, name='flowfield')(flow)
         transformed_mask = tf.keras.layers.Lambda(lambda x: x, name='transformed_mask')(transformed_mask)
@@ -613,7 +636,7 @@ def create_RegistrationModel_inkl_mask(config):
         outputs = [transformed, transformed_mask, flow]
         if COMPOSE_CONSISTENCY: outputs = [comp_transformed] + outputs
 
-        model = Model(name='simpleregister', inputs=[input_tensor, input_mask_tensor, input_tensor_empty],
+        model = Model(name='simpleregister', inputs=[input_tensor_raw, input_mask_tensor, input_tensor_empty],
                       outputs=outputs)
 
         from tensorflow.keras.losses import mse

@@ -1171,6 +1171,8 @@ def compose(transforms, interp_method='linear', shift_center=True, indexing='ij'
             nxt = ensure_dense(nxt, shape)
             curr = ensure_dense(curr, shape)
             curr = curr + transform(nxt, curr, interp_method=interp_method, indexing=indexing)
+            #curr = transform(nxt, curr, interp_method=interp_method, indexing=indexing)
+
         else:
             # compose affines
             nxt = ensure_square_affine(nxt)

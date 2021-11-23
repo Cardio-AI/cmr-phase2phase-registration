@@ -69,7 +69,7 @@ def create_unet(config, metrics=None, networkname='unet', single_model=True, sup
     with strategy.scope():
 
         inputs = Input((*config.get('DIM', [224, 224]), config.get('IMG_CHANNELS', 3)))
-        print(inputs.shape)
+        print('build u-net for input shape: ',inputs.shape)
 
         # define standard values according to convention over configuration paradigm
         metrics = [keras.metrics.binary_accuracy] if metrics is None else metrics
