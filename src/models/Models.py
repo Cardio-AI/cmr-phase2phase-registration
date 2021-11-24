@@ -621,7 +621,7 @@ def create_RegistrationModel_inkl_mask(config):
             #flows_composed = comp(flow)
             #flows_composed = tf.unstack(flows_composed, axis=1)
             flows_p2ed = [conv_layer_p2ed(vol) for vol in pre_flows]
-            flows_p2ed, _ = zip(*sorted(zip(flows_p2ed, indicies), key=lambda tup: tup[1]))
+            #flows_p2ed, _ = zip(*sorted(zip(flows_p2ed, indicies), key=lambda tup: tup[1])) # if shuffle
             # they should transform each timestep to ED
             comp_transformed = [st_layer_p2ed([input_vol[..., take_t_elem][..., tf.newaxis], flow]) for input_vol, flow in
                            zip(input_vols, flows_p2ed)]
