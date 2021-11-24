@@ -93,6 +93,7 @@ def pred_fold(config, debug=True):
         pred_mask_config['MASKING_IMAGE'] = False
         pred_mask_config['IMG_CHANNELS'] = 1
         pred_mask_config['TARGET_CHANNELS'] = 1
+        compose_given = config.get('COMPOSE_CONSISTENCY', False)
         masks_all_labels_generator = PhaseWindowGenerator(x_train_sax_masks, x_train_sax_masks, config=pred_mask_config,
                                                       yield_masks=True)
         # new version
@@ -104,12 +105,17 @@ def pred_fold(config, debug=True):
         cmr_moving, msk_moving = zip(*x)
         if len(y[0]) == 4:
             ed_repeated, cmr_target, msk_target, _ = zip(*y)
+        elif len(y[0])==5:
+            ed_repeated, cmr_target, msk_target, _, _ = zip(*y)
         else:
             cmr_target, msk_target, _ = zip(*y)
         cmr_moving, msk_moving, cmr_target, msk_target = map(np.concatenate, [cmr_moving, msk_moving,cmr_target, msk_target])
         pred = model.predict(pred_generator)
         if len(pred)==4:
             comp_moved2ed, cmr_moved, msk_moved, flows = pred
+        elif len(pred)==5:
+            comp_moved2ed, cmr_moved, msk_moved, flows, flows2ed = pred
+
         else:
             cmr_moved, msk_moved, flows = pred
 
@@ -119,8 +125,16 @@ def pred_fold(config, debug=True):
         msk_t = np.squeeze(msk_target.astype(np.bool))
         for dim in range(flows.shape[-1]):
             flows_masked[..., dim][~msk_t] = 0
-        comp = create_dense_compose(config)
-        flows_composed_masked = comp.predict(flows_masked)
+
+        if compose_given:
+            msk_ed = np.repeat(msk_target[:,0:1],5,axis=1)# mask the compose flowfield with ED (fixed)
+            flows_composed_masked = flows2ed.copy()
+            msk_ed = np.squeeze(msk_ed.astype(np.bool))
+            for dim in range(flows2ed.shape[-1]):
+                flows_composed_masked[..., dim][~msk_ed] = 0
+        else:
+            comp = create_dense_compose(config)
+            flows_composed_masked = comp.predict(flows_masked)
 
         # iterate over the patients and
         for i in range(len(x_val_sax)):
@@ -130,7 +144,7 @@ def pred_fold(config, debug=True):
             cmr_m = cmr_moved[i]
             msk_mov = msk_moving[i][...,0:1]
             msk_t = msk_target[i] # target mask of each pair-wise p2p
-            #msk_ed = np.repeat(msk_target[i][0:1],5,axis=0)# mask the compose flowfield with ED (fixed)
+
             msk_m = msk_moved[i]
             flow = flows[i]
             flow_comp_m = flows_composed_masked[i]

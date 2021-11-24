@@ -672,6 +672,8 @@ class WindowMotionCallback(Callback):
                         movings, vects = pred_
                     elif len(pred_) == 4:
                         _, movings, moving_m, vects = pred_
+                    elif len(pred_) == 5:
+                        _, movings, moving_m, vects, _ = pred_
                     else:
                         movings, moving_m, vects = pred_
                     # logging.info(predictions.shape)
@@ -684,7 +686,7 @@ class WindowMotionCallback(Callback):
                     for p in range(len(phases)):
 
                         # Slice the volumes
-                        if len(y) == 4: # comp_cmr, target_cmr, target_msk, zeros
+                        if len(y) in [4,5]: # comp_cmr, target_cmr, target_msk, zeros
                             idx_moving_cmr = 0
                             idy_target_cmr = 1
                             idx_moving_msk = 1

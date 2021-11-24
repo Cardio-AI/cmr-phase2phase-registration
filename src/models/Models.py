@@ -542,6 +542,7 @@ def create_RegistrationModel_inkl_mask(config):
         reg_loss_weight = config.get('REG_LOSS_WEIGHT', 0.001)
         learning_rate = config.get('LEARNING_RATE', 0.001)
         COMPOSE_CONSISTENCY = config.get('COMPOSE_CONSISTENCY', False)
+        config_temp = config.copy()
 
         # input vol with timesteps, z, x, y, c -> =number of input timesteps
         input_tensor_raw = Input(shape=(T_SHAPE, *input_shape, config.get('IMG_CHANNELS',1)))
@@ -578,12 +579,12 @@ def create_RegistrationModel_inkl_mask(config):
             print('eds shape:',eds.shape)
             print('input shape:', input_tensor_raw.shape)
             input_tensor = tf.concat([input_tensor_raw, eds], axis=-1) # add the ed phase as 4th channel to each phase
-            config['IMG_CHANNELS'] = config.get('IMG_CHANNELS',1) + 1 # extend the config, for the u-net creation
+            config_temp['IMG_CHANNELS'] = config.get('IMG_CHANNELS',1) + 1 # extend the config, for the u-net creation
         else:
             input_tensor = input_tensor_raw
 
         # we need to build the u-net after the compose concat path to make sure that our u-net input channels match the input
-        unet = create_unet(config, single_model=False)
+        unet = create_unet(config_temp, single_model=False)
 
         input_vols = tf.unstack(input_tensor, axis=1)
         input_mask_vols = tf.unstack(input_mask_tensor, axis=1)
@@ -627,6 +628,9 @@ def create_RegistrationModel_inkl_mask(config):
 
             comp_transformed = tf.stack(comp_transformed, axis=1)
             comp_transformed = tf.keras.layers.Lambda(lambda x: x, name='comp_transformed')(comp_transformed)
+            flow_composed = tf.stack(flows_p2ed, axis=1)
+            flow_composed = tf.keras.layers.Lambda(lambda x: x, name='flowfield2ed')(flow_composed)
+
             print('comp transformed:', comp_transformed.shape)
 
         flow = tf.keras.layers.Lambda(lambda x : x, name='flowfield')(flow)
@@ -634,7 +638,7 @@ def create_RegistrationModel_inkl_mask(config):
         transformed = tf.keras.layers.Lambda(lambda x: x, name='transformed')(transformed)
 
         outputs = [transformed, transformed_mask, flow]
-        if COMPOSE_CONSISTENCY: outputs = [comp_transformed] + outputs
+        if COMPOSE_CONSISTENCY: outputs = [comp_transformed] + outputs + [flow_composed]
 
         model = Model(name='simpleregister', inputs=[input_tensor_raw, input_mask_tensor, input_tensor_empty],
                       outputs=outputs)
@@ -644,9 +648,9 @@ def create_RegistrationModel_inkl_mask(config):
         from src.utils.Metrics import dice_coef_loss
 
         losses = [MSE_().loss, dice_coef_loss, Grad('l2').loss]
-        if COMPOSE_CONSISTENCY: losses = [MSE_().loss] + losses
+        if COMPOSE_CONSISTENCY: losses = [MSE_().loss] + losses + [Grad('l2').loss]
         weights = [image_loss_weight, dice_loss_weight, reg_loss_weight]
-        if COMPOSE_CONSISTENCY: weights = [image_loss_weight] + weights
+        if COMPOSE_CONSISTENCY: weights = [image_loss_weight] + weights + [reg_loss_weight]
         model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=learning_rate), loss=losses,
                       loss_weights=weights)
 

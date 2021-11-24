@@ -1655,6 +1655,7 @@ class PhaseMaskWindowGenerator(DataGenerator):
         self.RESAMPLE_T = config.get('RESAMPLE_T', False)
         self.WINDOW_SIZE = config.get('WINDOW_SIZE', 1)
         self.IMG_CHANNELS = config.get('IMG_CHANNELS', 1)
+        if self.IMG_CHANNELS == 4: self.IMG_CHANNELS=3
         self.INPUT_T_ELEM = config.get('INPUT_T_ELEM', 0)
         self.REPLACE_WILDCARD = ('clean', 'mask')
         self.BETWEEN_PHASES = config.get('BETWEEN_PHASES', False)
@@ -1769,7 +1770,7 @@ class PhaseMaskWindowGenerator(DataGenerator):
         logging.debug('Batchsize: {} preprocessing took: {:0.3f} sec'.format(self.BATCHSIZE, time() - t0))
         zeros = np.zeros((*x.shape[:-1], 3), dtype=np.float32)
         if self.COMPOSE_CONSISTENCY:
-            return tuple([[x,x2], [comp_transformed,y, y2, zeros]])
+            return tuple([[x,x2], [comp_transformed,y, y2, zeros, zeros]])
         else:
             return tuple([[x, x2], [y, y2, zeros]])
 
