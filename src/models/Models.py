@@ -564,84 +564,61 @@ def create_RegistrationModel_inkl_mask(config):
                               kernel_initializer=tensorflow.keras.initializers.RandomNormal(mean=0.0, stddev=1e-10),
                               name='unet2flow_p2ed')
         st_layer = nrn_layers.SpatialTransformer(interp_method=interp_method, indexing=indexing, ident=True,
-                                                 name='deformable_layer')
+                                                 name='deformable_p2p')
         st_layer_p2ed = nrn_layers.SpatialTransformer(interp_method=interp_method, indexing=indexing, ident=True,
-                                                 name='deformable_layer_p2ed')
+                                                 name='deformable_p2ed')
         st_mask_layer = nrn_layers.SpatialTransformer(interp_method=interp_method, indexing=indexing, ident=True,
-                                                      name='deformable_mask_layer')
-
+                                                      name='deformable_mask')
+        # lambda layers for spatial transformer indexing
         st_lambda_layer = tf.keras.layers.Lambda(
-            lambda x: st_layer([x[..., 0:1], x[..., 1:]]), name='deformable_lambda_layer')
+            lambda x: st_layer([x[...,0:1], x[..., -3:]]), name='p2p')
+        st_p2ed_lambda_layer = tf.keras.layers.Lambda(
+            lambda x: st_layer_p2ed([x[...,0:1], x[..., -3:]]), name='p2ed')
+        st_mask_lambda_layer = tf.keras.layers.Lambda(
+            lambda x: st_mask_layer([x[...,0:1], x[..., -3:]]), name='p2p_mask')
 
 
 
         if COMPOSE_CONSISTENCY:
-            ed = input_tensor_raw[:,-1:,...,-1:] # extract the ed phase as volume
-            print('ed shape:', ed.shape)
-            eds = tf.repeat(ed,input_tensor_raw.shape[1], axis=1) # repeat ED along the t-axis
-            print('eds shape:',eds.shape)
-            print('input shape:', input_tensor_raw.shape)
-            input_tensor = tf.concat([input_tensor_raw, eds], axis=-1) # add the ed phase as 4th channel to each phase
+            # extract the ed phase as volume
+            # repeat ED along the t-axis
+            # add the ed phase as 4th channel to each phase
+            stack_lambda_layer = tf.keras.layers.Lambda(
+                lambda x: tf.keras.layers.Concatenate(axis=-1)([x, tf.repeat(x[:, -1:, ..., -1:], x.shape[1], axis=1)]),
+                name='stack_ed')
+            input_tensor = stack_lambda_layer(input_tensor_raw)
             config_temp['IMG_CHANNELS'] = config.get('IMG_CHANNELS',1) + 1 # extend the config, for the u-net creation
         else:
             input_tensor = input_tensor_raw
 
         # we need to build the u-net after the compose concat path to make sure that our u-net input channels match the input
         unet = create_unet(config_temp, single_model=False)
-        
-        input_vols = tf.unstack(input_tensor, axis=1)
-        input_mask_vols = tf.unstack(input_mask_tensor, axis=1)
-        #print(input_vols[0].shape)
-
-        indicies = list(tf.range(len(input_vols)))
-        zipped = list(zip(input_vols, indicies))
-        # random.shuffle(zipped)
-        input_vols_shuffled, indicies = zip(*zipped)
-        pre_flows = [unet(vol) for vol in input_vols_shuffled]
-        flows = [conv_layer_p2p(vol) for vol in pre_flows]
-        #flows, _ = zip(*sorted(zip(flows_p2p, indicies), key=lambda tup: tup[1]))
-
+        print('input before unet:', input_tensor.shape)
+        pre_flows = TimeDistributed(unet)(input_tensor)
+        print('input after unet:', pre_flows.shape)
+        flows = TimeDistributed(conv_layer_p2p)(pre_flows)
+        print('flows_p2p:', flows.shape)
         # Each CMR input vol has CMR data from three timesteps stacked as channel: t1,t1+t2/2,t2
         # transform only one timestep, mostly the first one
-        transformed = [st_layer([input_vol[..., take_t_elem][..., tf.newaxis], flow]) for input_vol, flow in
-                       zip(input_vols, flows)]
+        transformed = TimeDistributed(st_lambda_layer)(tf.keras.layers.Concatenate(axis=-1)([input_tensor_raw, flows]))
+        print('transformed_p2p:', transformed.shape)
+        transformed_mask = TimeDistributed(st_mask_lambda_layer)(tf.keras.layers.Concatenate(axis=-1)([input_mask_tensor, flows]))
 
-        # Remove the Z flow when transforming the masks, as we provide only spare masks,
-        # moving a mask in z results in a transformed mask at Z where we dont have a mask in the GT
-        # The dice loss, will than backpropagate not to move in Z at all, as this will reduce the dice loss
-        #empty_z_flow = tf.zeros_like(flows[0])
-        #mod_mask_flows = [tf.concat([empty_z_flow[...,0:1], flow[...,1:]], axis=-1) for flow in flows]
-        transformed_mask = [st_mask_layer([input_vol[..., take_t_elem][..., tf.newaxis], flow]) for input_vol, flow in
-                            zip(input_mask_vols, flows)]
-
-        transformed = tf.stack(transformed, axis=1)
-        transformed_mask = tf.stack(transformed_mask, axis=1)
-        flow = tf.stack(flows, axis=1)
 
         if COMPOSE_CONSISTENCY:
             # composed flowfield should move each phase to ED
-            #comp = create_dense_compose(config)
-            #flows_composed = comp(flow)
-            #flows_composed = tf.unstack(flows_composed, axis=1)
-            flows_p2ed = [conv_layer_p2ed(vol) for vol in pre_flows]
-            #flows_p2ed, _ = zip(*sorted(zip(flows_p2ed, indicies), key=lambda tup: tup[1])) # if shuffle
-            # they should transform each timestep to ED
-            comp_transformed = [st_layer_p2ed([input_vol[..., take_t_elem][..., tf.newaxis], flow]) for input_vol, flow in
-                           zip(input_vols, flows_p2ed)]
-
-            comp_transformed = tf.stack(comp_transformed, axis=1)
+            flows_p2ed = TimeDistributed(conv_layer_p2ed)(pre_flows)
+            comp_transformed = TimeDistributed(st_p2ed_lambda_layer)(tf.keras.layers.Concatenate(axis=-1)([input_tensor_raw, flows_p2ed]))
             comp_transformed = tf.keras.layers.Lambda(lambda x: x, name='comp_transformed')(comp_transformed)
-            flow_composed = tf.stack(flows_p2ed, axis=1)
-            flow_composed = tf.keras.layers.Lambda(lambda x: x, name='flowfield2ed')(flow_composed)
-
+            flows_p2ed = tf.keras.layers.Lambda(lambda x: x, name='flowfield_p2ed')(flows_p2ed)
             print('comp transformed:', comp_transformed.shape)
 
-        flow = tf.keras.layers.Lambda(lambda x : x, name='flowfield')(flow)
+        flow = tf.keras.layers.Lambda(lambda x : x, name='flowfield_p2p')(flows)
         transformed_mask = tf.keras.layers.Lambda(lambda x: x, name='transformed_mask')(transformed_mask)
         transformed = tf.keras.layers.Lambda(lambda x: x, name='transformed')(transformed)
 
         outputs = [transformed, transformed_mask, flow]
-        if COMPOSE_CONSISTENCY: outputs = [comp_transformed] + outputs + [flow_composed]
+        if COMPOSE_CONSISTENCY: outputs = [comp_transformed] + outputs + [flows_p2ed]
 
         model = Model(name='simpleregister', inputs=[input_tensor_raw, input_mask_tensor],
                       outputs=outputs)
