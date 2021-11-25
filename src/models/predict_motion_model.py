@@ -122,14 +122,14 @@ def pred_fold(config, debug=True):
         # mask the flow field with the target mask
         # also necessary for the compose
         flows_masked = flows.copy()
-        msk_t = np.squeeze(msk_target.astype(np.bool))
+        msk_t = np.squeeze(msk_target>0.1)
         for dim in range(flows.shape[-1]):
             flows_masked[..., dim][~msk_t] = 0
 
         if compose_given:
             msk_ed = np.repeat(msk_target[:,0:1],5,axis=1)# mask the compose flowfield with ED (fixed)
             flows_composed_masked = flows2ed.copy()
-            msk_ed = np.squeeze(msk_ed.astype(np.bool))
+            msk_ed = np.squeeze(msk_ed>0.1)
             for dim in range(flows2ed.shape[-1]):
                 flows_composed_masked[..., dim][~msk_ed] = 0
         else:

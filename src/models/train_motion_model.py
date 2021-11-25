@@ -132,7 +132,7 @@ def train_fold(config, in_memory=False):
         to_file=os.path.join(EXP_PATH, 'model.png'),
         show_layer_names=True,
         rankdir='TB',
-        expand_nested=True,
+        expand_nested=False,
         dpi=96
     )
 

@@ -72,7 +72,7 @@ def train_fold(config, in_memory=False):
 
     """examples = 12
     x_train_sax, y_train_sax, x_val_sax, y_val_sax = x_train_sax[:examples], y_train_sax[:examples], x_val_sax[:examples], y_val_sax[:examples]"""
-
+    x_train_sax = [x for x in x_train_sax if 'patient060' in x] * 4
     logging.info('SAX train CMR: {}, SAX train masks: {}'.format(len(x_train_sax), len(y_train_sax)))
     logging.info('SAX val CMR: {}, SAX val masks: {}'.format(len(x_val_sax), len(y_val_sax)))
 
@@ -80,8 +80,11 @@ def train_fold(config, in_memory=False):
     # check if we find each patient in the corresponding dataframe
 
     METADATA_FILE = DF_META
-    df = pd.read_csv(METADATA_FILE)
+    df = pd.read_csv(METADATA_FILE, dtype={'patient':str, 'ED#':int, 'MS#':int, 'ES#':int, 'PF#':int, 'MD#':int})
     DF_METADATA = df[['patient', 'ED#', 'MS#', 'ES#', 'PF#', 'MD#']]
+    #DF_METADATA['patient'] = df['patient'].astype(str)
+    """DF_METADATA.loc[['ED#', 'MS#', 'ES#', 'PF#', 'MD#']] = DF_METADATA[
+        ['ED#', 'MS#', 'ES#', 'PF#', 'MD#']].astype(int)"""
 
     files_ = x_train_sax + x_val_sax
     info('Check if we find the patient ID and phase mapping for all: {} files.'.format(len(files_)))
@@ -96,9 +99,12 @@ def train_fold(config, in_memory=False):
             else: # DMD data
                 patient_str = os.path.basename(x).split('_volume')[0].lower()
 
+            if 'nii.gz' in patient_str:  # ACDC files e.g.: patient001_4d.nii.gz
+                patient_str = re.search('patient(.{3})_', x)
+                patient_str = patient_str.group(1).upper()
+
             assert len(
                 patient_str) > 0, 'empty patient id found, please check the get_patient_id in fn train_fold(), usually there are path problems'
-
             # returns the indices in the following order: 'ED#', 'MS#', 'ES#', 'PF#', 'MD#'
             # reduce by one, as the indexes start at 0, the excel-sheet at 1
             ind = DF_METADATA[DF_METADATA.patient.str.contains(patient_str)][['ED#', 'MS#', 'ES#', 'PF#', 'MD#']]

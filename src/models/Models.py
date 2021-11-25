@@ -570,6 +570,9 @@ def create_RegistrationModel_inkl_mask(config):
         st_mask_layer = nrn_layers.SpatialTransformer(interp_method=interp_method, indexing=indexing, ident=True,
                                                       name='deformable_mask_layer')
 
+        st_lambda_layer = tf.keras.layers.Lambda(
+            lambda x: st_layer([x[..., 0:1], x[..., 1:]]), name='deformable_lambda_layer')
+
 
 
         if COMPOSE_CONSISTENCY:
@@ -585,7 +588,7 @@ def create_RegistrationModel_inkl_mask(config):
 
         # we need to build the u-net after the compose concat path to make sure that our u-net input channels match the input
         unet = create_unet(config_temp, single_model=False)
-
+        
         input_vols = tf.unstack(input_tensor, axis=1)
         input_mask_vols = tf.unstack(input_mask_tensor, axis=1)
         #print(input_vols[0].shape)
@@ -595,8 +598,8 @@ def create_RegistrationModel_inkl_mask(config):
         # random.shuffle(zipped)
         input_vols_shuffled, indicies = zip(*zipped)
         pre_flows = [unet(vol) for vol in input_vols_shuffled]
-        flows_p2p = [conv_layer_p2p(vol) for vol in pre_flows]
-        flows, _ = zip(*sorted(zip(flows_p2p, indicies), key=lambda tup: tup[1]))
+        flows = [conv_layer_p2p(vol) for vol in pre_flows]
+        #flows, _ = zip(*sorted(zip(flows_p2p, indicies), key=lambda tup: tup[1]))
 
         # Each CMR input vol has CMR data from three timesteps stacked as channel: t1,t1+t2/2,t2
         # transform only one timestep, mostly the first one
@@ -640,7 +643,7 @@ def create_RegistrationModel_inkl_mask(config):
         outputs = [transformed, transformed_mask, flow]
         if COMPOSE_CONSISTENCY: outputs = [comp_transformed] + outputs + [flow_composed]
 
-        model = Model(name='simpleregister', inputs=[input_tensor_raw, input_mask_tensor, input_tensor_empty],
+        model = Model(name='simpleregister', inputs=[input_tensor_raw, input_mask_tensor],
                       outputs=outputs)
 
         from tensorflow.keras.losses import mse

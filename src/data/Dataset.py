@@ -488,7 +488,10 @@ def get_trainings_files(data_path, fold=0, path_to_folds_df=None):
         x, y = load_acdc_files(data_path)
         if len(x) == 0:
             logging.error('no files found in: {}, try to list all files in this directory:'.format(data_path))
-            logging.error(os.listdir(data_path))
+            files_ = os.listdir(data_path)
+            logging.error(files_)
+            x = sorted(glob.glob(os.path.join(data_path, '*')))
+            y = x
     if path_to_folds_df:
         df = pd.read_csv(path_to_folds_df)
         patients = df[df.fold.isin([fold])]
@@ -1379,6 +1382,10 @@ def get_phases_as_onehot_gcn(file_path, df, temporal_sampling_factor, length, we
             len(patient_str))
     else:  # DMD data
         patient_str = os.path.basename(file_path).split('_volume')[0].lower()
+
+    if 'nii.gz' in patient_str:  # ACDC files e.g.: patient001_4d.nii.gz
+        patient_str = re.search('patient(.{3})_', file_path)
+        patient_str = patient_str.group(1).upper()
 
     assert len(
         patient_str) > 0, 'empty patient id found, please check the get_patient_id in fn train_fold(), usually there are path problems'

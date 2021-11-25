@@ -972,11 +972,9 @@ class PhaseRegressionGenerator_v2(DataGenerator):
             self.ISACDC = True
 
         # opens a dataframe with cleaned phases per patient
-        if not self.ISACDC:
-            self.METADATA_FILE = config.get('DF_META', '/mnt/ssd/data/gcn/02_imported_4D_unfiltered/SAx_3D_dicomTags_phase')
-            df = pd.read_csv(self.METADATA_FILE)
-            self.DF_METADATA = df[['patient', 'ED#', 'MS#', 'ES#', 'PF#', 'MD#']]
-
+        self.METADATA_FILE = config.get('DF_META', '/mnt/ssd/data/gcn/02_imported_4D_unfiltered/SAx_3D_dicomTags_phase')
+        df = pd.read_csv(self.METADATA_FILE,dtype={'patient':str, 'ED#':int, 'MS#':int, 'ES#':int, 'PF#':int, 'MD#':int})
+        self.DF_METADATA = df[['patient', 'ED#', 'MS#', 'ES#', 'PF#', 'MD#']]
 
 
         # create a 1D kernel with linearly increasing/decreasing values in the range(lower,upper),
@@ -1069,6 +1067,7 @@ class PhaseRegressionGenerator_v2(DataGenerator):
                     '{}\n'
                     'mask:\n'
                     '{}'.format(str(e), self.IMAGES[ID], self.LABELS[ID]))
+                raise e
 
         logging.debug('Batchsize: {} preprocessing took: {:0.3f} sec'.format(self.BATCHSIZE, time() - t0))
 
@@ -1115,8 +1114,10 @@ class PhaseRegressionGenerator_v2(DataGenerator):
 
         # Returns the indices in the following order: 'ED#', 'MS#', 'ES#', 'PF#', 'MD#'
         if self.ISACDC:
-            onehot_orig = get_phases_as_onehot_acdc(x, temporal_sampling_factor, len(model_inputs),
-                                               self.SMOOTHING_WEIGHT_CORRECT)
+            """onehot_orig = get_phases_as_onehot_acdc(x, temporal_sampling_factor, len(model_inputs),
+                                               self.SMOOTHING_WEIGHT_CORRECT)""" # works for original acdc data with two labels
+            onehot_orig = get_phases_as_onehot_gcn(x, self.DF_METADATA, temporal_sampling_factor, len(model_inputs),
+                                                   self.SMOOTHING_WEIGHT_CORRECT)
         else:
             onehot_orig = get_phases_as_onehot_gcn(x, self.DF_METADATA, temporal_sampling_factor, len(model_inputs),
                                               self.SMOOTHING_WEIGHT_CORRECT)
@@ -1655,7 +1656,6 @@ class PhaseMaskWindowGenerator(DataGenerator):
         self.RESAMPLE_T = config.get('RESAMPLE_T', False)
         self.WINDOW_SIZE = config.get('WINDOW_SIZE', 1)
         self.IMG_CHANNELS = config.get('IMG_CHANNELS', 1)
-        if self.IMG_CHANNELS == 4: self.IMG_CHANNELS=3
         self.INPUT_T_ELEM = config.get('INPUT_T_ELEM', 0)
         self.REPLACE_WILDCARD = ('clean', 'mask')
         self.BETWEEN_PHASES = config.get('BETWEEN_PHASES', False)
