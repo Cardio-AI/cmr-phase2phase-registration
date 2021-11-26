@@ -1229,7 +1229,7 @@ class PhaseRegressionGenerator_v2(DataGenerator):
             from src.data.Preprocess import align_inplane_with_ip
             if self.ISACDC:
                 import glob
-                msk_name = sorted(glob.glob(x.split('_4d')[0].replace('sax', 'msk_ed') + '*'))[0]
+                msk_name = sorted(glob.glob(x.split('_4d.nii.gz')[0].replace('sax', 'msk_ed') + '*'))[0]
             else:
                 msk_name = x.replace('clean', 'mask')
             model_inputs = align_inplane_with_ip(model_inputs, msk_file_name=msk_name)
