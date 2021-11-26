@@ -652,11 +652,12 @@ def align_inplane_with_ip(model_inputs, msk_file_name):
     -------
 
     '''
-
+    print(msk_file_name)
     mask = sitk.GetArrayFromImage(sitk.ReadImage(msk_file_name))
     # Find the first labelled time step, could also be done for all labelled time steps
     if mask.ndim==3:
         mask3d = mask
+        print('3d:', mask3d.shape)
     else:
         i = get_first_idx(mask)
         mask3d = mask[i]
