@@ -655,8 +655,11 @@ def align_inplane_with_ip(model_inputs, msk_file_name):
 
     mask = sitk.GetArrayFromImage(sitk.ReadImage(msk_file_name))
     # Find the first labelled time step, could also be done for all labelled time steps
-    i = get_first_idx(mask)
-    mask3d = mask[i]
+    if mask.ndim==3:
+        mask3d = mask
+    else:
+        i = get_first_idx(mask)
+        mask3d = mask[i]
     # Get the first and second insertion points for all valid slices
     fips, sips = get_ip_from_mask_3d(mask3d)
     # average both points to find the mean fip and sip

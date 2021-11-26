@@ -1227,7 +1227,11 @@ class PhaseRegressionGenerator_v2(DataGenerator):
         # rotate 4D with mean rotation angle
         if self.ROTATE:
             from src.data.Preprocess import align_inplane_with_ip
-            msk_name = x.replace('clean', 'mask')
+            if self.ISACDC:
+                import glob
+                msk_name = sorted(glob.glob(x.split('_')[0].replace('sax', 'msk_ed') + '*'))[0]
+            else:
+                msk_name = x.replace('clean', 'mask')
             model_inputs = align_inplane_with_ip(model_inputs, msk_file_name=msk_name)
 
         if apply_hist_matching:

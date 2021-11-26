@@ -569,7 +569,7 @@ def create_RegistrationModel_inkl_mask(config):
                                                  name='deformable_p2ed')
         st_mask_layer = nrn_layers.SpatialTransformer(interp_method=interp_method, indexing=indexing, ident=True,
                                                       name='deformable_mask')
-        # lambda layers for spatial transformer indexing
+        # lambda layers for spatial transformer indexing of the cmr vol and the flowfield
         st_lambda_layer = tf.keras.layers.Lambda(
             lambda x: st_layer([x[...,0:1], x[..., -3:]]), name='p2p')
         st_p2ed_lambda_layer = tf.keras.layers.Lambda(
