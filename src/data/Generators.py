@@ -968,6 +968,7 @@ class PhaseRegressionGenerator_v2(DataGenerator):
                                 dtype=np.float32)  # onehot and mask with gt length
 
         self.ISACDC = False
+        logging.info('first file: {}'.format(self.IMAGES[0].lower()))
         if 'acdc' in self.IMAGES[0].lower():
             self.ISACDC = True
             logging.info('acdc in file name detected, modifying file loading...')
