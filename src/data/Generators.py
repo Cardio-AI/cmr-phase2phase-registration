@@ -969,7 +969,7 @@ class PhaseRegressionGenerator_v2(DataGenerator):
 
         self.ISACDC = False
         logging.info('first file: {}'.format(self.IMAGES[0].lower()))
-        if 'acdc' in self.IMAGES[0].lower():
+        if 'nii.gz' in self.IMAGES[0].lower():
             self.ISACDC = True
             logging.info('acdc in file name detected, modifying file loading...')
 
@@ -1232,7 +1232,6 @@ class PhaseRegressionGenerator_v2(DataGenerator):
             if self.ISACDC:
                 import glob
                 msk_name = sorted(glob.glob(x.split('_4d.nii.gz')[0].replace('sax', 'msk_ed') + '*'))[0]
-                logging.info('ACDC detected')
             else:
                 msk_name = x.replace('clean', 'mask')
             model_inputs = align_inplane_with_ip(model_inputs, msk_file_name=msk_name)
