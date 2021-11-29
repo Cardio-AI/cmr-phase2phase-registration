@@ -902,6 +902,7 @@ def get_angle_tf(a, b):
     """
     # import math as m
     # pi = tf.constant(m.pi)
+    b = tf.cast(b, dtype=a.dtype)
     inner = tf.einsum('...i,...i->...', a, b)
     norms = tf.norm(a, ord='euclidean', axis=-1) * tf.norm(b, ord='euclidean', axis=-1)  # [...,None]
     cos = inner / (norms + sys.float_info.epsilon)
