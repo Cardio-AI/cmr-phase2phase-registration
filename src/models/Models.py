@@ -365,15 +365,18 @@ def create_PhaseRegressionModel_v2(config, networkname='PhaseRegressionModel'):
             tensor_magnitude = TimeDistributed(norm_lambda)(flows)
             flow_features = tf.keras.layers.Concatenate(axis=-1)([flows, tensor_magnitude])
             features_given = True
+            print('Inkl flow and norm shape: {}'.format(flow_features.shape))
         elif add_vect_norm:
             # add the magnitude as fourth channel
             tensor_magnitude = TimeDistributed(norm_lambda)(flows)
             flow_features = tensor_magnitude
             features_given = True
+            print('Inkl norm shape: {}'.format(flow_features.shape))
         elif add_flows:
             flow_features = flows
             features_given = True
-        print('Inkl norm shape: {}'.format(flow_features.shape))
+            print('Inkl flow shape: {}'.format(flow_features.shape))
+
 
         if add_vect_direction:
             directions = TimeDistributed(flow2direction_lambda)(flows)
