@@ -375,8 +375,11 @@ def create_PhaseRegressionModel_v2(config, networkname='PhaseRegressionModel'):
         if add_vect_direction:
             directions = TimeDistributed(flow2direction_lambda)(flows)
             print('directions shape: {}'.format(directions.shape))
-            flow_features = tf.keras.layers.Concatenate(axis=-1)(
+            if flow_features:
+                flow_features = tf.keras.layers.Concatenate(axis=-1)(
                 [flow_features, directions])  # encode the spatial location of each vector
+            else:
+                flow_features = directions
             # add the location tensor as further channel
             # flow_features = tf.keras.layers.Concatenate(axis=-1)([flow_features, tf.tile(centers_tensor[tf.newaxis,...],multiples=[1,flow_features.shape[1],1,1,1,1])])
         print('flow features inkl directions shape: {}'.format(flow_features.shape))
