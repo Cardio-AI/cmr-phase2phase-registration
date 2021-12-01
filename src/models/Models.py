@@ -364,18 +364,21 @@ def create_PhaseRegressionModel_v2(config, networkname='PhaseRegressionModel'):
             # add the magnitude as fourth channel
             tensor_magnitude = TimeDistributed(norm_lambda)(flows)
             flow_features = tf.keras.layers.Concatenate(axis=-1)([flows, tensor_magnitude])
+            features_given = True
         elif add_vect_norm:
             # add the magnitude as fourth channel
             tensor_magnitude = TimeDistributed(norm_lambda)(flows)
             flow_features = tensor_magnitude
+            features_given = True
         elif add_flows:
             flow_features = flows
+            features_given = True
         print('Inkl norm shape: {}'.format(flow_features.shape))
 
         if add_vect_direction:
             directions = TimeDistributed(flow2direction_lambda)(flows)
             print('directions shape: {}'.format(directions.shape))
-            if flow_features:
+            if features_given:
                 flow_features = tf.keras.layers.Concatenate(axis=-1)(
                 [flow_features, directions])  # encode the spatial location of each vector
             else:
