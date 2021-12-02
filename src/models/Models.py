@@ -359,8 +359,9 @@ def create_PhaseRegressionModel_v2(config, networkname='PhaseRegressionModel'):
         print('Flowfield shape: {}'.format(flows.shape))
         transformed = TimeDistributed(st_lambda_layer)(tf.keras.layers.Concatenate(axis=-1)([input_tensor, flows]))
         print('Transformed shape : {}'.format(transformed.shape))
+        features_given = False
 
-        if add_vect_norm and add_flows:
+        if (add_vect_norm and add_flows):
             # add the magnitude as fourth channel
             tensor_magnitude = TimeDistributed(norm_lambda)(flows)
             flow_features = tf.keras.layers.Concatenate(axis=-1)([flows, tensor_magnitude])
@@ -376,7 +377,6 @@ def create_PhaseRegressionModel_v2(config, networkname='PhaseRegressionModel'):
             flow_features = flows
             features_given = True
             print('Inkl flow shape: {}'.format(flow_features.shape))
-
 
         if add_vect_direction:
             directions = TimeDistributed(flow2direction_lambda)(flows)
