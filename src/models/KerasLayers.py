@@ -613,7 +613,7 @@ class UpSampleBlock(Layer):
 
 
 def conv_layer_fn(inputs, filters=16, f_size=(3, 3, 3), activation='elu', batch_norm=True, kernel_init='he_normal',
-                  pad='same', bn_first=False, ndims=2):
+                  pad='same', bn_first=False, ndims=2, custom_name=''):
     """
     Wrapper for a 2/3D-conv layer + batchnormalisation
     Either with Conv,BN,activation or Conv,activation,BN

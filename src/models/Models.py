@@ -243,6 +243,8 @@ def create_PhaseRegressionModel_v2(config, networkname='PhaseRegressionModel'):
                           name='unet2flow')
 
         unet = create_unet(temp_config, single_model=False, networkname='3D-Unet')
+
+        enc = tf.keras.Model(inputs=unet.inputs,outputs=[unet.get_layer('conv3d_7').output])
         st_layer = nrn_layers.SpatialTransformer(interp_method=interp_method, indexing=indexing, ident=True,
                                                  name='deformable_layer')
         st_lambda_layer = tf.keras.layers.Lambda(
@@ -400,17 +402,28 @@ def create_PhaseRegressionModel_v2(config, networkname='PhaseRegressionModel'):
 
         # down-sample the flow in-plane
         # Build an encoder with n times conv+relu+maxpool+bn-blocks
+        """flow_features2 = TimeDistributed(enc)(inputs_spatial_stacked)
+        print('flow features from encoder: {}'.format(flow_features2.shape))
+        flow_features2 = TimeDistributed(tf.keras.layers.Conv2D(16, 2, 1, padding='valid'))(flow_features2)
+        print('flow features from encoder: {}'.format(flow_features2.shape))
+        flow_features2 = TimeDistributed(gap)(flow_features2)
+        print('flow features from encoder: {}'.format(flow_features2.shape))"""
+
         if downsample_flow_features:
             flow_features = TimeDistributed(downsample)(flow_features)
         else:  # use a gap3D layer
             flow_features = TimeDistributed(gap)(flow_features)
         flow_features = tf.keras.layers.Reshape(target_shape=(flow_features.shape[1], flow_features.shape[-1]))(
             flow_features)
+        """flow_features = flow_features2
+        flow_features = tf.concat([flow_features, flow_features2], axis=-1)"""
 
         if add_bilstm:
             print('Shape before LSTM layers: {}'.format(flow_features.shape))
             flow_features = bi_lstm_layer(flow_features)
             print('Shape after LSTM layers: {}'.format(flow_features.shape))
+
+
 
         # input (t,encoding) output (t,5)
         # 36, 5
@@ -600,7 +613,7 @@ def create_RegistrationModel_inkl_mask(config):
             # repeat ED along the t-axis
             # add the ed phase as 4th channel to each phase
             stack_lambda_layer = tf.keras.layers.Lambda(
-                lambda x: tf.keras.layers.Concatenate(axis=-1)([x, tf.repeat(x[:, -1:, ..., -1:], x.shape[1], axis=1)]),
+                lambda x: tf.keras.layers.Concatenate(axis=-1)([x, tf.repeat(x[:, 0:1, ..., -1:], x.shape[1], axis=1)]),
                 name='stack_ed')
             input_tensor = stack_lambda_layer(input_tensor_raw)
             config_temp['IMG_CHANNELS'] = config.get('IMG_CHANNELS', 1) + 1  # extend the config, for the u-net creation

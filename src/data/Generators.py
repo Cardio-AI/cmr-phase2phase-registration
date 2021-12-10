@@ -1723,10 +1723,12 @@ class PhaseMaskWindowGenerator(DataGenerator):
         #self.on_batch_end()
 
         # Initialization
-        x = np.empty_like(self.X_SHAPE)  # model input
-        x2 = np.empty_like(self.X_SHAPE)  # model input
-        y = np.empty_like(self.Y_SHAPE)  # model output
+        x = np.empty_like(self.X_SHAPE)  # CMR model input
+        x2 = np.empty_like(self.X_SHAPE)  # CMR mask model input
+        y = np.empty_like(self.Y_SHAPE)  #  model output
         y2 = np.empty_like(self.Y_SHAPE)  # model output
+        # model returns:
+        # comp moved CMR moved, moved CMR, moved msk, flow, flow_comp
 
         futures = set()
 
