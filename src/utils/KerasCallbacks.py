@@ -698,9 +698,9 @@ class WindowMotionCallback(Callback):
                             idy_target_msk = 1
                         first_vol, second_vol = x[idx_moving_cmr][elem_in_b][p], y[idy_target_cmr][elem_in_b][p]
                         first_m, second_m = x[idx_moving_msk][elem_in_b][p], y[idy_target_msk][elem_in_b][p]
-                        if first_vol.shape[-1] == 3:
+                        if first_vol.shape[-1] in [2,3]:
                             first_vol = first_vol[..., self.take_t_elem][..., np.newaxis]
-                        if first_m.shape[-1] == 3:
+                        if first_m.shape[-1] in [2,3]:
                             first_m = first_m[..., self.take_t_elem]
                         moved, moved_m, vect = movings[elem_in_b][p], moving_m[elem_in_b][p], vects[elem_in_b][p]
                         spatial_slices = first_vol.shape[0]

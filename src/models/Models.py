@@ -623,21 +623,21 @@ def create_RegistrationModel_inkl_mask(config):
         # we need to build the u-net after the compose concat path to make sure that our u-net input channels match the input
         unet = create_unet(config_temp, single_model=False)
         print('input before unet:', input_tensor.shape)
-        pre_flows = TimeDistributed(unet)(input_tensor)
+        pre_flows = TimeDistributed(unet, name='unet')(input_tensor)
         print('input after unet:', pre_flows.shape)
-        flows = TimeDistributed(conv_layer_p2p)(pre_flows)
+        flows = TimeDistributed(conv_layer_p2p, name='unet2flow_p2p')(pre_flows)
         print('flows_p2p:', flows.shape)
         # Each CMR input vol has CMR data from three timesteps stacked as channel: t1,t1+t2/2,t2
         # transform only one timestep, mostly the first one
-        transformed = TimeDistributed(st_lambda_layer)(tf.keras.layers.Concatenate(axis=-1)([input_tensor_raw, flows]))
+        transformed = TimeDistributed(st_lambda_layer, name='st_p2p')(tf.keras.layers.Concatenate(axis=-1)([input_tensor_raw, flows]))
         print('transformed_p2p:', transformed.shape)
-        transformed_mask = TimeDistributed(st_mask_lambda_layer)(
+        transformed_mask = TimeDistributed(st_mask_lambda_layer, name='st_p2p_msk')(
             tf.keras.layers.Concatenate(axis=-1)([input_mask_tensor, flows]))
 
         if COMPOSE_CONSISTENCY:
             # composed flowfield should move each phase to ED
-            flows_p2ed = TimeDistributed(conv_layer_p2ed)(pre_flows)
-            comp_transformed = TimeDistributed(st_p2ed_lambda_layer)(
+            flows_p2ed = TimeDistributed(conv_layer_p2ed, name='unet2flow_ed2p')(pre_flows)
+            comp_transformed = TimeDistributed(st_p2ed_lambda_layer, name='st_p2ed')(
                 tf.keras.layers.Concatenate(axis=-1)([input_tensor_raw, flows_p2ed]))
             comp_transformed = tf.keras.layers.Lambda(lambda x: x, name='comp_transformed')(comp_transformed)
             flows_p2ed = tf.keras.layers.Lambda(lambda x: x, name='flowfield_p2ed')(flows_p2ed)

@@ -1552,7 +1552,7 @@ def get_n_windows_from_single4D(nda4d, idx, window_size=1):
     logging.debug('gather nd took: {:0.3f} s'.format(time() - t1))
     return [t_lower, t, t_upper]
 
-def get_n_windows_between_phases_from_single4D(nda4d, idx, register_backwards=True):
+def get_n_windows_between_phases_from_single4D(nda4d, idx, register_backwards=True, intermediate=True):
     """
     Split a 4D volume in two lists of 3D volumes
     With list1[n] - list2[n] two 3D ndas which shows the start and endpoint of a timepoint n
@@ -1646,6 +1646,10 @@ def get_n_windows_between_phases_from_single4D(nda4d, idx, register_backwards=Tr
             windows= [t_shift_to_left, t_middle, t_phases]
         else:
             windows = [t_phases, t_middle, t_shift_to_left]
+
+        if not intermediate:
+            windows = windows[0:1] + windows[-1:] # exclude intermediate timestep
+
         return windows
         # here: T=moving, T+1=fixed, seems to register worse, need to check compose
         # return [t_phases, t_middle, t_shift_to_left]

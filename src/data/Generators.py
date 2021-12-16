@@ -1935,8 +1935,8 @@ class PhaseMaskWindowGenerator(DataGenerator):
         # [nda[idx_shift_to_left], nda[idx_middle], nda[idxs]] each with 5,z,x,y
         # in other words: [vol[t+1], vol[t+0.5], vol[t]]
         if self.BETWEEN_PHASES:
-            combined = get_n_windows_between_phases_from_single4D(model_inputs, idx, register_backwards=self.REGISTER_BACKWARDS)
-            combined_m = get_n_windows_between_phases_from_single4D(model_m_inputs, idx, register_backwards=self.REGISTER_BACKWARDS)
+            combined = get_n_windows_between_phases_from_single4D(model_inputs, idx, register_backwards=self.REGISTER_BACKWARDS, intermediate=False)
+            combined_m = get_n_windows_between_phases_from_single4D(model_m_inputs, idx, register_backwards=self.REGISTER_BACKWARDS, intermediate=False)
         else: # Extract he motion at each phase, defined by the window size
             # combined --> t-w, t, t+w, We can use this window in different combinations as input and target
             combined = get_n_windows_from_single4D(model_inputs, idx, window_size=self.WINDOW_SIZE)
@@ -2001,20 +2001,15 @@ class PhaseMaskWindowGenerator(DataGenerator):
 
         if self.IMG_CHANNELS == 1:
             model_inputs = combined[...,self.INPUT_T_ELEM]
-            model_targets = combined[...,-1][..., np.newaxis]
+            model_targets = combined[...,-1:]
             model_m_inputs = combined_m[...,self.INPUT_T_ELEM]
-            model_m_targets = combined_m[-1][..., np.newaxis]
+            model_m_targets = combined_m[-1:]
 
-        elif self.IMG_CHANNELS == 3:
+        elif self.IMG_CHANNELS in [2,3]:
             model_inputs = combined
-            model_targets = combined[...,-1][..., np.newaxis]
+            model_targets = combined[...,-1:]
             model_m_inputs = combined_m
-            model_m_targets = combined_m[...,-1][..., np.newaxis]
-
-            #self.__plot_state_if_debug__(img=model_inputs[len(model_inputs) // 2], start_time=t1,
-            #                             step='clipped cropped and pad')
-
-
+            model_m_targets = combined_m[...,-1:]
 
         assert not np.any(np.isnan(model_inputs))
         assert not np.any(np.isnan(model_targets))
