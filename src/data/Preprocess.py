@@ -652,24 +652,41 @@ def align_inplane_with_ip(model_inputs, msk_file_name):
     -------
 
     '''
-    mask = sitk.GetArrayFromImage(sitk.ReadImage(msk_file_name))
+    if type(msk_file_name) == type(''):
+        mask = sitk.GetArrayFromImage(sitk.ReadImage(msk_file_name))
+    else:
+        mask = msk_file_name
+    # t,z,y,x --> numpy order of dimensions
     # Find the first labelled time step, could also be done for all labelled time steps
     if mask.ndim==3:
         mask3d = mask
     else:
         i = get_first_idx(mask)
         mask3d = mask[i]
-    # Get the first and second insertion points for all valid slices
+
+    import matplotlib.pyplot as plt
+    from src.visualization.Visualize import show_2D_or_3D
+    # first roll to center of mean septum,
+    # than rotate to a 90 degree angle between the septum and the x-axis
+    # Get the anterior and inferior insertion points for all valid slices
     fips, sips = get_ip_from_mask_3d(mask3d)
-    # average both points to find the mean fip and sip
+    # average both points to find the mean fip and sip per volume
     fip = np.array(fips).mean(axis=0)
     sip = np.array(sips).mean(axis=0)
-    # Calc the angle to the x-axis
+    # Calc the angle between the mean septum and the x-axis
     ip_angle = get_angle2x(fip, sip)
     # How much do we want to rotate
     rot_angle = ip_angle - 90
+    center = np.mean([fip,sip], axis=0).astype(int)
+    ny, nx = model_inputs.shape[2:]
+    ry = int(ny//2-center[1])
+    rx = int(nx // 2 - center[0])
+    model_inputs = np.roll(model_inputs, ry, axis=-2)
+    model_inputs = np.roll(model_inputs, rx, axis=-1)
+
     # Rotate the 4D volume in-plane (x,y-axis)
     model_inputs = ndimage.rotate(model_inputs, angle=rot_angle, reshape=False, order=1, axes=(-2, -1))
+
     return model_inputs
 
 

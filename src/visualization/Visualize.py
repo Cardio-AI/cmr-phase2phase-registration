@@ -85,7 +85,7 @@ def show_2D_or_3D(img=None, mask=None, f_size=(8,8),dpi=100, interpol='none'):
     elif dim == 4 and temp.shape[-1] in [3,4]: # only mask
         return plot_3d_vol(temp, mask)
     elif dim == 4:
-        return plot_4d_vol(img, mask)
+        return plot_4d_vol(img_4d=img, mask_4d=mask)
     else:
         logging.error('Unsupported dim: {}, shape: {}'.format(img.ndim, img.shape))
         raise NotImplementedError('Wrong shape Exception in: {}'.format('show_2D_or_3D()'))
@@ -670,10 +670,9 @@ def plot_4d_vol(img_4d, timesteps=[0], save=False, path='temp/', mask_4d=None, f
         for z, slice in enumerate(img_3d):  # traverse through the z-axis
             # show slice and delete ticks
             if mask_4d is not None:
-                
-                ax[t_][z] = show_slice_transparent(slice, mask_4d[t_, z, ...], show=True, ax=ax[t_][z])
+                ax[t_][z] = show_slice_transparent(slice, mask_4d[t_, z, ...], show=True, dpi=20,ax=ax[t_][z])
             else:
-                ax[t_][z] = show_slice_transparent(slice, show=False, ax=ax[t_][z])
+                ax[t_][z] = show_slice_transparent(slice, show=True, dpi=20,ax=ax[t_][z])
             ax[t_][z].set_xticks([])
             ax[t_][z].set_yticks([])
             # ax[t_][z].set_aspect('equal')

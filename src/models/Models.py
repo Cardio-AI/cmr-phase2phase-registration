@@ -218,6 +218,7 @@ def create_PhaseRegressionModel_v2(config, networkname='PhaseRegressionModel'):
         add_vect_norm = config.get('ADD_VECTOR_NORM', False)
         add_vect_direction = config.get('ADD_VECTOR_DIRECTION', False)
         add_flows = config.get('ADD_FLOW', False)
+        addunetencoding = config.get('ADD_ENC', False)
         add_softmax = config.get('ADD_SOFTMAX', False)
         softmax_axis = config.get('SOFTMAX_AXIS', 1)
         image_loss_weight = config.get('IMAGE_LOSS_WEIGHT', 20)
@@ -241,16 +242,17 @@ def create_PhaseRegressionModel_v2(config, networkname='PhaseRegressionModel'):
         Conv_layer = Conv(ndims, kernel_size=3, padding='same',
                           kernel_initializer=tensorflow.keras.initializers.RandomNormal(mean=0.0, stddev=1e-5),
                           name='unet2flow')
-
+        # use a standard U-net, without the final layer for feature extraction (pre-flow)
         unet = create_unet(temp_config, single_model=False, networkname='3D-Unet')
-
-        enc = tf.keras.Model(inputs=unet.inputs,outputs=[unet.get_layer('conv3d_7').output])
+        # this is a wrapper to re-use the u-net encoder/encoding
+        enc = tf.keras.Model(inputs=unet.inputs,outputs=[unet.layers[(len(unet.layers)//2)-1].output])
         st_layer = nrn_layers.SpatialTransformer(interp_method=interp_method, indexing=indexing, ident=True,
                                                  name='deformable_layer')
         st_lambda_layer = tf.keras.layers.Lambda(
             lambda x: st_layer([x[..., 0:1], x[..., 1:]]), name='deformable_lambda_layer')
 
         gap = tensorflow.keras.layers.GlobalAveragePooling3D(name='GAP_3D_Layer')
+        # concat the current frame with the previous on the last channel
         roll_concat_lambda_layer = tf.keras.layers.Lambda(lambda x:
                                                           tf.keras.layers.Concatenate(axis=-1, name='stack_with_moved')(
                                                               [#tf.roll(x, shift=1, axis=stack_axis),
@@ -355,11 +357,11 @@ def create_PhaseRegressionModel_v2(config, networkname='PhaseRegressionModel'):
         print('Shape Input Tensor: {}'.format(input_tensor.shape))
         inputs_spatial_stacked = roll_concat_lambda_layer(input_tensor)
         print('Shape rolled and stacked: {}'.format(inputs_spatial_stacked.shape))
-        pre_flows = TimeDistributed(unet)(inputs_spatial_stacked)
+        pre_flows = TimeDistributed(unet, name='4d-p2p-unet')(inputs_spatial_stacked)
         print('Unet output shape: {}'.format(pre_flows.shape))
-        flows = TimeDistributed(Conv_layer)(pre_flows)
+        flows = TimeDistributed(Conv_layer, name='4d-p2p-flow')(pre_flows)
         print('Flowfield shape: {}'.format(flows.shape))
-        transformed = TimeDistributed(st_lambda_layer)(tf.keras.layers.Concatenate(axis=-1)([input_tensor, flows]))
+        transformed = TimeDistributed(st_lambda_layer, name='4d-p2p-st')(tf.keras.layers.Concatenate(axis=-1)([input_tensor, flows]))
         print('Transformed shape : {}'.format(transformed.shape))
         features_given = False
 
@@ -388,11 +390,13 @@ def create_PhaseRegressionModel_v2(config, networkname='PhaseRegressionModel'):
                 [flow_features, directions])  # encode the spatial location of each vector
             else:
                 flow_features = directions
+                features_given = True
             # add the location tensor as further channel
             # flow_features = tf.keras.layers.Concatenate(axis=-1)([flow_features, tf.tile(centers_tensor[tf.newaxis,...],multiples=[1,flow_features.shape[1],1,1,1,1])])
         print('flow features inkl directions shape: {}'.format(flow_features.shape))
 
         # Apply an Bidirectional convLstm layer before downsampling
+        # ranspose t and z
         if add_conv_bilstm:
             flow_features = tf.transpose(flow_features, perm=[0, 2, 1, 3, 4, 5])
             print('transposed: {}'.format(flow_features.shape))
@@ -400,14 +404,6 @@ def create_PhaseRegressionModel_v2(config, networkname='PhaseRegressionModel'):
             flow_features = tf.transpose(flow_features, perm=[0, 2, 1, 3, 4, 5])
         print('flow features after conv lstm: {}'.format(flow_features.shape))
 
-        # down-sample the flow in-plane
-        # Build an encoder with n times conv+relu+maxpool+bn-blocks
-        """flow_features2 = TimeDistributed(enc)(inputs_spatial_stacked)
-        print('flow features from encoder: {}'.format(flow_features2.shape))
-        flow_features2 = TimeDistributed(tf.keras.layers.Conv2D(16, 2, 1, padding='valid'))(flow_features2)
-        print('flow features from encoder: {}'.format(flow_features2.shape))
-        flow_features2 = TimeDistributed(gap)(flow_features2)
-        print('flow features from encoder: {}'.format(flow_features2.shape))"""
 
         if downsample_flow_features:
             flow_features = TimeDistributed(downsample)(flow_features)
@@ -415,8 +411,22 @@ def create_PhaseRegressionModel_v2(config, networkname='PhaseRegressionModel'):
             flow_features = TimeDistributed(gap)(flow_features)
         flow_features = tf.keras.layers.Reshape(target_shape=(flow_features.shape[1], flow_features.shape[-1]))(
             flow_features)
-        """flow_features = flow_features2
-        flow_features = tf.concat([flow_features, flow_features2], axis=-1)"""
+
+        # down-sample the flow in-plane
+        # Build an encoder with n times conv+relu+maxpool+bn-blocks
+        if addunetencoding:
+            flow_features2 = TimeDistributed(enc)(inputs_spatial_stacked)
+            print('flow features from encoder: {}'.format(flow_features2.shape))
+            flow_features2 = TimeDistributed(tf.keras.layers.Conv2D(16, 2, 1, padding='valid'))(flow_features2)
+            print('flow features from encoder: {}'.format(flow_features2.shape))
+            flow_features2 = TimeDistributed(gap)(flow_features2)
+            print('flow features from encoder: {}'.format(flow_features2.shape))
+            if features_given:
+                flow_features = tf.concat([flow_features, flow_features2], axis=-1)
+            else:
+                flow_features = flow_features2
+
+
 
         if add_bilstm:
             print('Shape before LSTM layers: {}'.format(flow_features.shape))

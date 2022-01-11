@@ -1216,12 +1216,6 @@ class PhaseRegressionGenerator_v2(DataGenerator):
         # repeat the 3D volumes along t (we did the same with the onehot vector)
         model_inputs = np.stack(list(map(lambda x: sitk.GetArrayFromImage(x), model_inputs)), axis=0)
 
-        # performance test, keep t, crop the other dimensions to 1.5 times the target shape
-        # This decreases the memory footprint and the computation time for further processing steps
-        if not self.IN_MEMORY:
-            model_inputs = pad_and_crop(model_inputs,
-                                    target_shape=(model_inputs.shape[0], *(np.array(self.DIM) * 1.5).astype(np.int)))
-
         # get idx of valid mask
         # get IPs of one timestep
         # calc mean IPs
@@ -1234,7 +1228,23 @@ class PhaseRegressionGenerator_v2(DataGenerator):
                 msk_name = sorted(glob.glob(x.split('_4d.nii.gz')[0].replace('sax', 'msk_ed') + '*'))[0]
             else:
                 msk_name = x.replace('clean', 'mask')
-            model_inputs = align_inplane_with_ip(model_inputs, msk_file_name=msk_name)
+            #if os.path.isfile(msk_name):
+            msk = split_one_4d_sitk_in_list_of_3d_sitk(sitk.ReadImage(msk_name), axis=0)
+            msk = list(map(lambda x:
+                                    resample_3D(sitk_img=x[0],
+                                                size=x[1],
+                                                spacing=target_spacing,
+                                                interpolate=self.MSK_INTERPOLATION),
+                                    zip(msk, new_size_inputs)))
+            msk = np.stack(list(map(lambda x: sitk.GetArrayFromImage(x), msk)), axis=0)
+            model_inputs = align_inplane_with_ip(model_inputs, msk_file_name=msk)
+
+        # performance test, keep t, crop the other dimensions to 1.5 times the target shape
+        # This decreases the memory footprint and the computation time for further processing steps
+        if not self.IN_MEMORY:
+            model_inputs = pad_and_crop(model_inputs,
+                                    target_shape=(model_inputs.shape[0], *(np.array(self.DIM) * 1.5).astype(np.int)))
+
 
         if apply_hist_matching:
             model_inputs = match_hist(model_inputs, ref)
@@ -1300,6 +1310,7 @@ class PhaseRegressionGenerator_v2(DataGenerator):
         # - The standard (unit) softmax function 𝜎:ℝ𝐾→ℝ𝐾 is defined by the formula
         # 𝜎(𝐳)𝑖=𝑒𝑧𝑖∑𝐾𝑗=1𝑒𝑧𝑗 for 𝑖=1,…,𝐾 and 𝐳=(𝑧1,…,𝑧𝐾)∈ℝ𝐾
         model_inputs = normalise_image(model_inputs, normaliser=self.SCALER)  # normalise per 4D
+        onehot = normalise_image(onehot, normaliser='minmax')
         # logging.debug('background: \n{}'.format(onehot))
 
         ax_to_normalise = 1

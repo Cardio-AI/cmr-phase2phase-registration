@@ -226,7 +226,7 @@ def match_hist_(nda, avg):
     logging.info('fourth: {:0.3f} s'.format(time() - t0))
     return np.reshape(temp, shape_)
 
-def match_hist(nda,ref, prob_per_z=10):
+def match_hist(nda,ref, prob_per_z=40):
 
     for z in range(nda.shape[1]):
         # apply hist matching only on some 2d slices +t, this is more realistic, as some series have different scanner settings
