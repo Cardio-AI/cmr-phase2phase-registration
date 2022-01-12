@@ -1,5 +1,17 @@
 # predict cardiac phases for a cv experiment
-def predict(cfg_file, data_root, c2l=False):
+def predict(cfg_file, data_root='', c2l=False):
+    """
+    Predict on the held-out validation split
+    Parameters
+    ----------
+    cfg_file :
+    data_root :
+    c2l :
+
+    Returns
+    -------
+
+    """
     import json, logging, os
     from logging import info
     import numpy as np
@@ -13,8 +25,11 @@ def predict(cfg_file, data_root, c2l=False):
     tf.get_logger().setLevel('FATAL')
 
     # load the experiment config
-    with open(cfg_file, encoding='utf-8') as data_file:
-        config = json.loads(data_file.read())
+    if type(cfg_file) == type(''):
+        with open(cfg_file, encoding='utf-8') as data_file:
+            config = json.loads(data_file.read())
+    else:
+        config = cfg_file
     globals().update(config)
 
     EXPERIMENT = config.get('EXPERIMENT', 'UNDEFINED')
@@ -27,7 +42,7 @@ def predict(cfg_file, data_root, c2l=False):
         config['DATA_PATH_SAX'] = os.path.join(data_root, 'sax')
         config['DF_FOLDS'] = os.path.join(data_root, 'df_kfold.csv')
         config['DF_META'] = os.path.join(data_root, 'SAx_3D_dicomTags_phase.csv')
-    # TODO: add a dataset flag for this script which allows different datasets, tan the training dataset for inference
+    # TODO: add a dataset flag for this script which allows different datasets, than the training dataset for inference
     isacdc = False
     if isacdc:
         x_train_sax, y_train_sax, x_val_sax, y_val_sax = get_trainings_files(data_path='/mnt/ssd/data/acdc/3D/all',
@@ -71,7 +86,11 @@ def predict(cfg_file, data_root, c2l=False):
     ensure_dir(pred_path)
     ensure_dir(moved_path)
     pred_filename = os.path.join(pred_path, 'gtpred_fold{}.npy'.format(config['FOLD']))
+    moved_filename = os.path.join(moved_path, 'moved_f{}.npy'.format(config['FOLD']))
+    vects_filename = os.path.join(moved_path, 'vects_f{}.npy'.format(config['FOLD']))
     np.save(pred_filename, np.stack([gts, preds], axis=0))
+    np.save(moved_filename, moved)
+    np.save(vects_filename, vects)
     logging.info('saved as: \n{} \ndone!'.format(pred_filename))
 
 

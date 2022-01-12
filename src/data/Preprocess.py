@@ -679,11 +679,11 @@ def align_inplane_with_ip(model_inputs, msk_file_name):
     rot_angle = ip_angle - 90
     import scipy.ndimage as nd
     # Move to center of lv bloodpool or mean septum wall
-    center = nd.center_of_mass(mask3d==3)
+    #center = nd.center_of_mass(mask3d==3)
     #center = center[1:] # ignore z-axis for translation
     center = np.mean([fip,sip], axis=0).astype(int)
     center = center[::-1]
-    ny, nx = model_inputs.shape[2:]
+    ny, nx = model_inputs.shape[-2:]
     ry = int(ny//2-center[0])
     rx = int(nx//2-center[1])
     model_inputs = np.roll(model_inputs, ry, axis=-2)

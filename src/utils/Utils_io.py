@@ -172,27 +172,11 @@ def init_config(config, save=True):
     :param save:
     :return: config (dict) with all training/evaluation params
     """
-    import datetime
-
-    # make sure config path and experiment name are set
-    exp = config.get('EXPERIMENT', 'UNDEFINED')
-    timestemp = str(datetime.datetime.now().strftime(
-        "%Y-%m-%d_%H_%M"))  # ad a timestep to each project to make repeated experiments unique
-
-    EXPERIMENTS_ROOT = 'exp/'
-    EXP_PATH_TEMP = os.path.join(EXPERIMENTS_ROOT, exp, timestemp)
-
-    # make sure all paths are set, otherwise use a temp dir
-    config['CONFIG_PATH'] = config.get('CONFIG_PATH', os.path.join(EXP_PATH_TEMP, 'config'))
-    config['TENSORBOARD_PATH'] = config.get('TENSORBOARD_PATH', os.path.join(EXP_PATH_TEMP, 'tensorboard_logs'))
-    config['MODEL_PATH'] = config.get('MODEL_PATH', os.path.join(EXP_PATH_TEMP, 'model'))
-    config['HISTORY_PATH'] = config.get('HISTORY_PATH', os.path.join(EXP_PATH_TEMP, 'history'))
 
     # make sure all paths exists
     ensure_dir(config['TENSORBOARD_PATH'])
     ensure_dir(config['MODEL_PATH'])
     ensure_dir(config['CONFIG_PATH'])
-    ensure_dir(config['HISTORY_PATH'])
 
     # Define a config for param injection and save it for usage during evaluation, save all upper key,value pairs from global namespace
     config = dict(((key, value) for key, value in config.items()

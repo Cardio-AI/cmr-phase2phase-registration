@@ -2,11 +2,11 @@
 
 
 def train_fold(config, in_memory=False):
-    # make sure all neccessary params in config are set
+    # make sure all necessary params in config are set
     # if not set them with default values
     import tensorflow as tf
     tf.get_logger().setLevel('FATAL')
-    #tf.compat.v1.disable_eager_execution()
+
     from src.utils.Tensorflow_helper import choose_gpu_by_id
     # ------------------------------------------define GPU id/s to use
     GPU_IDS = config.get('GPU_IDS', '0,1')
@@ -38,27 +38,28 @@ def train_fold(config, in_memory=False):
     EXPERIMENT = config.get('EXPERIMENT')
     FOLD = config.get('FOLD')
 
-    EXPERIMENT = '{}_f{}'.format(EXPERIMENT, FOLD)
-    timestemp = str(datetime.datetime.now().strftime(
-        "%Y-%m-%d_%H_%M"))  # add a timestep to each project to make repeated experiments unique
+    EXPERIMENT = '{}f{}'.format(EXPERIMENT, FOLD)
+    """timestemp = str(datetime.datetime.now().strftime(
+        "%Y-%m-%d_%H_%M"))"""  # add a timestep to each project to make repeated experiments unique
 
     EXPERIMENTS_ROOT = 'exp/'
-    EXP_PATH = os.path.join(EXPERIMENTS_ROOT, EXPERIMENT, timestemp)
-    MODEL_PATH = os.path.join(EXP_PATH, 'model', )
-    TENSORBOARD_PATH = os.path.join(EXP_PATH, 'tensorboard_logs')
-    CONFIG_PATH = os.path.join(EXP_PATH, 'config')
-    HISTORY_PATH = os.path.join(EXP_PATH, 'history')
+    EXP_PATH = config.get('EXP_PATH')
+    FOLD_PATH = os.path.join(EXP_PATH, 'f{}'.format(FOLD))
+    MODEL_PATH = os.path.join(FOLD_PATH, 'model', )
+    TENSORBOARD_PATH = os.path.join(FOLD_PATH, 'tensorboard_logs')
+    CONFIG_PATH = os.path.join(FOLD_PATH, 'config')
+
     ensure_dir(MODEL_PATH)
     ensure_dir(TENSORBOARD_PATH)
     ensure_dir(CONFIG_PATH)
-    ensure_dir(HISTORY_PATH)
+
 
     DATA_PATH_SAX = config.get('DATA_PATH_SAX')
     DF_FOLDS = config.get('DF_FOLDS')
     DF_META = config.get('DF_META', '/mnt/ssd/data/gcn/02_imported_4D_unfiltered/SAx_3D_dicomTags_phase.csv')
     EPOCHS = config.get('EPOCHS')
 
-    Console_and_file_logger(path=EXP_PATH, log_lvl=logging.INFO)
+    Console_and_file_logger(path=FOLD_PATH, log_lvl=logging.INFO)
     config = init_config(config=locals(), save=True)
     logging.info('Is built with tensorflow: {}'.format(tf.test.is_built_with_cuda()))
     logging.info('Visible devices:\n{}'.format(tf.config.list_physical_devices()))
@@ -82,9 +83,6 @@ def train_fold(config, in_memory=False):
     METADATA_FILE = DF_META
     df = pd.read_csv(METADATA_FILE, dtype={'patient':str, 'ED#':int, 'MS#':int, 'ES#':int, 'PF#':int, 'MD#':int})
     DF_METADATA = df[['patient', 'ED#', 'MS#', 'ES#', 'PF#', 'MD#']]
-    #DF_METADATA['patient'] = df['patient'].astype(str)
-    """DF_METADATA.loc[['ED#', 'MS#', 'ES#', 'PF#', 'MD#']] = DF_METADATA[
-        ['ED#', 'MS#', 'ES#', 'PF#', 'MD#']].astype(int)"""
 
     files_ = x_train_sax + x_val_sax
     info('Check if we find the patient ID and phase mapping for all: {} files.'.format(len(files_)))
@@ -124,25 +122,19 @@ def train_fold(config, in_memory=False):
     val_config['AUGMENT_PHASES'] = False
     val_config['HIST_MATCHING'] = False
     val_config['AUGMENT_TEMP'] = False
-    # val_config['RESAMPLE_T'] = False # this could yield phases which does not fit into the given dim
     validation_generator = PhaseRegressionGenerator_v2(x_val_sax, x_val_sax, config=val_config, in_memory=in_memory)
 
-
-    """tf.debugging.experimental.enable_dump_debug_info(
-        'logs/tfdbg2_logdir',
-        tensor_debug_mode="FULL_HEALTH",
-        circular_buffer_size=-1)"""
     # get model
     model = create_PhaseRegressionModel_v2(config)
 
     # write the model summary to a txt file
-    with open(os.path.join(EXP_PATH, 'model_summary.txt'), 'w') as fh:
+    with open(os.path.join(FOLD_PATH, 'model_summary.txt'), 'w') as fh:
         # Pass the file handle in as a lambda function to make it callable
         model.summary(line_length=140, print_fn=lambda x: fh.write(x + '\n'))
 
     tf.keras.utils.plot_model(
         model, show_shapes=False,
-        to_file=os.path.join(EXP_PATH, 'model.png'),
+        to_file=os.path.join(FOLD_PATH, 'model.png'),
         show_layer_names=True,
         rankdir='TB',
         expand_nested=False,
@@ -151,7 +143,6 @@ def train_fold(config, in_memory=False):
 
     # training
     initial_epoch = 0
-
     model.fit(
         x=batch_generator,
         validation_data=validation_generator,
@@ -168,6 +159,9 @@ def train_fold(config, in_memory=False):
     del validation_generator
     del model
     gc.collect()
+
+    from src.models.predict_phase_reg_model import predict
+    predict(config)
 
     logging.info('Fold {} finished after {:0.3f} sec'.format(FOLD, time() - t0))
     return True
@@ -210,10 +204,6 @@ def main(args=None, in_memory=False):
         timestemp = str(datetime.datetime.now().strftime("%Y-%m-%d_%H_%M"))
 
         config['EXP_PATH'] = os.path.join(EXPERIMENTS_ROOT, EXPERIMENT, timestemp)
-        config['MODEL_PATH'] = os.path.join(config['EXP_PATH'], 'model', )
-        config['TENSORBOARD_PATH'] = os.path.join(config['EXP_PATH'], 'tensorboard_logs')
-        config['CONFIG_PATH'] = os.path.join(config['EXP_PATH'], 'config')
-        config['HISTORY_PATH'] = os.path.join(config['EXP_PATH'], 'history')
 
         if args.data:  # if we specified a different data path (training from workspace or node temporal disk)
             config['DATA_PATH_SAX'] = os.path.join(args.data, "sax/")
@@ -221,100 +211,20 @@ def main(args=None, in_memory=False):
             config['DF_META'] = os.path.join(args.data, "SAx_3D_dicomTags_phase.csv")
         print(config)
     else:
-        print('no config given, build a new one')
+        print('no config given, please select one from the  templates in exp/examples')
 
-        EXPERIMENT = args.exp
-        timestemp = str(datetime.datetime.now().strftime(
-            "%Y-%m-%d_%H_%M"))  # add a timestep to each project to make repeated experiments unique
 
-        EXP_PATH = os.path.join(EXPERIMENTS_ROOT, EXPERIMENT, timestemp)
-        MODEL_PATH = os.path.join(EXP_PATH, 'model', )
-        TENSORBOARD_PATH = os.path.join(EXP_PATH, 'tensorboard_logs')
-        CONFIG_PATH = os.path.join(EXP_PATH, 'config')
-        HISTORY_PATH = os.path.join(EXP_PATH, 'history')
-        Console_and_file_logger(path=EXP_PATH)
-
-        # define the input data paths and fold
-        # first to the 4D Nrrd files,
-        # second to a dataframe with a mapping of fold:patient
-        # Finally the path to the metadata
-        DATA_PATH_SAX = args.sax
-        DF_FOLDS = args.folds
-        DF_META = args.meta
-        FOLD = 0
-        FOLDS = [0, 1, 2, 3]
-
-        # General params
-        SEED = 42  # define a seed for the generator shuffle
-        BATCHSIZE = 8  # 32, 64, 24, 16, 1 for 3D use: 4
-        GENERATOR_WORKER = BATCHSIZE  # if not set, use batchsize
-        EPOCHS = 100
-
-        DIM = [8, 64, 64]  # network input shape for spacing of 3, (z,y,x)
-        T_SHAPE = 36
-        T_SPACING = 55
-        SPACING = [8, 3, 3]  # if resample, resample to this spacing, (z,y,x)
-
-        # Model params
-        ADD_BILSTM = args.add_lstm
-        BILSTM_UNITS = args.lstm_units
-        DEPTH = args.depth  # depth of the encoder
-        FILTERS = args.filters  # initial number of filters, will be doubled after each downsampling block
-        M_POOL = [1, 2, 2]  # size of max-pooling used for downsampling and upsampling
-        F_SIZE = [3, 3, 3]  # conv filter size
-        BN_FIRST = False  # decide if batch normalisation between conv and activation or afterwards
-        BATCH_NORMALISATION = True  # apply BN or not
-        PAD = 'same'  # padding strategy of the conv layers
-        KERNEL_INIT = 'he_normal'  # conv weight initialisation
-        OPTIMIZER = 'adam'  # Adam, Adagrad, RMSprop, Adadelta,  # https://keras.io/optimizers/
-        ACTIVATION = 'relu'  # tf.keras.layers.LeakyReLU(), relu or any other non linear activation function
-        LEARNING_RATE = 1e-4  # start with a huge lr to converge fast
-        REDUCE_LR_ON_PLATEAU_PATIENCE = 5
-        DECAY_FACTOR = 0.7  # Define a learning rate decay for the ReduceLROnPlateau callback
-        POLY_LR_DECAY = False
-        MIN_LR = 1e-12  # minimal lr, smaller lr does not improve the model
-        DROPOUT_MIN = 0.4  # lower dropout at the shallow layers
-        DROPOUT_MAX = 0.5  # higher dropout at the deep layers
-
-        # Callback params
-        MONITOR_FUNCTION = 'loss'
-        MONITOR_MODE = 'min'
-        SAVE_MODEL_FUNCTION = 'loss'
-        SAVE_MODEL_MODE = 'min'
-        MODEL_PATIENCE = 20
-        SAVE_LEARNING_PROGRESS_AS_TF = True
-
-        # Generator and Augmentation params
-        BORDER_MODE = cv2.BORDER_REFLECT_101  # border mode for the data generation
-        IMG_INTERPOLATION = cv2.INTER_LINEAR  # image interpolation in the genarator
-        MSK_INTERPOLATION = cv2.INTER_NEAREST  # mask interpolation in the generator
-        AUGMENT = args.aug  # a compose of 2D augmentation (grid distortion, 90degree rotation, brightness and shift)
-        AUGMENT_PROB = 0.8
-        AUGMENT_PHASES = args.paug
-        AUGMENT_PHASES_RANGE = args.prange
-        AUGMENT_TEMP = args.taug
-        AUGMENT_TEMP_RANGE = args.trange
-        REPEAT_ONEHOT = True
-        SHUFFLE = True
-        RESAMPLE = args.resample
-        RESAMPLE_T = args.tresample
-        HIST_MATCHING = args.hmatch
-        SCALER = 'MinMax'  # MinMax, Standard or Robust
-        # We define 5 target phases
-        PHASES = len(['ED#', 'MS#', 'ES#', 'PF#', 'MD#'])
-        TARGET_SMOOTHING = True
-        SMOOTHING_WEIGHT_CORRECT = args.gausweight
-        GAUS_SIGMA = args.gaussigma
-
-        print('init config')
-        config = init_config(config=locals(), save=False)
 
     for f in config.get('FOLDS', [0]):
         print('starting fold: {}'.format(f))
         config_ = config.copy()
         config_['FOLD'] = f
         train_fold(config_, in_memory=in_memory)
-        print('train fold: {}'.format(f))
+        print('train fold: {} finished'.format(f))
+
+    from src.models.evaluate_phase_reg import evaluate
+
+    evaluate(config.get('EXP_PATH'))
 
 
 if __name__ == "__main__":
