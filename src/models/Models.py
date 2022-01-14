@@ -451,22 +451,25 @@ def create_PhaseRegressionModel_v2(config, networkname='PhaseRegressionModel'):
         flows = tf.keras.layers.Activation('linear', name='flows', dtype='float32')(flows)
 
         outputs = [onehot, transformed, flows]
+        from tensorflow.keras.losses import mse
+        from src.utils.Metrics import Grad, MSE_
 
         if loss == 'cce':
             losses = [own_metr.CCE(masked=mask_loss, smooth=0.8, transposed=False)]
         elif loss == 'meandiff':
             losses = [own_metr.Meandiff_loss()]
-        elif loss == 'msecce':
+        elif loss == 'mae':
             print(loss)
-            losses = [own_metr.MSE(), own_metr.CCE(masked=mask_loss, smooth=0.8, transposed=False)]
-            print(losses)
-        else:  # default fallback --> MSE - works the best
-            from tensorflow.keras.losses import mse
-            from src.utils.Metrics import Grad, MSE_
             losses = {
-                # changed!!!!
-                # 'onehot': own_metr.Meandiff_loss(),
-                # 'onehot': own_metr.CCE(masked=mask_loss, smooth=0.8, transposed=False),
+                'onehot': own_metr.MSE(masked=mask_loss, loss_fn=tf.keras.losses.mae, onehot=True),
+                'transformed': own_metr.MSE(masked=mask_loss, loss_fn=tf.keras.losses.mse, onehot=False),
+                'flows': Grad('l2').loss}
+            weights = {
+                'onehot': phase_loss_weight,
+                'transformed': image_loss_weight,
+                'flows': flow_loss_weight}
+        else:  # default fallback --> MSE - works the best
+            losses = {
                 'onehot': own_metr.MSE(masked=mask_loss, loss_fn=tf.keras.losses.mse,onehot=True),
                 'transformed': own_metr.MSE(masked=mask_loss, loss_fn=tf.keras.losses.mse,onehot=False),
                 'flows': Grad('l2').loss}
