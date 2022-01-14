@@ -467,8 +467,8 @@ def create_PhaseRegressionModel_v2(config, networkname='PhaseRegressionModel'):
                 # changed!!!!
                 # 'onehot': own_metr.Meandiff_loss(),
                 # 'onehot': own_metr.CCE(masked=mask_loss, smooth=0.8, transposed=False),
-                'onehot': own_metr.MSE(masked=mask_loss),
-                'transformed': MSE_().loss,
+                'onehot': own_metr.MSE(masked=mask_loss, loss_fn=tf.keras.losses.mse,onehot=True),
+                'transformed': own_metr.MSE(masked=mask_loss, loss_fn=tf.keras.losses.mse,onehot=False),
                 'flows': Grad('l2').loss}
             weights = {
                 'onehot': phase_loss_weight,

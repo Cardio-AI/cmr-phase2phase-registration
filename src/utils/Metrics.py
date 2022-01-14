@@ -295,31 +295,37 @@ class CCE(tf.keras.losses.Loss):
 
 
 
-class MSE(tf.keras.losses.Loss):
+class MSE:
 
-    def __init__(self, masked=False):
+    def __init__(self, masked=False, loss_fn=tf.keras.losses.mse, onehot=False):
 
-        super().__init__(name='MSE_{}'.format(masked))
+        #super().__init__(name='MSE_{}'.format(masked))
+        self.__name__ = 'MSE_{}'.format(masked)
         self.masked = masked
+        self.loss_fn = loss_fn
+        self.onehot = onehot
 
 
     def __call__(self, y_true, y_pred, **kwargs):
 
-        if y_true.shape[1] == 2: # this is a stacked onehot vector
-            y_true, y_msk = tf.unstack(y_true, num=2, axis=1)
-            y_pred, _ = tf.unstack(y_pred, num=2, axis=1)
-
-            if self.masked:
+        if self.masked:
+            if y_pred.shape[1] == 2:  # this is a stacked onehot vector
+                y_true, y_msk = tf.unstack(y_true, num=2, axis=1)
+                y_pred, zeros = tf.unstack(y_pred, num=2, axis=1)
+                # masking works only if we have the gt stacked
                 y_msk = tf.cast(y_msk, tf.float32)  # weight the first area by 2
                 y_true = y_msk * y_true
                 y_pred = y_msk * y_pred
-        loss = tf.reduce_mean(tf.keras.losses.mse(y_true, y_pred)) #* y_msk[...,0]
-
-        return loss
+        elif self.onehot:
+            y_true, y_msk = tf.unstack(y_true, num=2, axis=1)
+            zeros = tf.zeros_like(y_true)
+            y_true = tf.stack([y_true, zeros], axis=1)
+        return self.loss_fn(y_true, y_pred)
 
 def mse_wrapper(y_true,y_pred):
     y_true, y_len = tf.unstack(y_true,num=2, axis=1)
     y_pred, _ = tf.unstack(y_pred,num=2, axis=1)
+
     return tf.keras.losses.mse(y_true, y_pred)
 
 def ca_wrapper(y_true, y_pred):
