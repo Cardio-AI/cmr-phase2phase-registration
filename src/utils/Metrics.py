@@ -4,7 +4,7 @@
 import numpy as np
 import tensorflow as tf
 
-class Meandiff():
+class Meandiff:
 
     def __init__(self, apply_sum=True, apply_average=True):
         self.__name__ = 'meandiff_sum_{}_avg_{}'.format(apply_sum, apply_average)
@@ -12,8 +12,7 @@ class Meandiff():
         self.apply_average = apply_average
 
     def __call__(self, y_true, y_pred, **kwargs):
-        return  meandiff(y_true, y_pred, apply_sum=self.apply_sum, apply_average=self.apply_average) # this should yield a loss between 1 and 0.0001
-
+        return  meandiff(y_true, y_pred, apply_sum=self.apply_sum, apply_average=self.apply_average)
 
 def meandiff( y_true, y_pred, apply_sum=True, apply_average=True):
 
@@ -61,13 +60,7 @@ def meandiff( y_true, y_pred, apply_sum=True, apply_average=True):
     # returns b, 5,
     gt_idx = tf.cast(tf.math.argmax(temp_gt, axis=1), dtype=tf.int32)
     pred_idx = tf.cast(tf.math.argmax(temp_pred, axis=1), dtype=tf.int32)
-
-    #gt_idx = tf.cast(DifferentiableArgmax(temp_gt, axis=1), dtype=tf.float32)#
-    #pred_idx = tf.cast(DifferentiableArgmax(temp_pred, axis=1), dtype=tf.float32)
     filled_length = tf.repeat(tf.expand_dims(y_len,axis=1),5,axis=1)
-    #print('gt_idx shape: {}'.format(gt_idx.shape))
-    #print('pred_idx shape: {}'.format(pred_idx.shape))
-    #print('filled shape: {}'.format(filled_length.shape))
 
     # b, 5, 3
     stacked = tf.stack([gt_idx, pred_idx, filled_length], axis=-1)
@@ -78,7 +71,7 @@ def meandiff( y_true, y_pred, apply_sum=True, apply_average=True):
     if apply_sum: diffs = tf.cast(tf.reduce_sum(diffs, axis=1),tf.float32)
     if apply_average: diffs = tf.reduce_mean(diffs)
     diffs = tf.cast(diffs, tf.float32)
-    tf.math.greater_equal(diffs, 0.), 'distance cant be smaller than 0'
+    #tf.math.greater_equal(diffs, 0), 'distance cant be smaller than 0'
     return diffs
 
 @tf.function
@@ -96,10 +89,10 @@ def get_min_distance(vals):
     diff = bigger - smaller
     diff_ring = tf.math.abs(mod - bigger + smaller)# we need to use the abs to avoid 0 - 0
     min_diff = tf.reduce_min(tf.stack([diff, diff_ring]))
-    tf.math.greater_equal(min_diff, 0) # this is an int, as we measure the distance between buckets for the metric
+    #tf.math.greater_equal(min_diff, 0) # this is an int, as we measure the distance between buckets for the metric
     return min_diff
 
-class Meandiff_loss():
+class Meandiff_loss:
 
     def __init__(self, apply_sum=True, apply_average=True):
         self.__name__ = 'meandiff_loss'
@@ -107,10 +100,10 @@ class Meandiff_loss():
         self.apply_average = apply_average
 
     def __call__(self, y_true, y_pred, **kwargs):
-        return  meandiff_loss(y_true, y_pred, apply_sum=self.apply_sum, apply_average=self.apply_average) # this should yield a loss between 1 and 0.0001
+        return  1 - 1/meandiff_loss_(y_true, y_pred, apply_sum=self.apply_sum, apply_average=self.apply_average) # this should yield a loss between 1 and 0.0001
 
 
-def meandiff_loss( y_true, y_pred, apply_sum=True, apply_average=True, as_loss=False):
+def meandiff_loss_( y_true, y_pred, apply_sum=True, apply_average=True, as_loss=False):
 
     """
     Average over the batches
@@ -136,6 +129,8 @@ def meandiff_loss( y_true, y_pred, apply_sum=True, apply_average=True, as_loss=F
     """
     # split gt mask and onehot
     # b, 2, t, phases
+    if len(y_true) == 3: # multi input/output model
+        y_true, y_pred = y_true[0], y_pred[0]
     y_true, y_len_msk = tf.unstack(y_true,2,axis=1)
     y_pred, _ = tf.unstack(y_pred,2,axis=1)
     # convert to tensor
@@ -175,8 +170,16 @@ def meandiff_loss( y_true, y_pred, apply_sum=True, apply_average=True, as_loss=F
     gt_idx = helper_max(temp_gt)
     pred_idx = helper_max(temp_pred)"""
     ################################################
-    gt_idx = tf.cast(DifferentiableArgmax(temp_gt, axis=1), dtype=tf.float32)#
-    pred_idx = tf.cast(DifferentiableArgmax(temp_pred, axis=1), dtype=tf.float32)
+    def softargmax(x, axis=1, beta=1e10):
+        x = tf.convert_to_tensor(x)
+        x_range = tf.range(5, dtype=tf.float32)
+        return tf.reduce_sum(tf.nn.softmax(x * beta) * x_range, axis=axis)
+
+    gt_idx = tf.cast(softargmax(temp_gt, axis=1), dtype=tf.float32)
+    pred_idx = tf.cast(softargmax(temp_pred, axis=1), dtype=tf.float32)
+
+    #gt_idx = tf.cast(DifferentiableArgmax(temp_gt, axis=1), dtype=tf.float32)#
+    #pred_idx = tf.cast(DifferentiableArgmax(temp_pred, axis=1), dtype=tf.float32)
     filled_length = tf.repeat(tf.expand_dims(y_len,axis=1),5,axis=1)
     #print('gt_idx shape: {}'.format(gt_idx.shape))
     #print('pred_idx shape: {}'.format(pred_idx.shape))
@@ -308,19 +311,27 @@ class MSE:
 
     def __call__(self, y_true, y_pred, **kwargs):
 
+
+
         if self.masked:
             if y_pred.shape[1] == 2:  # this is a stacked onehot vector
                 y_true, y_msk = tf.unstack(y_true, num=2, axis=1)
                 y_pred, zeros = tf.unstack(y_pred, num=2, axis=1)
                 # masking works only if we have the gt stacked
-                y_msk = tf.cast(y_msk, tf.float32)  # weight the first area by 2
+                y_msk = tf.cast(y_msk, tf.float32)  # weight the true cardiac cycle by zero and one
                 y_true = y_msk * y_true
                 y_pred = y_msk * y_pred
         elif self.onehot:
-            y_true, y_msk = tf.unstack(y_true, num=2, axis=1)
+            zeros = tf.zeros_like(y_true[:, 0], tf.float32)
+            ones = tf.ones_like(y_true[:, 1], tf.float32)
+            msk = tf.stack([ones, zeros], axis=1)
+            """y_true, y_msk = tf.unstack(y_true, num=2, axis=1)
             zeros = tf.zeros_like(y_true)
-            y_true = tf.stack([y_true, zeros], axis=1)
+            y_true = tf.stack([y_true, zeros], axis=1)"""
+            y_true, y_pred =  msk * y_true, msk * y_pred
+
         return self.loss_fn(y_true, y_pred)
+
 
 def mse_wrapper(y_true,y_pred):
     y_true, y_len = tf.unstack(y_true,num=2, axis=1)

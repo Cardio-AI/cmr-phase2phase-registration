@@ -272,7 +272,7 @@ def create_PhaseRegressionModel_v2(config, networkname='PhaseRegressionModel'):
         # concat this tensor as additional feature to the last axis of flow_features
         idx = get_idxs_tf(dim)
         c = get_centers_tf(dim)
-        print('centers: ',c.dtype)
+        #print('centers: ',c.dtype)
         centers = c - idx
         centers_tensor = centers[tf.newaxis, ...]
         flow2direction_lambda = tf.keras.layers.Lambda(
@@ -356,6 +356,9 @@ def create_PhaseRegressionModel_v2(config, networkname='PhaseRegressionModel'):
 
         print('Shape Input Tensor: {}'.format(input_tensor.shape))
         inputs_spatial_stacked = roll_concat_lambda_layer(input_tensor)
+        # replace the last timestep my the 2nd last timestep, otherwise we might try to predict
+        # the motion from the middle of a cardiac cycle to the first timestep (ED)
+        inputs_spatial_stacked = tf.keras.layers.Concatenate(axis=1)([inputs_spatial_stacked[:,:-1], inputs_spatial_stacked[:,-2:-1]])
         print('Shape rolled and stacked: {}'.format(inputs_spatial_stacked.shape))
         pre_flows = TimeDistributed(unet, name='4d-p2p-unet')(inputs_spatial_stacked)
         print('Unet output shape: {}'.format(pre_flows.shape))
@@ -455,11 +458,16 @@ def create_PhaseRegressionModel_v2(config, networkname='PhaseRegressionModel'):
         from src.utils.Metrics import Grad, MSE_
 
         if loss == 'cce':
-            losses = [own_metr.CCE(masked=mask_loss, smooth=0.8, transposed=False)]
+            losses = {'onehot': own_metr.MSE(masked=mask_loss, loss_fn=tf.keras.losses.categorical_crossentropy, onehot=True),
+                'transformed': own_metr.MSE(masked=mask_loss, loss_fn=tf.keras.losses.mse, onehot=False),
+                'flows': Grad('l2').loss}
+            weights = {
+                'onehot': phase_loss_weight,
+                'transformed': image_loss_weight,
+                'flows': flow_loss_weight}
         elif loss == 'meandiff':
             losses = [own_metr.Meandiff_loss()]
         elif loss == 'mae':
-            print(loss)
             losses = {
                 'onehot': own_metr.MSE(masked=mask_loss, loss_fn=tf.keras.losses.mae, onehot=True),
                 'transformed': own_metr.MSE(masked=mask_loss, loss_fn=tf.keras.losses.mse, onehot=False),
@@ -485,7 +493,8 @@ def create_PhaseRegressionModel_v2(config, networkname='PhaseRegressionModel'):
             loss=losses,
             loss_weights=weights,
             metrics={
-                'onehot': own_metr.meandiff,
+                #'onehot': own_metr.meandiff,
+                'onehot': [own_metr.Meandiff(), own_metr.meandiff_loss_]
                 # 'transformed': MSE_().loss,
                 # 'flows': Grad('l2').loss
             }

@@ -36,7 +36,7 @@ def get_metadata_maybe(sitk_img, key, default='not_found'):
     return value
 
 
-def show_2D_or_3D(img=None, mask=None, f_size=(8,8),dpi=100, interpol='none'):
+def show_2D_or_3D(img=None, mask=None, f_size=(8,8),dpi=100, interpol='none', allow_slicing=True):
     """
     Debug wrapper for 2D or 3D image/mask vizualisation
     wrapper checks the ndim and calls shoow_transparent or plot 3d
@@ -79,11 +79,11 @@ def show_2D_or_3D(img=None, mask=None, f_size=(8,8),dpi=100, interpol='none'):
     elif dim == 3 and temp.shape[-1] == 1:  # data from the batchgenerator
         return show_slice_transparent(img, mask, f_size=f_size, dpi=dpi, interpol=interpol)
     elif dim == 3:
-        return plot_3d_vol(img, mask)
+        return plot_3d_vol(img_3d=img, mask_3d=mask, allow_slicing=allow_slicing)
     elif dim == 4 and temp.shape[-1] == 1:  # data from the batchgenerator
-        return plot_3d_vol(img, mask)
+        return plot_3d_vol(img_3d=img, mask_3d=mask, allow_slicing=allow_slicing)
     elif dim == 4 and temp.shape[-1] in [3,4]: # only mask
-        return plot_3d_vol(temp, mask)
+        return plot_3d_vol(img_3d=temp, mask_3d=mask, allow_slicing=allow_slicing)
     elif dim == 4:
         return plot_4d_vol(img_4d=img, mask_4d=mask)
     else:
