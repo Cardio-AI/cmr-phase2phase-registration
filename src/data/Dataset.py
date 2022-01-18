@@ -1353,7 +1353,7 @@ def get_phases_as_idx_dmd(file_path, df, temporal_sampling_factor, length):
     indices = np.clip(indices, a_min=0, a_max=length - 1)
     return  indices
 
-def get_phases_as_onehot_gcn(file_path, df, temporal_sampling_factor, length, weight=1):
+def get_phases_as_onehot_gcn(file_path, df, temporal_sampling_factor=1, length=-1, weight=1):
     """
     load the phase info of a gcn data structure
     and converts it into a onehot vector
@@ -1397,12 +1397,16 @@ def get_phases_as_onehot_gcn(file_path, df, temporal_sampling_factor, length, we
     # Transform them into an one-hot representation
     indices = df[df.patient.str.contains(patient_str)][
         ['ED#', 'MS#', 'ES#', 'PF#', 'MD#']]
-    indices = indices.values[0].astype(int) - 1
+    if np.all(indices): # returns true if there are no zeros in this array (which means that they started counting at 1)
+        indices = indices.values[0].astype(int) - 1
 
     # scale the idx as we resampled along t (we need to resample the indicies in the same way)
-    indices = np.round(indices * temporal_sampling_factor).astype(int)
-    indices = np.clip(indices, a_min=0, a_max=length - 1)
+    if temporal_sampling_factor!=1:
+        indices = np.round(indices * temporal_sampling_factor).astype(int)
+        indices = np.clip(indices, a_min=0, a_max=length - 1)
 
+    if np.any(indices>length):
+        logging.error('found indicies  greater than length of cardiac cycle, please check: {}').format(indices[indices>length])
     onehot = np.zeros((indices.size, length))
     onehot[np.arange(indices.size), indices] = weight
     return onehot
