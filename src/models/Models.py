@@ -295,10 +295,10 @@ def create_PhaseRegressionModel_v2(config, networkname='PhaseRegressionModel'):
                                                               name='backward_conv_LSTM')
         bi_conv_lstm_layer = Bidirectional(forward_conv_lstm_layer, backward_layer=backward_conv_lstm_layer)
 
-        forward_layer = LSTM(lstm_units, return_sequences=True, dropout=0.4, name='forward_LSTM')
-        backward_layer = LSTM(lstm_units, return_sequences=True, dropout=0.4, go_backwards=True,
+        forward_layer = LSTM(lstm_units, return_sequences=True, dropout=0.0, name='forward_LSTM')
+        backward_layer = LSTM(lstm_units, return_sequences=True, dropout=0.0, go_backwards=True,
                               name='backward_LSTM')  # maybe change to tanh
-        bi_lstm_layer = Bidirectional(forward_layer, backward_layer=backward_layer, merge_mode='concat')
+        bi_lstm_layer = Bidirectional(forward_layer, backward_layer=backward_layer, merge_mode='ave')
 
         # How to downscale the in-plane/spatial resolution?
         # 1st idea: apply conv layers with a stride
@@ -345,7 +345,7 @@ def create_PhaseRegressionModel_v2(config, networkname='PhaseRegressionModel'):
         downsamples = downsamples[:-1]  # remove last BN layer
 
         downsample = tf.keras.Sequential(layers=downsamples, name='downsample_inplane_and_spatial')
-        final_onehot_conv = tf.keras.layers.Conv1D(filters=PHASES, kernel_size=3, strides=1, padding='same',
+        final_onehot_conv = tf.keras.layers.Conv1D(filters=PHASES, kernel_size=1, strides=1, padding='same',
                                                    kernel_initializer=kernel_init, activation=final_activation,
                                                    name='pre_onehot')
 
@@ -437,9 +437,8 @@ def create_PhaseRegressionModel_v2(config, networkname='PhaseRegressionModel'):
             print('Shape after LSTM layers: {}'.format(flow_features.shape))
 
 
-
         # input (t,encoding) output (t,5)
-        # 36, 5
+        # t, 5
         onehot = final_onehot_conv(flow_features)
         print('Shape after final conv layer: {}'.format(onehot.shape))
         # add empty tensor with one-hot shape to align with gt
@@ -458,7 +457,7 @@ def create_PhaseRegressionModel_v2(config, networkname='PhaseRegressionModel'):
         from src.utils.Metrics import Grad, MSE_
 
         if loss == 'cce':
-            losses = {'onehot': own_metr.MSE(masked=mask_loss, loss_fn=tf.keras.losses.categorical_crossentropy, onehot=True),
+            losses = {'onehot': own_metr.MSE(masked=mask_loss, loss_fn=tf.keras.losses.CategoricalCrossentropy(label_smoothing=0.4,reduction=tf.keras.losses.Reduction.NONE), onehot=True),
                 'transformed': own_metr.MSE(masked=mask_loss, loss_fn=tf.keras.losses.mse, onehot=False),
                 'flows': Grad('l2').loss}
             weights = {
@@ -493,8 +492,8 @@ def create_PhaseRegressionModel_v2(config, networkname='PhaseRegressionModel'):
             loss=losses,
             loss_weights=weights,
             metrics={
-                #'onehot': own_metr.meandiff,
-                'onehot': [own_metr.Meandiff(), own_metr.meandiff_loss_]
+                'onehot': own_metr.Meandiff(),
+                #'onehot': [own_metr.Meandiff(), own_metr.meandiff_loss_]
                 # 'transformed': MSE_().loss,
                 # 'flows': Grad('l2').loss
             }

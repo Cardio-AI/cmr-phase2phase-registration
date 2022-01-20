@@ -799,9 +799,12 @@ class PhaseRegressionGenerator(DataGenerator):
             # By this we avoid hard borders
             # Later divide the smoothed vectors by the sum or via softmax
             # to make sure they sum up to 1 for each class
-            onehot = np.apply_along_axis(
+            import scipy.ndimage as nd
+            onehot = nd.gaussian_filter(input=onehot,sigma=self.SIGMA, mode='mirror')
+
+            """onehot = np.apply_along_axis(
                 lambda x: gaussian_filter1d(x, sigma=self.SIGMA),
-                axis=1, arr=onehot)
+                axis=1, arr=onehot)"""
             logging.debug('onehot smoothed with sigma={}:'.format(self.SIGMA))
             if self.DEBUG_MODE: plt.imshow(onehot); plt.show()
             # logging.debug('smoothed:\n{}'.format(onehot))
@@ -893,35 +896,7 @@ class PhaseRegressionGenerator(DataGenerator):
         # - The standard (unit) softmax function 𝜎:ℝ𝐾→ℝ𝐾 is defined by the formula
         # 𝜎(𝐳)𝑖=𝑒𝑧𝑖∑𝐾𝑗=1𝑒𝑧𝑗 for 𝑖=1,…,𝐾 and 𝐳=(𝑧1,…,𝑧𝐾)∈ℝ𝐾
 
-        model_inputs = normalise_image(model_inputs, normaliser=self.SCALER)  # normalise per 4D
-        # logging.debug('background: \n{}'.format(onehot))
-
-        ax_to_normalise = 1
-        # Normalise the one-hot vector, with softmax
-        """onehot = np.apply_along_axis(
-            lambda x: np.exp(x)/ np.sum(np.exp(x)),
-            ax_to_normalise, onehot)"""
-        # For the MSE-loss we dont need that normalisation step
-        # logging.debug('normalised (sum phases per timestep == 1): \n{}'.format(onehot))
-        self.__plot_state_if_debug__(img=model_inputs[len(model_inputs) // 2], start_time=t1,
-                                     step='clipped cropped and pad')
-
-        # add length as mask to onhot if we repeat,
-        # otherwise we created a mask before the padding step
-        if self.REPEAT:
-            msk = np.pad(
-                np.ones((gt_length, self.PHASES)),
-                ((0, self.T_SHAPE - gt_length), (0, 0)))
-
-        if self.ISACDC:
-            model_inputs = np.flip(model_inputs,axis=1)
-
-        onehot = np.stack([onehot, msk], axis=0)
-        # make sure we do not introduce Nans to the model
-        assert not np.any(np.isnan(onehot))
-        assert not np.any(np.isnan(model_inputs))
-
-        return model_inputs[..., None], onehot, i, ID, time() - t0
+        model_inputs = normalise_image(model_inputs, normaliser=self.SCALER)
 
 class PhaseRegressionGenerator_v2(DataGenerator):
     """
@@ -952,6 +927,8 @@ class PhaseRegressionGenerator_v2(DataGenerator):
         self.AUGMENT_TEMP_RANGE = config.get('AUGMENT_TEMP_RANGE', (-5, 5))
         self.RESAMPLE_T = config.get('RESAMPLE_T', False)
         self.ROTATE = config.get('ROTATE', False)
+        self.ADD_SOFTMAX = config.get('ADD_SOFTMAX', False)
+        self.SOFTMAX_AXIS = config.get('SOFTMAX_AXIS', False)
         self.IN_MEMORY = in_memory
         self.THREAD_POOL = concurrent.futures.ThreadPoolExecutor(max_workers=12)
         self.config = config
@@ -1141,7 +1118,8 @@ class PhaseRegressionGenerator_v2(DataGenerator):
             logging.debug('temp augmentation with: {}'.format(rand))
             if self.DEBUG_MODE: plt.imshow(onehot); plt.show()
 
-        # Fake a ring behaviour by first, tile along t
+        # Fake a ring behaviour by
+        # first, tile along t
         # second smooth with a gausian Kernel,
         # third split+maximise element-wise on both matrices
         onehot = np.tile(onehot_orig, (1, reps * 2))
@@ -1154,6 +1132,11 @@ class PhaseRegressionGenerator_v2(DataGenerator):
             # By this we avoid hard borders
             # Later divide the smoothed vectors by the sum or via softmax
             # to make sure they sum up to 1 for each class
+            import scipy.ndimage as nd
+            # here we could define a uncertainty phase2frame and frame2phase by 2D gaus
+            # unfortunately th experiments were worse
+            #onehot = nd.gaussian_filter(input=onehot, sigma=self.SIGMA, mode='mirror')
+
             onehot = np.apply_along_axis(
                 lambda x: gaussian_filter1d(x, sigma=self.SIGMA),
                 axis=1, arr=onehot)
@@ -1300,7 +1283,7 @@ class PhaseRegressionGenerator_v2(DataGenerator):
         msk = np.ones_like(onehot)
         logging.debug('onehot pap and cropped:')
         if self.DEBUG_MODE: plt.imshow(onehot); plt.show()
-        msk = pad_and_crop(msk, target_shape=self.TARGET_SHAPE)
+        #msk = pad_and_crop(msk, target_shape=self.TARGET_SHAPE)
 
         # Finally normalise the 4D volume in one value space
         # Normalise the one-hot along the second axis
@@ -1315,9 +1298,10 @@ class PhaseRegressionGenerator_v2(DataGenerator):
 
         ax_to_normalise = 1
         # Normalise the one-hot vector, with softmax
-        """onehot = np.apply_along_axis(
+        if self.ADD_SOFTMAX:
+            onehot = np.apply_along_axis(
             lambda x: np.exp(x)/ np.sum(np.exp(x)),
-            ax_to_normalise, onehot)"""
+            self.SOFTMAX_AXIS, onehot)
         # For the MSE-loss we currently dont need a normalisation step of the onehot
         # logging.debug('normalised (sum phases per timestep == 1): \n{}'.format(onehot))
         self.__plot_state_if_debug__(img=model_inputs[len(model_inputs) // 2], start_time=t1,
