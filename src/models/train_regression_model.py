@@ -24,7 +24,6 @@ def train_fold(config, in_memory=False):
     from src.data.Dataset import get_trainings_files
     from src.data.Generators import PhaseRegressionGenerator_v2
     from src.models.Models import create_PhaseRegressionModel_v2
-    from src.data.Generators import PhaseRegressionGenerator
     from src.models.Models import create_PhaseRegressionModel
 
     # import external libs
