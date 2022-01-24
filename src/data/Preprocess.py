@@ -638,7 +638,7 @@ def get_ip_from_mask_3d(msk_3d, debug=False, keepdim=False, rev=False):
 
     return first_ips, second_ips
 
-def align_inplane_with_ip(model_inputs, msk_file_name):
+def align_inplane_with_ip(model_inputs, msk_file_name, roll2septum=False, roll2lvbood=False):
     '''
     Rotate a 4d SAX CMR stack according to the RV insertion points of a corresponding mask
     Returns the same 4d SAX stack but in-plane rotated to
@@ -678,16 +678,20 @@ def align_inplane_with_ip(model_inputs, msk_file_name):
     # How much do we want to rotate
     rot_angle = ip_angle - 90
     import scipy.ndimage as nd
-    # Move to center of lv bloodpool or mean septum wall
-    #center = nd.center_of_mass(mask3d==3)
-    #center = center[1:] # ignore z-axis for translation
-    center = np.mean([fip,sip], axis=0).astype(int)
-    center = center[::-1]
-    ny, nx = model_inputs.shape[-2:]
-    ry = int(ny//2-center[0])
-    rx = int(nx//2-center[1])
-    model_inputs = np.roll(model_inputs, ry, axis=-2)
-    model_inputs = np.roll(model_inputs, rx, axis=-1)
+    # Move to center of lv bloodpool
+    if roll2lvbood:
+        center = nd.center_of_mass(mask3d==3)
+        center = center[1:] # ignore z-axis for translation
+    if roll2septum:
+        # or mean septum wall
+        center = np.mean([fip,sip], axis=0).astype(int)
+        center = center[::-1]
+    if roll2septum or roll2lvbood:
+        ny, nx = model_inputs.shape[-2:]
+        ry = int(ny//2-center[0])
+        rx = int(nx//2-center[1])
+        model_inputs = np.roll(model_inputs, ry, axis=-2)
+        model_inputs = np.roll(model_inputs, rx, axis=-1)
 
     # Rotate the 4D volume in-plane (x,y-axis)
     model_inputs = ndimage.rotate(model_inputs, angle=rot_angle, reshape=False, order=1, axes=(-2, -1))

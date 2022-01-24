@@ -407,6 +407,19 @@ def create_PhaseRegressionModel_v2(config, networkname='PhaseRegressionModel'):
             flow_features = tf.transpose(flow_features, perm=[0, 2, 1, 3, 4, 5])
         print('flow features after conv lstm: {}'.format(flow_features.shape))
 
+        # slice the 3D sequence of features into on sequence per corner
+        # as our images are spatial aligned
+        # each 3D-sliced-corner-sequence represents one specific "part" of the heart
+        # finally concat them as channel, which makes them available to the LSTM layer
+        split=False
+        if split:
+            y, x = flow_features.shape[-3:-1]
+            dir_1 = flow_features[..., :y // 2, :x // 2,:]
+            dir_2 = flow_features[..., y // 2:, :x // 2,:]
+            dir_3 = flow_features[..., y // 2:, x // 2:,:]
+            dir_4 = flow_features[..., :y // 2, x // 2:,:]
+            flow_features = tf.keras.layers.Concatenate(axis=-1,name='split_corners')([dir_1,dir_2,dir_3,dir_4])
+        print('flow features after split corners: {}'.format(flow_features.shape))
 
         if downsample_flow_features:
             flow_features = TimeDistributed(downsample)(flow_features)
@@ -436,9 +449,9 @@ def create_PhaseRegressionModel_v2(config, networkname='PhaseRegressionModel'):
             flow_features = bi_lstm_layer(flow_features)
             print('Shape after LSTM layers: {}'.format(flow_features.shape))
 
-
         # input (t,encoding) output (t,5)
         # t, 5
+        # onehot = tf.keras.layers.Dense(units=5, activation=final_activation, kernel_initializer=kernel_init)(flow_features)
         onehot = final_onehot_conv(flow_features)
         print('Shape after final conv layer: {}'.format(onehot.shape))
         # add empty tensor with one-hot shape to align with gt

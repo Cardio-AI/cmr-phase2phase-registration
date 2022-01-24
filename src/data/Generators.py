@@ -619,7 +619,7 @@ class PhaseRegressionGenerator_v2(DataGenerator):
         self.IMG_INTERPOLATION = config.get('IMG_INTERPOLATION', sitk.sitkLinear)
         self.MSK_INTERPOLATION = config.get('MSK_INTERPOLATION', sitk.sitkNearestNeighbor)
         self.AUGMENT_TEMP = config.get('AUGMENT_TEMP', False)
-        self.AUGMENT_TEMP_RANGE = config.get('AUGMENT_TEMP_RANGE', (-5, 5))
+        self.AUGMENT_TEMP_RANGE = config.get('AUGMENT_TEMP_RANGE', (-3, 3))
         self.RESAMPLE_T = config.get('RESAMPLE_T', False)
         self.ROTATE = config.get('ROTATE', False)
         self.ADD_SOFTMAX = config.get('ADD_SOFTMAX', False)
@@ -772,8 +772,22 @@ class PhaseRegressionGenerator_v2(DataGenerator):
                                                                      self.AUGMENT_TEMP_RANGE[1])
         logging.debug('t-spacing: {}'.format(t_spacing))
         if self.RESAMPLE_T:
-            temporal_sampling_factor = model_inputs.GetSpacing()[-1] / t_spacing
-            model_inputs = resample_t_of_4d(model_inputs, t_spacing=t_spacing, interpolation=self.IMG_INTERPOLATION,
+            # read recent physical temporal spacing
+            # if non is given or set to 1, set the recent t spacing to the config t spacing
+            # if temp resampling is activated it will resample in  a range of tspacing +/- range
+            recent_spacing = model_inputs.GetSpacing()
+            if len(recent_spacing) == 4:# if we have a spacing for t
+                recent_t = recent_spacing[-1]
+                if recent_t == 1:
+                    recent_t = self.T_SPACING
+                    model_inputs.SetSpacing((*recent_spacing[:-1],recent_t ))
+            else: # fallback to the config value, here we dont resample t except of activated temp augmentation
+                recent_t = self.T_SPACING
+                model_inputs.SetSpacing((*recent_spacing[:-1], recent_t))
+
+            temporal_sampling_factor = recent_t / t_spacing
+            if temporal_sampling_factor!=1: # we dont need to resample if factor ==1
+                model_inputs = resample_t_of_4d(model_inputs, t_spacing=t_spacing, interpolation=self.IMG_INTERPOLATION,
                                             ismask=False)
         else:
             temporal_sampling_factor = 1  # dont scale the indices if we dont resample T
@@ -915,7 +929,7 @@ class PhaseRegressionGenerator_v2(DataGenerator):
                                                 interpolate=self.MSK_INTERPOLATION),
                                     zip(msk, new_size_inputs)))
             msk = np.stack(list(map(lambda x: sitk.GetArrayFromImage(x), msk)), axis=0)
-            model_inputs = align_inplane_with_ip(model_inputs, msk_file_name=msk)
+            model_inputs = align_inplane_with_ip(model_inputs, msk_file_name=msk, roll2septum=True, roll2lvbood=False)
 
         # performance test, keep t, crop the other dimensions to 1.5 times the target shape
         # This decreases the memory footprint and the computation time for further processing steps
