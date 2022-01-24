@@ -427,7 +427,7 @@ def create_PhaseRegressionModel_v2(config, networkname='PhaseRegressionModel'):
             flow_features = TimeDistributed(gap)(flow_features)
         flow_features = tf.keras.layers.Reshape(target_shape=(flow_features.shape[1], flow_features.shape[-1]))(
             flow_features)
-
+        print('flow features after downsample/gap layer: {}'.format(flow_features.shape))
         # down-sample the flow in-plane
         # Build an encoder with n times conv+relu+maxpool+bn-blocks
         if addunetencoding:
@@ -451,7 +451,9 @@ def create_PhaseRegressionModel_v2(config, networkname='PhaseRegressionModel'):
 
         # input (t,encoding) output (t,5)
         # t, 5
+        # Dense and conv layers instead of the LSTM layer both overfit more
         # onehot = tf.keras.layers.Dense(units=5, activation=final_activation, kernel_initializer=kernel_init)(flow_features)
+        #flow_features = tf.keras.layers.Conv1D(filters=32, kernel_size=3,strides=1, padding='same', kernel_initializer=kernel_init, activation='relu')(flow_features)
         onehot = final_onehot_conv(flow_features)
         print('Shape after final conv layer: {}'.format(onehot.shape))
         # add empty tensor with one-hot shape to align with gt
