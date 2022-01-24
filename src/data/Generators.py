@@ -920,7 +920,7 @@ class PhaseRegressionGenerator_v2(DataGenerator):
                 msk_name = sorted(glob.glob(x.split('_4d.nii.gz')[0].replace('sax', 'msk_ed') + '*'))[0]
             else:
                 msk_name = x.replace('clean', 'mask')
-            #if os.path.isfile(msk_name):
+            assert os.path.isfile(msk_name),'msk file name not given: {}'.format(msk_name)
             msk = split_one_4d_sitk_in_list_of_3d_sitk(sitk.ReadImage(msk_name), axis=0)
             msk = list(map(lambda x:
                                     resample_3D(sitk_img=x[0],
