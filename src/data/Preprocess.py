@@ -660,6 +660,8 @@ def align_inplane_with_ip(model_inputs, msk_file_name, roll2septum=False, roll2l
     # Find the first labelled time step, could also be done for all labelled time steps
     if mask.ndim==3:
         mask3d = mask
+    elif mask.shape[0] ==1:
+        mask3d = mask[0]
     else:
         i = get_first_idx(mask)
         mask3d = mask[i]
@@ -690,8 +692,8 @@ def align_inplane_with_ip(model_inputs, msk_file_name, roll2septum=False, roll2l
         ny, nx = model_inputs.shape[-2:]
         ry = int(ny//2-center[0])
         rx = int(nx//2-center[1])
-        model_inputs = np.roll(model_inputs, ry, axis=-2)
-        model_inputs = np.roll(model_inputs, rx, axis=-1)
+        model_inputs = np.roll(model_inputs, ry, axis=-2) # roll the y-axis
+        model_inputs = np.roll(model_inputs, rx, axis=-1) # roll the x-axis
 
     # Rotate the 4D volume in-plane (x,y-axis)
     model_inputs = ndimage.rotate(model_inputs, angle=rot_angle, reshape=False, order=1, axes=(-2, -1))

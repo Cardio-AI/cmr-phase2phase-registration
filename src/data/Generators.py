@@ -921,7 +921,11 @@ class PhaseRegressionGenerator_v2(DataGenerator):
             else:
                 msk_name = x.replace('clean', 'mask')
             assert os.path.isfile(msk_name),'msk file name not given: {}'.format(msk_name)
-            msk = split_one_4d_sitk_in_list_of_3d_sitk(sitk.ReadImage(msk_name), axis=0)
+            msk = sitk.ReadImage(msk_name)
+            if msk.GetDimension()==4:
+                msk = split_one_4d_sitk_in_list_of_3d_sitk(msk, axis=0)
+            else:
+                msk = [msk]
             msk = list(map(lambda x:
                                     resample_3D(sitk_img=x[0],
                                                 size=x[1],
@@ -1024,7 +1028,7 @@ class PhaseRegressionGenerator_v2(DataGenerator):
                 ((0, self.T_SHAPE - gt_length), (0, 0)))
 
         if self.ISACDC:
-            model_inputs = np.flip(model_inputs,axis=1)
+            model_inputs = np.flip(model_inputs,axis=1) # before: apex--> base, after: base --> apex
 
         onehot = np.stack([onehot, msk], axis=0)
         # make sure we do not introduce Nans to the model
@@ -1207,7 +1211,6 @@ class PhaseWindowGenerator(DataGenerator):
 
         # --------------- SPLIT IN 3D SITK IMAGES-------------
         # Create a list of 3D volumes for volume resampling
-        # apply histogram matching if given by config
         model_inputs = split_one_4d_sitk_in_list_of_3d_sitk(model_inputs, axis=0, prob=self.AUGMENT_PROB)
         logging.debug('split in t x 3D took: {:0.3f} s'.format(time() - t1))
         t1 = time()
