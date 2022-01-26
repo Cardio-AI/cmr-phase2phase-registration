@@ -640,6 +640,10 @@ class PhaseRegressionGenerator_v2(DataGenerator):
                                 dtype=np.float32)  # onehot and mask with gt length
 
         self.ISACDC = False
+        self.ISDMD = False
+        if config.get('ISDMDDATA', False):
+            self.ISDMD = True
+
         logging.info('first file: {}'.format(self.IMAGES[0].lower()))
         if 'nii.gz' in self.IMAGES[0].lower():
             self.ISACDC = True
@@ -804,11 +808,12 @@ class PhaseRegressionGenerator_v2(DataGenerator):
         if self.ISACDC:
             """onehot_orig = get_phases_as_onehot_acdc(x, temporal_sampling_factor, len(model_inputs),
                                                self.SMOOTHING_WEIGHT_CORRECT)""" # works for original acdc data with two labels
-            onehot_orig = get_phases_as_onehot_gcn(x, self.DF_METADATA, temporal_sampling_factor, len(model_inputs),
-                                                   self.SMOOTHING_WEIGHT_CORRECT)
-        else:
+            onehot_orig = get_phases_as_onehot_acdc(x, self.DF_METADATA, temporal_sampling_factor, len(model_inputs))
+        elif self.ISDMD:
             onehot_orig = get_phases_as_onehot_gcn(x, self.DF_METADATA, temporal_sampling_factor, len(model_inputs),
                                               self.SMOOTHING_WEIGHT_CORRECT)
+        else: # gcn/tof data phases minus 1
+            onehot_orig = get_phases_as_onehot_acdc(x, self.DF_METADATA, temporal_sampling_factor, len(model_inputs))
 
         logging.debug('onehot initialised:')
         if self.DEBUG_MODE: plt.imshow(onehot_orig); plt.show()

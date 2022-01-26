@@ -1397,8 +1397,8 @@ def get_phases_as_onehot_gcn(file_path, df, temporal_sampling_factor=1, length=-
     # Transform them into an one-hot representation
     indices = df[df.patient.str.contains(patient_str)][
         ['ED#', 'MS#', 'ES#', 'PF#', 'MD#']]
-    if np.all(indices): # returns true if there are no zeros in this array (which means that they started counting at 1)
-        indices = indices.values[0].astype(int) - 1
+    #if np.all(indices): # returns true if there are no zeros in this array (which means that they started counting at 1)
+    indices = indices.values[0].astype(int) - 1
 
     # scale the idx as we resampled along t (we need to resample the indicies in the same way)
     if temporal_sampling_factor!=1:
@@ -1450,7 +1450,66 @@ def get_phases_as_idx_acdc(file_path, temporal_sampling_factor, length):
     indices = np.clip(indices, a_min=0, a_max=length-1)
     return indices
 
-def get_phases_as_onehot_acdc(file_path, temporal_sampling_factor, length, weight=1):
+def get_phases_as_onehot_acdc(file_path, df, temporal_sampling_factor=1, length=-1, weight=1):
+    """
+    load the phase info of a gcn data structure
+    and converts it into a onehot vector
+    # order of phase classes, learnt by the phase regression model
+    # ['ED#', 'MS#', 'ES#', 'PF#', 'MD#']]
+    Parameters
+    ----------
+    file_path :
+    df :
+    temporal_sampling_factor :
+    length :
+    weight :
+
+    Returns
+    -------
+
+    """
+    import re
+
+    patient_str, ind, indices = '', '', ''
+    patient_str = re.search('-(.{8})_', file_path)
+    if patient_str:  # GCN data
+        patient_str = patient_str.group(1).upper()
+        assert (
+                    len(patient_str) == 8), 'matched patient ID from the phase sheet has a length of: {}, expected a length of 8 for GCN data'.format(
+            len(patient_str))
+    else:  # DMD data
+        patient_str = os.path.basename(file_path).split('_volume')[0].lower()
+
+    if 'nii.gz' in patient_str:  # ACDC files e.g.: patient001_4d.nii.gz
+        patient_str = re.search('patient(.{3})_', file_path)
+        patient_str = patient_str.group(1).upper()
+
+    assert len(
+        patient_str) > 0, 'empty patient id found, please check the get_patient_id in fn train_fold(), usually there are path problems'
+
+
+
+    # Returns the indices in the following order: 'ED#', 'MS#', 'ES#', 'PF#', 'MD#'
+    # Reduce the indices of the excel sheet by one, as the indexes start at 0, the excel-sheet at 1
+    # Transform them into an one-hot representation
+    indices = df[df.patient.str.contains(patient_str)][
+        ['ED#', 'MS#', 'ES#', 'PF#', 'MD#']]
+    #if np.all(indices): # returns true if there are no zeros in this array (which means that they started counting at 1)
+    indices = indices.values[0].astype(int)
+
+    # scale the idx as we resampled along t (we need to resample the indicies in the same way)
+    if temporal_sampling_factor!=1:
+        indices = np.round(indices * temporal_sampling_factor).astype(int)
+        indices = np.clip(indices, a_min=0, a_max=length - 1)
+
+    if np.any(indices>length):
+        logging.error('found indicies  greater than length of cardiac cycle, please check: {}').format(indices[indices>length])
+    onehot = np.zeros((indices.size, length))
+    onehot[np.arange(indices.size), indices] = weight
+    return onehot
+
+
+def get_phases_as_onehot_acdc_cfg(file_path, temporal_sampling_factor, length, weight=1):
     """
     load the phase info of an acdc data structure
     and converts it into a onehot vector
