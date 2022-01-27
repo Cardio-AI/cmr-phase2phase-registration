@@ -329,8 +329,36 @@ class MSE:
             zeros = tf.zeros_like(y_true)
             y_true = tf.stack([y_true, zeros], axis=1)"""
             y_true, y_pred =  msk * y_true, msk * y_pred
+            # b, 2,
+
 
         return self.loss_fn(y_true, y_pred)
+
+class SSIM:
+
+    def __init__(self):
+
+        #super().__init__(name='MSE_{}'.format(masked))
+        self.__name__ = 'SSIM'
+
+
+
+    def __call__(self, y_true, y_pred, **kwargs):
+
+            def get_shape(tensor):
+                static_shape = tensor.shape.as_list()
+                dynamic_shape = tf.unstack(tf.shape(tensor))
+                dims = [s[1] if s[0] is None else s[0]
+                        for s in zip(static_shape, dynamic_shape)]
+                return dims
+
+            shape_ytrue = get_shape(y_true)
+            t_shape = (shape_ytrue[0],shape_ytrue[-3],shape_ytrue[-2],shape_ytrue[1]*shape_ytrue[2])
+            img1 = tf.reshape(tensor=y_true, shape=t_shape)
+            img2 = tf.reshape(tensor=y_pred, shape=t_shape)
+            ssim = tf.image.ssim(img1, img2, max_val=1.0, filter_size=11,
+                          filter_sigma=1.5, k1=0.01, k2=0.03)
+            return 1- ssim
 
 
 def mse_wrapper(y_true,y_pred):

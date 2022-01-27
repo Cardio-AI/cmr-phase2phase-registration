@@ -798,7 +798,7 @@ class PhaseRegressionGenerator_v2(DataGenerator):
         # Create a list of 3D volumes for resampling
         # apply histogram matching if given by config
         model_inputs = split_one_4d_sitk_in_list_of_3d_sitk(model_inputs, axis=0)
-        logging.debug('load + hist matching took: {:0.3f} s'.format(time() - t0))
+
         gt_length = len(model_inputs)
         # How many times do we need to repeat that cycle along t to cover the desired output size
         reps = 1
@@ -913,6 +913,7 @@ class PhaseRegressionGenerator_v2(DataGenerator):
         # repeat the 3D volumes along t (we did the same with the onehot vector)
         model_inputs = np.stack(list(map(lambda x: sitk.GetArrayFromImage(x), model_inputs)), axis=0)
 
+        # load a valid 3D or 4D mask, resample with the same parameters as done with the CMR
         # get idx of valid mask
         # get IPs of one timestep
         # calc mean IPs

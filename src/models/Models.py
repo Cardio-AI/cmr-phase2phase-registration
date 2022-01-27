@@ -296,9 +296,12 @@ def create_PhaseRegressionModel_v2(config, networkname='PhaseRegressionModel'):
         bi_conv_lstm_layer = Bidirectional(forward_conv_lstm_layer, backward_layer=backward_conv_lstm_layer)
 
         forward_layer = LSTM(lstm_units, return_sequences=True, dropout=0.0, name='forward_LSTM')
-        backward_layer = LSTM(lstm_units, return_sequences=True, dropout=0.0, go_backwards=True,
-                              name='backward_LSTM')  # maybe change to tanh
-        bi_lstm_layer = Bidirectional(forward_layer, backward_layer=backward_layer, merge_mode='ave')
+        backward_layer = LSTM(lstm_units, return_sequences=True, dropout=0.0, go_backwards=True,name='backward_LSTM')
+        bi_lstm_layer = Bidirectional(forward_layer, backward_layer=backward_layer, merge_mode='ave', name='biLSTM')
+
+        forward_layer1 = LSTM(lstm_units, return_sequences=True, dropout=0.0, name='forward_LSTM1')
+        backward_layer1 = LSTM(lstm_units, return_sequences=True, dropout=0.0, go_backwards=True, name='backward_LSTM1')
+        bi_lstm_layer1 = Bidirectional(forward_layer1, backward_layer=backward_layer1, merge_mode='ave', name='biLSTM1')
 
         # How to downscale the in-plane/spatial resolution?
         # 1st idea: apply conv layers with a stride
@@ -447,6 +450,7 @@ def create_PhaseRegressionModel_v2(config, networkname='PhaseRegressionModel'):
         if add_bilstm:
             print('Shape before LSTM layers: {}'.format(flow_features.shape))
             flow_features = bi_lstm_layer(flow_features)
+            flow_features = bi_lstm_layer1(flow_features)
             print('Shape after LSTM layers: {}'.format(flow_features.shape))
 
         # input (t,encoding) output (t,5)
@@ -471,34 +475,34 @@ def create_PhaseRegressionModel_v2(config, networkname='PhaseRegressionModel'):
         from tensorflow.keras.losses import mse
         from src.utils.Metrics import Grad, MSE_
 
+        weights = {
+            'onehot': phase_loss_weight,
+            'transformed': image_loss_weight,
+            'flows': flow_loss_weight}
+
         if loss == 'cce':
-            losses = {'onehot': own_metr.MSE(masked=mask_loss, loss_fn=tf.keras.losses.CategoricalCrossentropy(label_smoothing=0.4,reduction=tf.keras.losses.Reduction.NONE), onehot=True),
+            losses = {
+                'onehot': own_metr.MSE(masked=mask_loss, loss_fn=tf.keras.losses.CategoricalCrossentropy(label_smoothing=0.4,reduction=tf.keras.losses.Reduction.NONE), onehot=True),
                 'transformed': own_metr.MSE(masked=mask_loss, loss_fn=tf.keras.losses.mse, onehot=False),
                 'flows': Grad('l2').loss}
-            weights = {
-                'onehot': phase_loss_weight,
-                'transformed': image_loss_weight,
-                'flows': flow_loss_weight}
-        elif loss == 'meandiff':
-            losses = [own_metr.Meandiff_loss()]
+
+        elif loss == 'ssim':
+            losses = {
+                'onehot': own_metr.MSE(masked=mask_loss, loss_fn=tf.keras.losses.mse, onehot=True),
+                'transformed': own_metr.SSIM(),
+                'flows': Grad('l2').loss}
         elif loss == 'mae':
             losses = {
                 'onehot': own_metr.MSE(masked=mask_loss, loss_fn=tf.keras.losses.mae, onehot=True),
                 'transformed': own_metr.MSE(masked=mask_loss, loss_fn=tf.keras.losses.mse, onehot=False),
                 'flows': Grad('l2').loss}
-            weights = {
-                'onehot': phase_loss_weight,
-                'transformed': image_loss_weight,
-                'flows': flow_loss_weight}
+
         else:  # default fallback --> MSE - works the best
             losses = {
                 'onehot': own_metr.MSE(masked=mask_loss, loss_fn=tf.keras.losses.mse,onehot=True),
                 'transformed': own_metr.MSE(masked=mask_loss, loss_fn=tf.keras.losses.mse,onehot=False),
                 'flows': Grad('l2').loss}
-            weights = {
-                'onehot': phase_loss_weight,
-                'transformed': image_loss_weight,
-                'flows': flow_loss_weight}
+
 
         print('added loss: {}'.format(loss))
         model = Model(inputs=[input_tensor], outputs=outputs, name=networkname)
@@ -509,7 +513,7 @@ def create_PhaseRegressionModel_v2(config, networkname='PhaseRegressionModel'):
             metrics={
                 'onehot': own_metr.Meandiff(),
                 #'onehot': [own_metr.Meandiff(), own_metr.meandiff_loss_]
-                # 'transformed': MSE_().loss,
+                #'transformed': own_metr.SSIM(),
                 # 'flows': Grad('l2').loss
             }
         )
