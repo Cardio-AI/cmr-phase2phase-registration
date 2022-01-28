@@ -813,7 +813,7 @@ class PhaseRegressionGenerator_v2(DataGenerator):
             onehot_orig = get_phases_as_onehot_gcn(x, self.DF_METADATA, temporal_sampling_factor, len(model_inputs),
                                               self.SMOOTHING_WEIGHT_CORRECT)
         else: # gcn/tof data phases minus 1
-            onehot_orig = get_phases_as_onehot_acdc(x, self.DF_METADATA, temporal_sampling_factor, len(model_inputs))
+            onehot_orig = get_phases_as_onehot_gcn(x, self.DF_METADATA, temporal_sampling_factor, len(model_inputs))
 
         logging.debug('onehot initialised:')
         if self.DEBUG_MODE: plt.imshow(onehot_orig); plt.show()
