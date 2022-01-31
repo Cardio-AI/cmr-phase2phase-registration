@@ -1359,6 +1359,8 @@ def get_phases_as_onehot_gcn(file_path, df, temporal_sampling_factor=1, length=-
     and converts it into a onehot vector
     # order of phase classes, learnt by the phase regression model
     # ['ED#', 'MS#', 'ES#', 'PF#', 'MD#']]
+    the GCN phase labels start with 1, different to indexing,
+    we need to subtract 1 from each idx
     Parameters
     ----------
     file_path :
@@ -1389,8 +1391,6 @@ def get_phases_as_onehot_gcn(file_path, df, temporal_sampling_factor=1, length=-
 
     assert len(
         patient_str) > 0, 'empty patient id found, please check the get_patient_id in fn train_fold(), usually there are path problems'
-
-
 
     # Returns the indices in the following order: 'ED#', 'MS#', 'ES#', 'PF#', 'MD#'
     # Reduce the indices of the excel sheet by one, as the indexes start at 0, the excel-sheet at 1
@@ -1456,6 +1456,7 @@ def get_phases_as_onehot_acdc(file_path, df, temporal_sampling_factor=1, length=
     and converts it into a onehot vector
     # order of phase classes, learnt by the phase regression model
     # ['ED#', 'MS#', 'ES#', 'PF#', 'MD#']]
+    the ACDC phase labels start with 0, similar to indexing, so no "-1" necessary
     Parameters
     ----------
     file_path :

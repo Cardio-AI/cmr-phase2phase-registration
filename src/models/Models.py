@@ -493,8 +493,8 @@ def create_PhaseRegressionModel_v2(config, networkname='PhaseRegressionModel'):
                 'flows': Grad('l2').loss}
         elif loss == 'mae':
             losses = {
-                'onehot': own_metr.MSE(masked=mask_loss, loss_fn=tf.keras.losses.mae, onehot=True),
-                'transformed': own_metr.MSE(masked=mask_loss, loss_fn=tf.keras.losses.mse, onehot=False),
+                'onehot': own_metr.MSE(masked=mask_loss, loss_fn=tf.keras.losses.mse, onehot=True),
+                'transformed': own_metr.MSE(masked=mask_loss, loss_fn=tf.keras.losses.mae, onehot=False),
                 'flows': Grad('l2').loss}
 
         else:  # default fallback --> MSE - works the best

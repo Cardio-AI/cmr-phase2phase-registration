@@ -775,17 +775,19 @@ class PhaseRegressionGenerator_v2(DataGenerator):
         if self.AUGMENT_TEMP: t_spacing = t_spacing + random.randint(self.AUGMENT_TEMP_RANGE[0],
                                                                      self.AUGMENT_TEMP_RANGE[1])
         logging.debug('t-spacing: {}'.format(t_spacing))
-        if self.RESAMPLE_T:
+        if self.AUGMENT_TEMP or self.RESAMPLE_T:
             # read recent physical temporal spacing
             # if non is given or set to 1, set the recent t spacing to the config t spacing
             # if temp resampling is activated it will resample in  a range of tspacing +/- range
+            recent_t = self.T_SPACING
             recent_spacing = model_inputs.GetSpacing()
-            if len(recent_spacing) == 4:# if we have a spacing for t
-                recent_t = recent_spacing[-1]
-                if recent_t == 1:
-                    recent_t = self.T_SPACING
-                    model_inputs.SetSpacing((*recent_spacing[:-1],recent_t ))
-            else: # fallback to the config value, here we dont resample t except of activated temp augmentation
+            if self.RESAMPLE_T: # take the physical spacing of t from the CMR
+                if len(recent_spacing) == 4:# if we have a spacing for t
+                    recent_t = recent_spacing[-1]
+                    if recent_t == 1: # if it is useless --> 1
+                        recent_t = self.T_SPACING
+                        model_inputs.SetSpacing((*recent_spacing[:-1],recent_t ))
+            else: # fallback to the config value, here we just resample with by the factor of temp augmentation
                 recent_t = self.T_SPACING
                 model_inputs.SetSpacing((*recent_spacing[:-1], recent_t))
 
@@ -806,8 +808,6 @@ class PhaseRegressionGenerator_v2(DataGenerator):
 
         # Returns the indices in the following order: 'ED#', 'MS#', 'ES#', 'PF#', 'MD#'
         if self.ISACDC:
-            """onehot_orig = get_phases_as_onehot_acdc(x, temporal_sampling_factor, len(model_inputs),
-                                               self.SMOOTHING_WEIGHT_CORRECT)""" # works for original acdc data with two labels
             onehot_orig = get_phases_as_onehot_acdc(x, self.DF_METADATA, temporal_sampling_factor, len(model_inputs))
         elif self.ISDMD:
             onehot_orig = get_phases_as_onehot_gcn(x, self.DF_METADATA, temporal_sampling_factor, len(model_inputs),
