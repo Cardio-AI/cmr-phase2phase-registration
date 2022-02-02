@@ -624,6 +624,8 @@ class PhaseRegressionGenerator_v2(DataGenerator):
         self.ROTATE = config.get('ROTATE', False)
         self.ADD_SOFTMAX = config.get('ADD_SOFTMAX', False)
         self.SOFTMAX_AXIS = config.get('SOFTMAX_AXIS', False)
+        self.ROLL2SEPTUM = config.get('ROLL2SEPTUM', True) # default
+        self.ROLL2LV = not self.ROLL2SEPTUM # either to septum or to lv blood pool
         self.IN_MEMORY = in_memory
         self.THREAD_POOL = concurrent.futures.ThreadPoolExecutor(max_workers=12)
         self.config = config
@@ -640,14 +642,12 @@ class PhaseRegressionGenerator_v2(DataGenerator):
                                 dtype=np.float32)  # onehot and mask with gt length
 
         self.ISACDC = False
-        self.ISDMD = False
-        if config.get('ISDMDDATA', False):
-            self.ISDMD = True
+        self.ISDMD = config.get('ISDMDDATA', False)
 
         logging.info('first file: {}'.format(self.IMAGES[0].lower()))
         if 'nii.gz' in self.IMAGES[0].lower():
             self.ISACDC = True
-            logging.info('acdc in file name detected, modifying file loading...')
+            logging.info('acdc file pattern in file name detected, modifying file loading...')
 
         # opens a dataframe with cleaned phases per patient
         self.METADATA_FILE = config.get('DF_META', '/mnt/ssd/data/gcn/02_imported_4D_unfiltered/SAx_3D_dicomTags_phase')
@@ -896,7 +896,7 @@ class PhaseRegressionGenerator_v2(DataGenerator):
 
         # performance test, keep t, crop the other dimensions to 1.5 times the target shape
         # This decreases the memory footprint and the computation time for further processing steps
-        if not self.IN_MEMORY:
+        if not self.IN_MEMORY: # keep the temporal resolution, otherwise we would center crop t
             model_inputs = pad_and_crop(model_inputs,
                                     target_shape=(model_inputs.shape[0], *(np.array(self.DIM) * 1.5).astype(np.int)))
 
@@ -951,7 +951,6 @@ class PhaseRegressionGenerator_v2(DataGenerator):
             lower, upper = self.AUGMENT_PHASES_RANGE
             rand = random.randint(lower, upper)
             onehot = np.concatenate([onehot[rand:], onehot[:rand]], axis=0)
-            # if we extend the list in one line the list will not be modified, that's why we use two steps
             model_inputs = np.concatenate([model_inputs[rand:], model_inputs[:rand]], axis=0)
             logging.debug('temp augmentation with: {}'.format(rand))
             if self.DEBUG_MODE: plt.imshow(onehot); plt.show()
@@ -971,9 +970,9 @@ class PhaseRegressionGenerator_v2(DataGenerator):
             # By this we avoid hard borders
             # Later divide the smoothed vectors by the sum or via softmax
             # to make sure they sum up to 1 for each class
-            import scipy.ndimage as nd
-            # here we could define a uncertainty phase2frame and frame2phase by 2D gaus
-            # unfortunately th experiments were worse
+            # The 1D Gaus could be extended to a 2D Gaus
+            # This would define a uncertainty for phase2frame and frame2phase
+            # unfortunately the experiments are worse
             # onehot = nd.gaussian_filter(input=onehot, sigma=self.SIGMA, mode='mirror')
 
             onehot = np.apply_along_axis(
@@ -981,18 +980,18 @@ class PhaseRegressionGenerator_v2(DataGenerator):
                 axis=0, arr=onehot)
             logging.debug('onehot smoothed with sigma={}:'.format(self.SIGMA))
             if self.DEBUG_MODE: plt.imshow(onehot); plt.show()
-            # logging.debug('smoothed:\n{}'.format(onehot))
-            # transform into an temporal index based target vector index2phase
+
         # Split and maximize the tiled one-hot vector to make sure that the beginning and end are also smooth
         first, second = np.split(onehot, indices_or_sections=2, axis=0)
         onehot = np.maximum(first, second)
         onehot = onehot[:self.T_SHAPE]
+        model_inputs = model_inputs[:self.T_SHAPE]
         logging.debug('onehot element-wise max and cropped to a length of {}:'.format(self.T_SHAPE))
         if self.DEBUG_MODE: plt.imshow(onehot); plt.show()
 
         # we crop and pad the 4D volume and the target vectors into the same size
         model_inputs = pad_and_crop(model_inputs, target_shape=(self.T_SHAPE, *self.DIM))
-        onehot = pad_and_crop(onehot, target_shape=self.TARGET_SHAPE)
+        #onehot = pad_and_crop(onehot, target_shape=self.TARGET_SHAPE) # this would centercrop t, which is false
 
         msk = np.ones_like(onehot)
         logging.debug('onehot pap and cropped:')
