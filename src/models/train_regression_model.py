@@ -151,7 +151,7 @@ def train_fold(config, in_memory=False):
         #max_queue_size=config.get('QUEUE_SIZE',2),
         # use_multiprocessing=False,
         # workers=12,
-        verbose=2)
+        verbose=1)
 
     # free as much memory as possible
     del batch_generator

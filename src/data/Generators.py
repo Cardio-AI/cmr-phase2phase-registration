@@ -775,7 +775,9 @@ class PhaseRegressionGenerator_v2(DataGenerator):
         if self.AUGMENT_TEMP: t_spacing = t_spacing + random.randint(self.AUGMENT_TEMP_RANGE[0],
                                                                      self.AUGMENT_TEMP_RANGE[1])
         logging.debug('t-spacing: {}'.format(t_spacing))
-        if self.AUGMENT_TEMP or self.RESAMPLE_T:
+        # TODO: this will only augment once, move it to variable pre-processing or remove
+        if False:
+        #if self.AUGMENT_TEMP or self.RESAMPLE_T:
             # read recent physical temporal spacing
             # if non is given or set to 1, set the recent t spacing to the config t spacing
             # if temp resampling is activated it will resample in  a range of tspacing +/- range
@@ -810,64 +812,15 @@ class PhaseRegressionGenerator_v2(DataGenerator):
         if self.ISACDC:
             onehot_orig = get_phases_as_onehot_acdc(x, self.DF_METADATA, temporal_sampling_factor, len(model_inputs))
         elif self.ISDMD:
-            onehot_orig = get_phases_as_onehot_gcn(x, self.DF_METADATA, temporal_sampling_factor, len(model_inputs),
-                                              self.SMOOTHING_WEIGHT_CORRECT)
+            onehot_orig = get_phases_as_onehot_gcn(x, self.DF_METADATA, temporal_sampling_factor, len(model_inputs))
         else: # gcn/tof data phases minus 1
             onehot_orig = get_phases_as_onehot_gcn(x, self.DF_METADATA, temporal_sampling_factor, len(model_inputs))
 
         logging.debug('onehot initialised:')
         if self.DEBUG_MODE: plt.imshow(onehot_orig); plt.show()
 
-        # Interpret the 4D CMR stack and the corresponding phase-one-hot-vect
-        # as temporal ring, which could be shifted by a random starting idx along the T-axis
-        # by this we can augment the starting phase, which is not always the same
-        if self.AUGMENT_PHASES:
-            lower, upper = self.AUGMENT_PHASES_RANGE
-            rand = random.randint(lower, upper)
-            onehot_orig = np.concatenate([onehot_orig[:, rand:], onehot_orig[:, :rand]], axis=1)
-            # if we extend the list in one line the list will not be modified, that's why we use two steps
-            first = model_inputs[rand:]
-            first.extend(model_inputs[:rand])
-            model_inputs = first
-            logging.debug('temp augmentation with: {}'.format(rand))
-            if self.DEBUG_MODE: plt.imshow(onehot_orig); plt.show()
-
-        # Fake a ring behaviour by
-        # first, tile along t
-        # second smooth with a gausian Kernel,
-        # third split+maximise element-wise on both matrices
-        onehot = np.tile(onehot_orig, (1, reps * 2))
-        logging.debug('onehot repeated {}:'.format(reps))
-        if self.DEBUG_MODE: plt.imshow(onehot); plt.show()
-        # logging.debug('one-hot: \n{}'.format(onehot))
-
-        if self.TARGET_SMOOTHING:
-            # Smooth each temporal vector along the indices.
-            # By this we avoid hard borders
-            # Later divide the smoothed vectors by the sum or via softmax
-            # to make sure they sum up to 1 for each class
-            import scipy.ndimage as nd
-            # here we could define a uncertainty phase2frame and frame2phase by 2D gaus
-            # unfortunately th experiments were worse
-            #onehot = nd.gaussian_filter(input=onehot, sigma=self.SIGMA, mode='mirror')
-
-            onehot = np.apply_along_axis(
-                lambda x: gaussian_filter1d(x, sigma=self.SIGMA),
-                axis=1, arr=onehot)
-            logging.debug('onehot smoothed with sigma={}:'.format(self.SIGMA))
-            if self.DEBUG_MODE: plt.imshow(onehot); plt.show()
-            # logging.debug('smoothed:\n{}'.format(onehot))
-            # transform into an temporal index based target vector index2phase
-        # Split and maximize the tiled one-hot vector to make sure that the beginning and end are also smooth
-        first, second = np.split(onehot, indices_or_sections=2, axis=1)
-        onehot = np.maximum(first, second)
-        onehot = onehot[:, :self.T_SHAPE]
-        logging.debug('onehot element-wise max and cropped to a length of {}:'.format(self.T_SHAPE))
-        if self.DEBUG_MODE: plt.imshow(onehot); plt.show()
-
-        if self.REPEAT: onehot = onehot.T
-        logging.debug('onehot transposed:')
-        if self.DEBUG_MODE: plt.imshow(onehot); plt.show()
+        # 5,t --> t,5
+        onehot_orig = onehot_orig.T
 
         # logging.debug('transposed: \n{}'.format(onehot))
         self.__plot_state_if_debug__(img=model_inputs[len(model_inputs) // 2], start_time=t0, step='raw')
@@ -955,7 +908,7 @@ class PhaseRegressionGenerator_v2(DataGenerator):
 
         self.__plot_state_if_debug__(img=model_inputs[len(model_inputs) // 2], start_time=t1, step='resampled')
         model_inputs = clip_quantile(model_inputs, .9999)
-        return model_inputs, onehot, reps, gt_length
+        return model_inputs, onehot_orig, reps, gt_length
 
 
 
@@ -991,18 +944,59 @@ class PhaseRegressionGenerator_v2(DataGenerator):
             self.__plot_state_if_debug__(img=model_inputs[0], start_time=t1, step='augmented')
             t1 = time()
 
-        # clip, pad/crop and normalise & extend last axis
-        # We repeat/tile the 3D volume at this time, to avoid resampling/augmenting the same slices multiple times
-        # Ideally this saves computation time and memory
+        # Interpret the 4D CMR stack and the corresponding phase-one-hot-vect
+        # as temporal ring, which could be shifted by a random starting idx along the T-axis
+        # by this we can augment the starting phase, which is not always the same
+        if self.AUGMENT_PHASES:
+            lower, upper = self.AUGMENT_PHASES_RANGE
+            rand = random.randint(lower, upper)
+            onehot = np.concatenate([onehot[rand:], onehot[:rand]], axis=0)
+            # if we extend the list in one line the list will not be modified, that's why we use two steps
+            model_inputs = np.concatenate([model_inputs[rand:], model_inputs[:rand]], axis=0)
+            logging.debug('temp augmentation with: {}'.format(rand))
+            if self.DEBUG_MODE: plt.imshow(onehot); plt.show()
 
+        # Fake a ring behaviour by
+        # first, tile along t
+        # second smooth with a gausian Kernel,
+        # third split+maximise element-wise on both matrices
         model_inputs = np.tile(model_inputs, (reps, 1, 1, 1))[:self.T_SHAPE, ...]
+        onehot = np.tile(onehot, (reps * 2, 1))
+        logging.debug('onehot repeated {}:'.format(reps))
+        if self.DEBUG_MODE: plt.imshow(onehot); plt.show()
+        # logging.debug('one-hot: \n{}'.format(onehot))
+
+        if self.TARGET_SMOOTHING:
+            # Smooth each temporal vector along the indices.
+            # By this we avoid hard borders
+            # Later divide the smoothed vectors by the sum or via softmax
+            # to make sure they sum up to 1 for each class
+            import scipy.ndimage as nd
+            # here we could define a uncertainty phase2frame and frame2phase by 2D gaus
+            # unfortunately th experiments were worse
+            # onehot = nd.gaussian_filter(input=onehot, sigma=self.SIGMA, mode='mirror')
+
+            onehot = np.apply_along_axis(
+                lambda x: gaussian_filter1d(x, sigma=self.SIGMA),
+                axis=0, arr=onehot)
+            logging.debug('onehot smoothed with sigma={}:'.format(self.SIGMA))
+            if self.DEBUG_MODE: plt.imshow(onehot); plt.show()
+            # logging.debug('smoothed:\n{}'.format(onehot))
+            # transform into an temporal index based target vector index2phase
+        # Split and maximize the tiled one-hot vector to make sure that the beginning and end are also smooth
+        first, second = np.split(onehot, indices_or_sections=2, axis=0)
+        onehot = np.maximum(first, second)
+        onehot = onehot[:self.T_SHAPE]
+        logging.debug('onehot element-wise max and cropped to a length of {}:'.format(self.T_SHAPE))
+        if self.DEBUG_MODE: plt.imshow(onehot); plt.show()
+
         # we crop and pad the 4D volume and the target vectors into the same size
         model_inputs = pad_and_crop(model_inputs, target_shape=(self.T_SHAPE, *self.DIM))
         onehot = pad_and_crop(onehot, target_shape=self.TARGET_SHAPE)
+
         msk = np.ones_like(onehot)
         logging.debug('onehot pap and cropped:')
         if self.DEBUG_MODE: plt.imshow(onehot); plt.show()
-        #msk = pad_and_crop(msk, target_shape=self.TARGET_SHAPE)
 
         # Finally normalise the 4D volume in one value space
         # Normalise the one-hot along the second axis
@@ -1034,7 +1028,8 @@ class PhaseRegressionGenerator_v2(DataGenerator):
                 ((0, self.T_SHAPE - gt_length), (0, 0)))
 
         if self.ISACDC:
-            model_inputs = np.flip(model_inputs,axis=1) # before: apex--> base, after: base --> apex
+            # before: axis 1 == z-axis: apex--> base, after: base --> apex
+            model_inputs = np.flip(model_inputs,axis=1)
 
         onehot = np.stack([onehot, msk], axis=0)
         # make sure we do not introduce Nans to the model
