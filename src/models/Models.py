@@ -463,7 +463,7 @@ def create_PhaseRegressionModel_v2(config, networkname='PhaseRegressionModel'):
         onehot = final_onehot_conv(flow_features)
         print('Shape after final conv layer: {}'.format(onehot.shape))
         # add empty tensor with one-hot shape to align with gt
-        if add_softmax: onehot = tf.keras.activations.softmax(onehot, axis=softmax_axis)
+        if add_softmax: onehot = tf.keras.activations.softmax(onehot, axis=softmax_axis+1)
 
         zeros = tf.zeros_like(onehot, name='zero_padding')
         onehot = tf.stack([onehot, zeros], axis=1, name='extend_onehot_by_zeros')
@@ -484,7 +484,7 @@ def create_PhaseRegressionModel_v2(config, networkname='PhaseRegressionModel'):
 
         if loss == 'cce':
             losses = {
-                'onehot': own_metr.MSE(masked=mask_loss, loss_fn=tf.keras.losses.CategoricalCrossentropy(label_smoothing=0.4,reduction=tf.keras.losses.Reduction.NONE), onehot=True),
+                'onehot': own_metr.MSE(masked=mask_loss, loss_fn='cce', onehot=True),
                 'transformed': own_metr.MSE(masked=mask_loss, loss_fn=tf.keras.losses.mse, onehot=False),
                 'flows': Grad('l2').loss}
 

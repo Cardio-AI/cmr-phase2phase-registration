@@ -770,6 +770,7 @@ class PhaseRegressionGenerator_v2(DataGenerator):
         model_inputs = load_masked_img(sitk_img_f=x, mask=self.MASKING_IMAGE,
                                        masking_values=self.MASKING_VALUES, replace=self.REPLACE_WILDCARD)
 
+        assert(model_inputs.GetSize()[-1]<= self.T_SHAPE),'CMR sequence is longer ({}) than defined network input shape ({})'.format(model_inputs.GetSize()[-1], self.T_SHAPE)
         # resample the temporal resolution
         # if AUGMENT_TEMP --> add a temporal augmentation factor within the range given by: AUGMENT_TEMP_RANGE
         t_spacing = self.T_SPACING
@@ -890,7 +891,7 @@ class PhaseRegressionGenerator_v2(DataGenerator):
         # This decreases the memory footprint and the computation time for further processing steps
         if not self.IN_MEMORY: # keep the temporal resolution, otherwise we would center crop t
             model_inputs = pad_and_crop(model_inputs,
-                                    target_shape=(gt_length, *(np.array(self.DIM) * 1.5).astype(np.int)))
+                                    target_shape=(model_inputs.shape[0], *(np.array(self.DIM) * 1.5).astype(np.int)))
 
         if apply_hist_matching:
             model_inputs = match_hist(model_inputs, ref)

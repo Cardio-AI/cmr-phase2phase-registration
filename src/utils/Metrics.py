@@ -309,6 +309,7 @@ class MSE:
         self.onehot = onehot
 
 
+
     def __call__(self, y_true, y_pred, **kwargs):
 
 
@@ -325,13 +326,15 @@ class MSE:
             zeros = tf.zeros_like(y_true[:, 0], tf.float32)
             ones = tf.ones_like(y_true[:, 1], tf.float32)
             msk = tf.stack([ones, zeros], axis=1)
-            """y_true, y_msk = tf.unstack(y_true, num=2, axis=1)
-            zeros = tf.zeros_like(y_true)
-            y_true = tf.stack([y_true, zeros], axis=1)"""
             y_true, y_pred =  msk * y_true, msk * y_pred
             # b, 2,
 
-
+        if self.loss_fn == 'cce':
+            # recent tf version does not support cce with another axis than -1
+            # updating tf will break the recent model graph plotting
+            y_true, y_pred = tf.transpose(y_true,perm=[0,1,3,2]), tf.transpose(y_pred,perm=[0,1,3,2])
+            loss = tf.keras.losses.CategoricalCrossentropy(label_smoothing=0.4,reduction=tf.keras.losses.Reduction.NONE)(y_true,y_pred)
+            return loss
         return self.loss_fn(y_true, y_pred)
 
 class SSIM:

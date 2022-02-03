@@ -1502,7 +1502,7 @@ def get_phases_as_onehot_acdc(file_path, df, temporal_sampling_factor=1, length=
         indices = np.round(indices * temporal_sampling_factor).astype(int)
         indices = np.clip(indices, a_min=0, a_max=length - 1)
 
-    if np.any(indices>length):
+    if np.any(indices>=length):
         logging.error('found indicies  greater than length of cardiac cycle, please check: {}'.format(indices[indices>length]))
     onehot = np.zeros((indices.size, length))
     onehot[np.arange(indices.size), indices] = weight
