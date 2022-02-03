@@ -623,7 +623,7 @@ class PhaseRegressionGenerator_v2(DataGenerator):
         self.RESAMPLE_T = config.get('RESAMPLE_T', False)
         self.ROTATE = config.get('ROTATE', False)
         self.ADD_SOFTMAX = config.get('ADD_SOFTMAX', False)
-        self.SOFTMAX_AXIS = config.get('SOFTMAX_AXIS', False)
+        self.SOFTMAX_AXIS = config.get('SOFTMAX_AXIS', 0)
         self.ROLL2SEPTUM = config.get('ROLL2SEPTUM', True) # default
         self.ROLL2LV = not self.ROLL2SEPTUM # either to septum or to lv blood pool
         self.IN_MEMORY = in_memory
@@ -731,9 +731,9 @@ class PhaseRegressionGenerator_v2(DataGenerator):
             # use the indexes to order the batch
             # otherwise slower images will always be at the end of the batch
             try:
-                x_, y_, i, ID, needed_time = future.result()
+                x_, y1_, y2_, i, ID, needed_time = future.result()
 
-                x[i,], y2[i,], y[i,] = x_, np.roll(x_,shift=-1, axis=0), y_
+                x[i,], y2[i,], y[i,] = x_, y1_, y2_
                 logging.debug('img finished after {:0.3f} sec.'.format(needed_time))
             except Exception as e:
                 # write these files into a dedicated error log
@@ -754,6 +754,7 @@ class PhaseRegressionGenerator_v2(DataGenerator):
     def __fix_preprocessing__(self,i,ID):
 
         t0 = time()
+        t1 = time()
         ref = None
         apply_hist_matching=False
         if self.HIST_MATCHING and random.random() <= self.AUGMENT_PROB:
@@ -772,10 +773,13 @@ class PhaseRegressionGenerator_v2(DataGenerator):
         # resample the temporal resolution
         # if AUGMENT_TEMP --> add a temporal augmentation factor within the range given by: AUGMENT_TEMP_RANGE
         t_spacing = self.T_SPACING
-        if self.AUGMENT_TEMP: t_spacing = t_spacing + random.randint(self.AUGMENT_TEMP_RANGE[0],
+        # TODO: this will only augment once, move it to variable pre-processing or remove
+        if False:
+        #if self.AUGMENT_TEMP:
+            t_spacing = t_spacing + random.randint(self.AUGMENT_TEMP_RANGE[0],
                                                                      self.AUGMENT_TEMP_RANGE[1])
         logging.debug('t-spacing: {}'.format(t_spacing))
-        # TODO: this will only augment once, move it to variable pre-processing or remove
+
         if False:
         #if self.AUGMENT_TEMP or self.RESAMPLE_T:
             # read recent physical temporal spacing
@@ -800,31 +804,20 @@ class PhaseRegressionGenerator_v2(DataGenerator):
         else:
             temporal_sampling_factor = 1  # dont scale the indices if we dont resample T
         # Create a list of 3D volumes for resampling
-        # apply histogram matching if given by config
         model_inputs = split_one_4d_sitk_in_list_of_3d_sitk(model_inputs, axis=0)
 
         gt_length = len(model_inputs)
-        # How many times do we need to repeat that cycle along t to cover the desired output size
-        reps = 1
-        if self.REPEAT: reps = int(np.ceil(self.T_SHAPE / gt_length))
-
         # Returns the indices in the following order: 'ED#', 'MS#', 'ES#', 'PF#', 'MD#'
         if self.ISACDC:
-            onehot_orig = get_phases_as_onehot_acdc(x, self.DF_METADATA, temporal_sampling_factor, len(model_inputs))
+            onehot_orig = get_phases_as_onehot_acdc(x, self.DF_METADATA, temporal_sampling_factor, gt_length)
         elif self.ISDMD:
-            onehot_orig = get_phases_as_onehot_gcn(x, self.DF_METADATA, temporal_sampling_factor, len(model_inputs))
+            onehot_orig = get_phases_as_onehot_gcn(x, self.DF_METADATA, temporal_sampling_factor, gt_length)
         else: # gcn/tof data phases minus 1
-            onehot_orig = get_phases_as_onehot_gcn(x, self.DF_METADATA, temporal_sampling_factor, len(model_inputs))
-
-        logging.debug('onehot initialised:')
-        if self.DEBUG_MODE: plt.imshow(onehot_orig); plt.show()
-
+            onehot_orig = get_phases_as_onehot_gcn(x, self.DF_METADATA, temporal_sampling_factor, gt_length)
         # 5,t --> t,5
         onehot_orig = onehot_orig.T
-
-        # logging.debug('transposed: \n{}'.format(onehot))
-        self.__plot_state_if_debug__(img=model_inputs[len(model_inputs) // 2], start_time=t0, step='raw')
-        t1 = time()
+        logging.debug('onehot initialised:')
+        if self.DEBUG_MODE: plt.imshow(onehot_orig); plt.show()
 
         if self.RESAMPLE:
             if model_inputs[0].GetDimension() in [2, 3]:
@@ -863,7 +856,6 @@ class PhaseRegressionGenerator_v2(DataGenerator):
         logging.debug('Size after resample: {}'.format(model_inputs[0].GetSize()))
 
         # transform to nda for further processing
-        # repeat the 3D volumes along t (we did the same with the onehot vector)
         model_inputs = np.stack(list(map(lambda x: sitk.GetArrayFromImage(x), model_inputs)), axis=0)
 
         # load a valid 3D or 4D mask, resample with the same parameters as done with the CMR
@@ -871,7 +863,7 @@ class PhaseRegressionGenerator_v2(DataGenerator):
         # get IPs of one timestep
         # calc mean IPs
         # calc IP angle and rotation angle
-        # rotate 4D with mean rotation angle
+        # rotate 4D with mean rotation angle and roll volume to center
         if self.ROTATE:
             from src.data.Preprocess import align_inplane_with_ip
             if self.ISACDC:
@@ -898,13 +890,16 @@ class PhaseRegressionGenerator_v2(DataGenerator):
         # This decreases the memory footprint and the computation time for further processing steps
         if not self.IN_MEMORY: # keep the temporal resolution, otherwise we would center crop t
             model_inputs = pad_and_crop(model_inputs,
-                                    target_shape=(model_inputs.shape[0], *(np.array(self.DIM) * 1.5).astype(np.int)))
-
+                                    target_shape=(gt_length, *(np.array(self.DIM) * 1.5).astype(np.int)))
 
         if apply_hist_matching:
             model_inputs = match_hist(model_inputs, ref)
             logging.debug('hist matching took: {:0.3f} s'.format(time() - t1))
             t1 = time()
+
+        # How many times do we need to repeat that cycle along t to cover the desired output size
+        reps = 1
+        if self.REPEAT: reps = int(np.ceil(self.T_SHAPE / gt_length))
 
         self.__plot_state_if_debug__(img=model_inputs[len(model_inputs) // 2], start_time=t1, step='resampled')
         model_inputs = clip_quantile(model_inputs, .9999)
@@ -935,8 +930,6 @@ class PhaseRegressionGenerator_v2(DataGenerator):
         if self.AUGMENT:
             # pad and crop in-plane to augment as less as possible
             # keep t as it is to align with the onehot vector, we modify t by np.tile/repeating and than cropping
-            #augment_shape = (model_inputs.shape[0], *self.DIM)
-            #model_inputs = pad_and_crop(model_inputs, target_shape=augment_shape)
             # use albumentation to apply random rotation scaling and shifts
             model_inputs = augmentation_compose_2d_3d_4d(img=model_inputs, mask=None,
                                                          probabillity=self.AUGMENT_PROB,
@@ -946,12 +939,13 @@ class PhaseRegressionGenerator_v2(DataGenerator):
 
         # Interpret the 4D CMR stack and the corresponding phase-one-hot-vect
         # as temporal ring, which could be shifted by a random starting idx along the T-axis
-        # by this we can augment the starting phase, which is not always the same
+        # by this we can augment the starting phase
         if self.AUGMENT_PHASES:
+            # [1,2,3,0] = np.roll([0,1,2,3],shift=-1,axis=0)
             lower, upper = self.AUGMENT_PHASES_RANGE
             rand = random.randint(lower, upper)
-            onehot = np.concatenate([onehot[rand:], onehot[:rand]], axis=0)
-            model_inputs = np.concatenate([model_inputs[rand:], model_inputs[:rand]], axis=0)
+            onehot = np.roll(onehot, shift=rand, axis=0)
+            model_inputs = np.roll(model_inputs,shift=rand,axis=0)
             logging.debug('temp augmentation with: {}'.format(rand))
             if self.DEBUG_MODE: plt.imshow(onehot); plt.show()
 
@@ -959,8 +953,11 @@ class PhaseRegressionGenerator_v2(DataGenerator):
         # first, tile along t
         # second smooth with a gausian Kernel,
         # third split+maximise element-wise on both matrices
-        model_inputs = np.tile(model_inputs, (reps, 1, 1, 1))[:self.T_SHAPE, ...]
-        onehot = np.tile(onehot, (reps * 2, 1))
+        # here we introduce the model target
+        model_targets = np.roll(model_inputs,shift=-1, axis=0) # [1,2,3,0] = np.roll([0,1,2,3],shift=-1,axis=0)
+        model_inputs = np.tile(model_inputs, (reps, 1, 1, 1))
+        model_targets = np.tile(model_targets, (reps, 1, 1, 1))
+        onehot = np.tile(onehot, (reps, 1))
         logging.debug('onehot repeated {}:'.format(reps))
         if self.DEBUG_MODE: plt.imshow(onehot); plt.show()
         # logging.debug('one-hot: \n{}'.format(onehot))
@@ -976,35 +973,37 @@ class PhaseRegressionGenerator_v2(DataGenerator):
             # onehot = nd.gaussian_filter(input=onehot, sigma=self.SIGMA, mode='mirror')
 
             onehot = np.apply_along_axis(
-                lambda x: gaussian_filter1d(x, sigma=self.SIGMA),
+                lambda x: gaussian_filter1d(x, sigma=self.SIGMA, mode='wrap'),
                 axis=0, arr=onehot)
             logging.debug('onehot smoothed with sigma={}:'.format(self.SIGMA))
             if self.DEBUG_MODE: plt.imshow(onehot); plt.show()
 
         # Split and maximize the tiled one-hot vector to make sure that the beginning and end are also smooth
-        first, second = np.split(onehot, indices_or_sections=2, axis=0)
-        onehot = np.maximum(first, second)
+        #first, second = np.split(onehot, indices_or_sections=2, axis=0)
+        #onehot = np.maximum(first, second)
         onehot = onehot[:self.T_SHAPE]
         model_inputs = model_inputs[:self.T_SHAPE]
+        model_targets = model_targets[:self.T_SHAPE]
         logging.debug('onehot element-wise max and cropped to a length of {}:'.format(self.T_SHAPE))
         if self.DEBUG_MODE: plt.imshow(onehot); plt.show()
 
-        # we crop and pad the 4D volume and the target vectors into the same size
+        # Center-crop z, x, y, keep t as it is
         model_inputs = pad_and_crop(model_inputs, target_shape=(self.T_SHAPE, *self.DIM))
-        #onehot = pad_and_crop(onehot, target_shape=self.TARGET_SHAPE) # this would centercrop t, which is false
+        model_targets = pad_and_crop(model_targets, target_shape=(self.T_SHAPE, *self.DIM))
 
         msk = np.ones_like(onehot)
         logging.debug('onehot pap and cropped:')
         if self.DEBUG_MODE: plt.imshow(onehot); plt.show()
 
         # Finally normalise the 4D volume in one value space
-        # Normalise the one-hot along the second axis
+        # Normalise the one-hot along the first or second axis
         # This can be done either by:
         # - divide each element by the sum of the elements + epsilon
         # 𝜎(𝐳)𝑖=𝑧𝑖∑𝐾𝑗=1𝑧𝑗+𝜖 for 𝑖=1,…,𝐾 and 𝐳=(𝑧1,…,𝑧𝐾)∈ℝ𝐾
         # - The standard (unit) softmax function 𝜎:ℝ𝐾→ℝ𝐾 is defined by the formula
         # 𝜎(𝐳)𝑖=𝑒𝑧𝑖∑𝐾𝑗=1𝑒𝑧𝑗 for 𝑖=1,…,𝐾 and 𝐳=(𝑧1,…,𝑧𝐾)∈ℝ𝐾
         model_inputs = normalise_image(model_inputs, normaliser=self.SCALER)  # normalise per 4D
+        model_targets = normalise_image(model_targets, normaliser=self.SCALER)
         onehot = normalise_image(onehot, normaliser='minmax')
         # logging.debug('background: \n{}'.format(onehot))
 
@@ -1029,12 +1028,14 @@ class PhaseRegressionGenerator_v2(DataGenerator):
         if self.ISACDC:
             # before: axis 1 == z-axis: apex--> base, after: base --> apex
             model_inputs = np.flip(model_inputs,axis=1)
+            model_targets = np.flip(model_targets,axis=1)
 
         onehot = np.stack([onehot, msk], axis=0)
         # make sure we do not introduce Nans to the model
         assert not np.any(np.isnan(onehot))
         assert not np.any(np.isnan(model_inputs))
-        return model_inputs[..., None], onehot, i, ID, time() - t0
+        assert not np.any(np.isnan(model_targets))
+        return model_inputs[..., None], model_targets[..., None], onehot, i, ID, time() - t0
 
 class PhaseWindowGenerator(DataGenerator):
     """

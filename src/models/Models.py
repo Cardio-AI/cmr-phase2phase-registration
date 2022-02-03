@@ -361,6 +361,7 @@ def create_PhaseRegressionModel_v2(config, networkname='PhaseRegressionModel'):
         inputs_spatial_stacked = roll_concat_lambda_layer(input_tensor)
         # replace the last timestep my the 2nd last timestep, otherwise we might try to predict
         # the motion from the middle of a cardiac cycle to the first timestep (ED)
+        # repeat the last time step
         inputs_spatial_stacked = tf.keras.layers.Concatenate(axis=1)([inputs_spatial_stacked[:,:-1], inputs_spatial_stacked[:,-2:-1]])
         print('Shape rolled and stacked: {}'.format(inputs_spatial_stacked.shape))
         pre_flows = TimeDistributed(unet, name='4d-p2p-unet')(inputs_spatial_stacked)
@@ -448,13 +449,14 @@ def create_PhaseRegressionModel_v2(config, networkname='PhaseRegressionModel'):
 
 
         if add_bilstm:
+            #flow_features = tf.keras.layers.Dropout(rate=0.5)(flow_features)
             print('Shape before LSTM layers: {}'.format(flow_features.shape))
             flow_features = bi_lstm_layer(flow_features)
+            #flow_features = tf.keras.layers.Dropout(rate=0.2)(flow_features)
             flow_features = bi_lstm_layer1(flow_features)
             print('Shape after LSTM layers: {}'.format(flow_features.shape))
 
         # input (t,encoding) output (t,5)
-        # t, 5
         # Dense and conv layers instead of the LSTM layer both overfit more
         # onehot = tf.keras.layers.Dense(units=5, activation=final_activation, kernel_initializer=kernel_init)(flow_features)
         #flow_features = tf.keras.layers.Conv1D(filters=32, kernel_size=3,strides=1, padding='same', kernel_initializer=kernel_init, activation='relu')(flow_features)

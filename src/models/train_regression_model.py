@@ -261,7 +261,8 @@ if __name__ == "__main__":
     try:
         import distutils.util
         in_memory = distutils.util.strtobool(results.inmemory)
-        print('running in-memory={}, watch for overflow!'.format(in_memory))
+        if in_memory:
+            print('running in-memory={}, watch for memory overflow!'.format(in_memory))
         main(results, in_memory=in_memory)
     except Exception as e:
         print(e)
