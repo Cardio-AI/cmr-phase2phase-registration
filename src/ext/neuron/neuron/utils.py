@@ -26,7 +26,7 @@ from pprint import pformat
 # often changed file
 #from imp import reload
 from tensorflow import keras
-import tensorflow.keras.backend as K
+import keras.backend as K
 import tensorflow as tf
 #reload(pl)
 

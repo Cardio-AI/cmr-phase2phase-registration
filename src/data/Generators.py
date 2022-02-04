@@ -13,7 +13,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import scipy
-import tensorflow.keras
+import tensorflow
+
 from scipy.ndimage import gaussian_filter1d
 
 from src.data.Dataset import describe_sitk, split_one_4d_sitk_in_list_of_3d_sitk, get_phases_as_onehot_gcn, \

@@ -1,10 +1,13 @@
+import tensorflow
 import tensorflow as tf
-import tensorflow.keras.layers as kl
-from tensorflow.keras import backend as K
-from tensorflow.keras.layers import Dropout, BatchNormalization, Activation
-from tensorflow.keras.layers import Layer
-from tensorflow.keras.layers import UpSampling2D as UpSampling2DInterpol
-from tensorflow.keras.layers import UpSampling3D
+
+from tensorflow import keras
+import keras.layers as kl
+from keras import backend as K
+from keras.layers import Dropout, BatchNormalization, Activation
+from keras.layers import Layer
+from keras.layers import UpSampling2D as UpSampling2DInterpol
+from keras.layers import UpSampling3D
 from tensorflow.python.keras.utils import conv_utils
 import numpy as np
 import sys

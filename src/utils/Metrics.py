@@ -210,8 +210,9 @@ def get_min_distance_loss(vals):
     return min_diff
 
 import tensorflow as tf
-import tensorflow.keras.backend as K
-from tensorflow.keras.layers import Layer, Lambda
+from tensorflow import keras
+import keras.backend as K
+from keras.layers import Layer, Lambda
 
 
 @tf.function

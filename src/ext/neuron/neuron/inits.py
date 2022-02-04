@@ -3,7 +3,9 @@
 # general imports
 import os
 import numpy as np
-import tensorflow.keras.backend as K
+import tensorflow
+from tensorflow import keras
+import keras.backend as K
 
 
 def output_init(shape, name=None, dim_ordering=None):

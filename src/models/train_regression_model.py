@@ -4,6 +4,7 @@
 def train_fold(config, in_memory=False):
     # make sure all necessary params in config are set
     # if not set them with default values
+    import tensorflow
     import tensorflow as tf
     tf.get_logger().setLevel('FATAL')
 
@@ -12,6 +13,7 @@ def train_fold(config, in_memory=False):
     GPU_IDS = config.get('GPU_IDS', '0,1')
     GPUS = choose_gpu_by_id(GPU_IDS)
     print(GPUS)
+    print(tf.config.list_physical_devices('GPU'))
     # ------------------------------------------ import helpers
     # this should import glob, os, and many other standard libs
     #from tensorflow.python.client import device_lib
@@ -263,7 +265,8 @@ if __name__ == "__main__":
         in_memory = distutils.util.strtobool(results.inmemory)
         if in_memory:
             print('running in-memory={}, watch for memory overflow!'.format(in_memory))
-        main(results, in_memory=in_memory)
+        #main(results, in_memory=in_memory)
     except Exception as e:
         print(e)
+    main(results, in_memory=in_memory)
     exit()

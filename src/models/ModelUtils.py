@@ -1,5 +1,6 @@
 import logging
 import os
+import tensorflow
 import tensorflow as tf
 from tensorflow import keras
 

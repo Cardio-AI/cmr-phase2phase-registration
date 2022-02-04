@@ -1,7 +1,4 @@
 import logging
-
-from tensorflow.python.keras.layers import LSTM, Bidirectional
-
 from src.models.KerasLayers import ConvEncoder, get_angle_tf, get_idxs_tf, get_centers_tf, ComposeTransform, \
     conv_layer_fn, ConvBlock
 
@@ -9,12 +6,15 @@ import sys
 import numpy as np
 import tensorflow
 import tensorflow as tf
-import tensorflow.keras.layers as KL
-from tensorflow.keras.layers import Input
-from tensorflow.keras.models import Model
-from tensorflow.keras import metrics as metr
-from tensorflow.keras.layers import Dropout, BatchNormalization, TimeDistributed
+from tensorflow import keras
+import keras.layers as KL
+from keras.layers import Input
+from keras.models import Model
+from tensorflow.python.keras import metrics as metr
+from keras.layers import Dropout, BatchNormalization, TimeDistributed
+from keras.layers import LSTM, Bidirectional
 import math
+import atexit
 
 from src.models.Unets import create_unet
 from src.utils import Metrics as own_metr
@@ -30,9 +30,10 @@ import src.ext.neuron.neuron.layers as nrn_layers
 def create_PhaseRegressionModel(config, networkname='PhaseRegressionModel'):
     if tf.distribute.has_strategy():
         strategy = tf.distribute.get_strategy()
+        atexit.register(strategy._extended._collective_ops._pool.close)
     else:
         # distribute the training with the "mirrored data"-paradigm across multiple gpus if available, if not use gpu 0
-        strategy = tf.distribute.MirroredStrategy(devices=config.get('GPUS', ["/gpu:0"]))
+        strategy = tf.distribute.MirroredStrategy()
     with strategy.scope():
 
         input_shape = config.get('DIM', [10, 224, 224])
@@ -101,11 +102,11 @@ def create_PhaseRegressionModel(config, networkname='PhaseRegressionModel'):
         inputs_temporal = tf.unstack(inputs_temporal, axis=1)
 
         if pre_gap_conv:
-            gap_conv = tf.keras.layers.Conv3D(filters=64, kernel_size=3, strides=(2, 1, 1), padding='valid',
+            gap_conv = keras.layers.Conv3D(filters=64, kernel_size=3, strides=(2, 1, 1), padding='valid',
                                               activation=activation, kernel_initializer=kernel_init)
 
-            inputs_temporal = [tf.keras.layers.BatchNormalization()(elem) for elem in inputs_temporal]
-            inputs_temporal = [tf.keras.layers.Dropout(rate=0.5)(elem) for elem in inputs_temporal]
+            inputs_temporal = [keras.layers.BatchNormalization()(elem) for elem in inputs_temporal]
+            inputs_temporal = [keras.layers.Dropout(rate=0.5)(elem) for elem in inputs_temporal]
             inputs_temporal = [gap_conv(vol) for vol in inputs_temporal]
         inputs_temporal = [gap(vol) for vol in inputs_temporal]
         inputs_temporal = tf.stack(inputs_temporal, axis=1)
@@ -116,10 +117,10 @@ def create_PhaseRegressionModel(config, networkname='PhaseRegressionModel'):
         # 36, 256
         if add_bilstm:
             print('add a bilstm layer with: {} lstm units'.format(lstm_units))
-            """inputs = tf.keras.layers.BatchNormalization()(inputs)
-            inputs = tf.keras.layers.Dropout(rate=0.5)(inputs)
+            """inputs = keras.layers.BatchNormalization()(inputs)
+            inputs = keras.layers.Dropout(rate=0.5)(inputs)
     
-            onehot_pre = tf.keras.layers.Conv1D(filters=64, kernel_size=5, strides=1, padding='same', activation=activation,
+            onehot_pre = keras.layers.Conv1D(filters=64, kernel_size=5, strides=1, padding='same', activation=activation,
                                             name='conv_pre_final')(inputs)"""
             forward_layer = LSTM(lstm_units, return_sequences=True)
             backward_layer = LSTM(lstm_units, activation='tanh', return_sequences=True,
@@ -134,15 +135,15 @@ def create_PhaseRegressionModel(config, networkname='PhaseRegressionModel'):
         # either 36,256 --> from the temp encoder or
         # 36,64 --> 64 --> number of BI-LSTM units
         # activation to linear
-        onehot = tf.keras.layers.Conv1D(filters=PHASES, kernel_size=1, strides=1, padding='same', activation='linear',
+        onehot = keras.layers.Conv1D(filters=PHASES, kernel_size=1, strides=1, padding='same', activation='linear',
                                         name='final_conv')(inputs)
         if final_activation == 'relu':
-            onehot = tf.keras.activations.relu(onehot)
+            onehot = keras.activations.relu(onehot)
         elif final_activation == 'softmax':
             # axis -1 --> one class per timestep, as we repeat the phases its not possible to softmax the phase
-            onehot = tf.keras.activations.softmax(onehot, axis=-1)
+            onehot = keras.activations.softmax(onehot, axis=-1)
         elif final_activation == 'sigmoid':
-            onehot = tf.keras.activations.sigmoid(onehot)
+            onehot = keras.activations.sigmoid(onehot)
         else:
             logging.info('No final activation given! Please check the "FINAL_ACTIVATION" param!')
 
@@ -186,6 +187,7 @@ def create_PhaseRegressionModel_v2(config, networkname='PhaseRegressionModel'):
     else:
         # distribute the training with the "mirrored data"-paradigm across multiple gpus if available, if not use gpu 0
         strategy = tf.distribute.MirroredStrategy(devices=config.get('GPUS', ["/gpu:0"]))
+    atexit.register(strategy._extended._collective_ops._pool.close)
     with strategy.scope():
 
         """from tensorflow.keras import mixed_precision
@@ -245,21 +247,21 @@ def create_PhaseRegressionModel_v2(config, networkname='PhaseRegressionModel'):
         # use a standard U-net, without the final layer for feature extraction (pre-flow)
         unet = create_unet(temp_config, single_model=False, networkname='3D-Unet')
         # this is a wrapper to re-use the u-net encoder/encoding
-        enc = tf.keras.Model(inputs=unet.inputs,outputs=[unet.layers[(len(unet.layers)//2)-1].output])
+        enc = keras.Model(inputs=unet.inputs,outputs=[unet.layers[(len(unet.layers)//2)-1].output])
         st_layer = nrn_layers.SpatialTransformer(interp_method=interp_method, indexing=indexing, ident=True,
                                                  name='deformable_layer')
-        st_lambda_layer = tf.keras.layers.Lambda(
+        st_lambda_layer = keras.layers.Lambda(
             lambda x: st_layer([x[..., 0:1], x[..., 1:]]), name='deformable_lambda_layer')
 
         gap = tensorflow.keras.layers.GlobalAveragePooling3D(name='GAP_3D_Layer')
         # concat the current frame with the previous on the last channel
-        roll_concat_lambda_layer = tf.keras.layers.Lambda(lambda x:
-                                                          tf.keras.layers.Concatenate(axis=-1, name='stack_with_moved')(
+        roll_concat_lambda_layer = keras.layers.Lambda(lambda x:
+                                                          keras.layers.Concatenate(axis=-1, name='stack_with_moved')(
                                                               [#tf.roll(x, shift=1, axis=stack_axis),
                                                                x,
                                                                tf.roll(x, shift=-1, axis=stack_axis)]))
 
-        norm_lambda = tf.keras.layers.Lambda(
+        norm_lambda = keras.layers.Lambda(
             lambda x: tf.norm(x, ord='euclidean', axis=-1, keepdims=True, name='flow2norm'), name='flow2norm')
 
         # calculate the direction between the displacement field and a grid with vectors pointing to the center
@@ -275,17 +277,17 @@ def create_PhaseRegressionModel_v2(config, networkname='PhaseRegressionModel'):
         #print('centers: ',c.dtype)
         centers = c - idx
         centers_tensor = centers[tf.newaxis, ...]
-        flow2direction_lambda = tf.keras.layers.Lambda(
+        flow2direction_lambda = keras.layers.Lambda(
             lambda x: get_angle_tf(x, centers_tensor), name='flow2direction')
 
-        forward_conv_lstm_layer = tf.keras.layers.ConvLSTM2D(filters=conv_lstm_units,
+        forward_conv_lstm_layer = keras.layers.ConvLSTM2D(filters=conv_lstm_units,
                                                              kernel_size=3,
                                                              strides=1,
                                                              padding='valid',
                                                              return_sequences=True,
                                                              dropout=0.5,
                                                              name='forward_conv_LSTM')
-        backward_conv_lstm_layer = tf.keras.layers.ConvLSTM2D(filters=conv_lstm_units,
+        backward_conv_lstm_layer = keras.layers.ConvLSTM2D(filters=conv_lstm_units,
                                                               kernel_size=3,
                                                               strides=1,
                                                               padding='valid',
@@ -333,22 +335,22 @@ def create_PhaseRegressionModel_v2(config, networkname='PhaseRegressionModel'):
                          kernel_initializer=kernel_init,
                          activation=activation,
                          name='downsample_{}'.format(i)))
-                downsamples.append(tf.keras.layers.MaxPool3D(pool_size=2, padding='same'))
+                downsamples.append(keras.layers.MaxPool3D(pool_size=2, padding='same'))
                 filters_ = filters_ * 2
             else:  # stop to down-sample the spatial resolution, continue with 2D conv
                 downsamples.append(
-                    tf.keras.layers.Conv2D(filters=filters_, kernel_size=(3, 3), padding='same', strides=1,
+                    keras.layers.Conv2D(filters=filters_, kernel_size=(3, 3), padding='same', strides=1,
                                            kernel_initializer=kernel_init,
                                            activation=activation,
                                            name='downsample_{}'.format(i))
                 )
-                downsamples.append(tf.keras.layers.MaxPool3D(pool_size=(1, 2, 2), padding='same'))
+                downsamples.append(keras.layers.MaxPool3D(pool_size=(1, 2, 2), padding='same'))
             downsamples.append(BatchNormalization(axis=-1))
 
         downsamples = downsamples[:-1]  # remove last BN layer
 
-        downsample = tf.keras.Sequential(layers=downsamples, name='downsample_inplane_and_spatial')
-        final_onehot_conv = tf.keras.layers.Conv1D(filters=PHASES, kernel_size=1, strides=1, padding='same',
+        downsample = keras.Sequential(layers=downsamples, name='downsample_inplane_and_spatial')
+        final_onehot_conv = keras.layers.Conv1D(filters=PHASES, kernel_size=1, strides=1, padding='same',
                                                    kernel_initializer=kernel_init, activation=final_activation,
                                                    name='pre_onehot')
 
@@ -362,20 +364,20 @@ def create_PhaseRegressionModel_v2(config, networkname='PhaseRegressionModel'):
         # replace the last timestep my the 2nd last timestep, otherwise we might try to predict
         # the motion from the middle of a cardiac cycle to the first timestep (ED)
         # repeat the last time step
-        inputs_spatial_stacked = tf.keras.layers.Concatenate(axis=1)([inputs_spatial_stacked[:,:-1], inputs_spatial_stacked[:,-2:-1]])
+        inputs_spatial_stacked = keras.layers.Concatenate(axis=1)([inputs_spatial_stacked[:,:-1], inputs_spatial_stacked[:,-2:-1]])
         print('Shape rolled and stacked: {}'.format(inputs_spatial_stacked.shape))
         pre_flows = TimeDistributed(unet, name='4d-p2p-unet')(inputs_spatial_stacked)
         print('Unet output shape: {}'.format(pre_flows.shape))
         flows = TimeDistributed(Conv_layer, name='4d-p2p-flow')(pre_flows)
         print('Flowfield shape: {}'.format(flows.shape))
-        transformed = TimeDistributed(st_lambda_layer, name='4d-p2p-st')(tf.keras.layers.Concatenate(axis=-1)([input_tensor, flows]))
+        transformed = TimeDistributed(st_lambda_layer, name='4d-p2p-st')(keras.layers.Concatenate(axis=-1)([input_tensor, flows]))
         print('Transformed shape : {}'.format(transformed.shape))
         features_given = False
 
         if (add_vect_norm and add_flows):
             # add the magnitude as fourth channel
             tensor_magnitude = TimeDistributed(norm_lambda)(flows)
-            flow_features = tf.keras.layers.Concatenate(axis=-1)([flows, tensor_magnitude])
+            flow_features = keras.layers.Concatenate(axis=-1)([flows, tensor_magnitude])
             features_given = True
             print('Inkl flow and norm shape: {}'.format(flow_features.shape))
         elif add_vect_norm:
@@ -393,13 +395,13 @@ def create_PhaseRegressionModel_v2(config, networkname='PhaseRegressionModel'):
             directions = TimeDistributed(flow2direction_lambda)(flows)
             print('directions shape: {}'.format(directions.shape))
             if features_given:
-                flow_features = tf.keras.layers.Concatenate(axis=-1)(
+                flow_features = keras.layers.Concatenate(axis=-1)(
                 [flow_features, directions])  # encode the spatial location of each vector
             else:
                 flow_features = directions
                 features_given = True
             # add the location tensor as further channel
-            # flow_features = tf.keras.layers.Concatenate(axis=-1)([flow_features, tf.tile(centers_tensor[tf.newaxis,...],multiples=[1,flow_features.shape[1],1,1,1,1])])
+            # flow_features = keras.layers.Concatenate(axis=-1)([flow_features, tf.tile(centers_tensor[tf.newaxis,...],multiples=[1,flow_features.shape[1],1,1,1,1])])
         print('flow features inkl directions shape: {}'.format(flow_features.shape))
 
         # Apply an Bidirectional convLstm layer before downsampling
@@ -422,14 +424,14 @@ def create_PhaseRegressionModel_v2(config, networkname='PhaseRegressionModel'):
             dir_2 = flow_features[..., y // 2:, :x // 2,:]
             dir_3 = flow_features[..., y // 2:, x // 2:,:]
             dir_4 = flow_features[..., :y // 2, x // 2:,:]
-            flow_features = tf.keras.layers.Concatenate(axis=-1,name='split_corners')([dir_1,dir_2,dir_3,dir_4])
+            flow_features = keras.layers.Concatenate(axis=-1,name='split_corners')([dir_1,dir_2,dir_3,dir_4])
         print('flow features after split corners: {}'.format(flow_features.shape))
 
         if downsample_flow_features:
             flow_features = TimeDistributed(downsample)(flow_features)
         else:  # use a gap3D layer
             flow_features = TimeDistributed(gap)(flow_features)
-        flow_features = tf.keras.layers.Reshape(target_shape=(flow_features.shape[1], flow_features.shape[-1]))(
+        flow_features = keras.layers.Reshape(target_shape=(flow_features.shape[1], flow_features.shape[-1]))(
             flow_features)
         print('flow features after downsample/gap layer: {}'.format(flow_features.shape))
         # down-sample the flow in-plane
@@ -437,7 +439,7 @@ def create_PhaseRegressionModel_v2(config, networkname='PhaseRegressionModel'):
         if addunetencoding:
             flow_features2 = TimeDistributed(enc)(inputs_spatial_stacked)
             print('flow features from encoder: {}'.format(flow_features2.shape))
-            flow_features2 = TimeDistributed(tf.keras.layers.Conv2D(16, 2, 1, padding='valid'))(flow_features2)
+            flow_features2 = TimeDistributed(keras.layers.Conv2D(16, 2, 1, padding='valid'))(flow_features2)
             print('flow features from encoder: {}'.format(flow_features2.shape))
             flow_features2 = TimeDistributed(gap)(flow_features2)
             print('flow features from encoder: {}'.format(flow_features2.shape))
@@ -450,39 +452,39 @@ def create_PhaseRegressionModel_v2(config, networkname='PhaseRegressionModel'):
 
         if add_bilstm:
             # min/max normlisation as lambda
-            minmax_lambda = lambda x: (x - tf.reduce_min(x)) / (tf.reduce_max(x) - tf.reduce_min(x) + tf.keras.backend.epsilon())
+            minmax_lambda = lambda x: (x - tf.reduce_min(x)) / (tf.reduce_max(x) - tf.reduce_min(x) + keras.backend.epsilon())
 
-            """flow_features = tf.keras.layers.BatchNormalization()(flow_features)
-            flow_features = tf.keras.layers.Conv1D(filters=16,kernel_size=3, padding='same')(flow_features)
-            flow_features = tf.keras.layers.Conv1D(filters=16, kernel_size=3, padding='same')(flow_features)
-            flow_features = tf.keras.layers.BatchNormalization()(flow_features)"""
+            """flow_features = keras.layers.BatchNormalization()(flow_features)
+            flow_features = keras.layers.Conv1D(filters=16,kernel_size=3, padding='same')(flow_features)
+            flow_features = keras.layers.Conv1D(filters=16, kernel_size=3, padding='same')(flow_features)
+            flow_features = keras.layers.BatchNormalization()(flow_features)"""
             print('Shape before LSTM layers: {}'.format(flow_features.shape))
             #flow_features = tf.map_fn(minmax_lambda,flow_features) # per instance rescaling
             flow_features = minmax_lambda(flow_features)
             flow_features = bi_lstm_layer(flow_features)
-            flow_features = tf.keras.layers.Dropout(rate=0.4)(flow_features)
+            flow_features = keras.layers.Dropout(rate=0.4)(flow_features)
             flow_features = bi_lstm_layer1(flow_features)
             print('Shape after LSTM layers: {}'.format(flow_features.shape))
 
         # input (t,encoding) output (t,5)
         # Dense and conv layers instead of the LSTM layer both overfit more
-        # onehot = tf.keras.layers.Dense(units=5, activation=final_activation, kernel_initializer=kernel_init)(flow_features)
-        #flow_features = tf.keras.layers.Conv1D(filters=32, kernel_size=3,strides=1, padding='same', kernel_initializer=kernel_init, activation='relu')(flow_features)
+        # onehot = keras.layers.Dense(units=5, activation=final_activation, kernel_initializer=kernel_init)(flow_features)
+        #flow_features = keras.layers.Conv1D(filters=32, kernel_size=3,strides=1, padding='same', kernel_initializer=kernel_init, activation='relu')(flow_features)
         onehot = final_onehot_conv(flow_features)
         print('Shape after final conv layer: {}'.format(onehot.shape))
         # add empty tensor with one-hot shape to align with gt
-        if add_softmax: onehot = tf.keras.activations.softmax(onehot, axis=softmax_axis+1)
+        if add_softmax: onehot = keras.activations.softmax(onehot, axis=softmax_axis+1)
 
         zeros = tf.zeros_like(onehot, name='zero_padding')
         onehot = tf.stack([onehot, zeros], axis=1, name='extend_onehot_by_zeros')
 
         # define the model output names
-        onehot = tf.keras.layers.Activation('linear', name='onehot', dtype='float32')(onehot)
-        transformed = tf.keras.layers.Activation('linear', name='transformed', dtype='float32')(transformed)
-        flows = tf.keras.layers.Activation('linear', name='flows', dtype='float32')(flows)
+        onehot = keras.layers.Activation('linear', name='onehot', dtype='float32')(onehot)
+        transformed = keras.layers.Activation('linear', name='transformed', dtype='float32')(transformed)
+        flows = keras.layers.Activation('linear', name='flows', dtype='float32')(flows)
 
         outputs = [onehot, transformed, flows]
-        from tensorflow.keras.losses import mse
+        from keras.losses import mse
         from src.utils.Metrics import Grad, MSE_
 
         weights = {
@@ -493,31 +495,31 @@ def create_PhaseRegressionModel_v2(config, networkname='PhaseRegressionModel'):
         if loss == 'cce':
             losses = {
                 'onehot': own_metr.MSE(masked=mask_loss, loss_fn='cce', onehot=True),
-                'transformed': own_metr.MSE(masked=mask_loss, loss_fn=tf.keras.losses.mse, onehot=False),
+                'transformed': own_metr.MSE(masked=mask_loss, loss_fn=keras.losses.mse, onehot=False),
                 'flows': Grad('l2').loss}
 
         elif loss == 'ssim':
             losses = {
-                'onehot': own_metr.MSE(masked=mask_loss, loss_fn=tf.keras.losses.mse, onehot=True),
+                'onehot': own_metr.MSE(masked=mask_loss, loss_fn=keras.losses.mse, onehot=True),
                 'transformed': own_metr.SSIM(),
                 'flows': Grad('l2').loss}
         elif loss == 'mae':
             losses = {
-                'onehot': own_metr.MSE(masked=mask_loss, loss_fn=tf.keras.losses.mse, onehot=True),
-                'transformed': own_metr.MSE(masked=mask_loss, loss_fn=tf.keras.losses.mae, onehot=False),
+                'onehot': own_metr.MSE(masked=mask_loss, loss_fn=keras.losses.mse, onehot=True),
+                'transformed': own_metr.MSE(masked=mask_loss, loss_fn=keras.losses.mae, onehot=False),
                 'flows': Grad('l2').loss}
 
         else:  # default fallback --> MSE - works the best
             losses = {
-                'onehot': own_metr.MSE(masked=mask_loss, loss_fn=tf.keras.losses.mse,onehot=True),
-                'transformed': own_metr.MSE(masked=mask_loss, loss_fn=tf.keras.losses.mse,onehot=False),
+                'onehot': own_metr.MSE(masked=mask_loss, loss_fn=keras.losses.mse,onehot=True),
+                'transformed': own_metr.MSE(masked=mask_loss, loss_fn=keras.losses.mse,onehot=False),
                 'flows': Grad('l2').loss}
 
 
         print('added loss: {}'.format(loss))
         model = Model(inputs=[input_tensor], outputs=outputs, name=networkname)
         model.compile(
-            optimizer=tf.keras.optimizers.Adam(learning_rate=config.get('LEARNING_RATE', 0.001)),
+            optimizer=keras.optimizers.Adam(learning_rate=config.get('LEARNING_RATE', 0.001)),
             loss=losses,
             loss_weights=weights,
             metrics={
@@ -592,12 +594,12 @@ def create_RegistrationModel(config):
 
         model = Model(name='simpleregister', inputs=[input_tensor, input_tensor_empty], outputs=outputs)
 
-        from tensorflow.keras.losses import mse
+        from keras.losses import mse
         from src.utils.Metrics import Grad, MSE_
 
         losses = [MSE_().loss, Grad('l2').loss]
         weights = [image_loss_weight, reg_loss_weight]
-        model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=learning_rate), loss=losses,
+        model.compile(optimizer=keras.optimizers.Adam(learning_rate=learning_rate), loss=losses,
                       loss_weights=weights)
 
     return model
@@ -651,19 +653,19 @@ def create_RegistrationModel_inkl_mask(config):
         st_mask_layer = nrn_layers.SpatialTransformer(interp_method=interp_method, indexing=indexing, ident=True,
                                                       name='deformable_mask')
         # lambda layers for spatial transformer indexing of the cmr vol and the flowfield
-        st_lambda_layer = tf.keras.layers.Lambda(
+        st_lambda_layer = keras.layers.Lambda(
             lambda x: st_layer([x[..., 0:1], x[..., -3:]]), name='p2p')
-        st_p2ed_lambda_layer = tf.keras.layers.Lambda(
+        st_p2ed_lambda_layer = keras.layers.Lambda(
             lambda x: st_layer_p2ed([x[..., 0:1], x[..., -3:]]), name='p2ed')
-        st_mask_lambda_layer = tf.keras.layers.Lambda(
+        st_mask_lambda_layer = keras.layers.Lambda(
             lambda x: st_mask_layer([x[..., 0:1], x[..., -3:]]), name='p2p_mask')
 
         if COMPOSE_CONSISTENCY:
             # extract the ed phase as volume
             # repeat ED along the t-axis
             # add the ed phase as 4th channel to each phase
-            stack_lambda_layer = tf.keras.layers.Lambda(
-                lambda x: tf.keras.layers.Concatenate(axis=-1)([x, tf.repeat(x[:, 0:1, ..., -1:], x.shape[1], axis=1)]),
+            stack_lambda_layer = keras.layers.Lambda(
+                lambda x: keras.layers.Concatenate(axis=-1)([x, tf.repeat(x[:, 0:1, ..., -1:], x.shape[1], axis=1)]),
                 name='stack_ed')
             input_tensor = stack_lambda_layer(input_tensor_raw)
             config_temp['IMG_CHANNELS'] = config.get('IMG_CHANNELS', 1) + 1  # extend the config, for the u-net creation
@@ -679,23 +681,23 @@ def create_RegistrationModel_inkl_mask(config):
         print('flows_p2p:', flows.shape)
         # Each CMR input vol has CMR data from three timesteps stacked as channel: t1,t1+t2/2,t2
         # transform only one timestep, mostly the first one
-        transformed = TimeDistributed(st_lambda_layer, name='st_p2p')(tf.keras.layers.Concatenate(axis=-1)([input_tensor_raw, flows]))
+        transformed = TimeDistributed(st_lambda_layer, name='st_p2p')(keras.layers.Concatenate(axis=-1)([input_tensor_raw, flows]))
         print('transformed_p2p:', transformed.shape)
         transformed_mask = TimeDistributed(st_mask_lambda_layer, name='st_p2p_msk')(
-            tf.keras.layers.Concatenate(axis=-1)([input_mask_tensor, flows]))
+            keras.layers.Concatenate(axis=-1)([input_mask_tensor, flows]))
 
         if COMPOSE_CONSISTENCY:
             # composed flowfield should move each phase to ED
             flows_p2ed = TimeDistributed(conv_layer_p2ed, name='unet2flow_ed2p')(pre_flows)
             comp_transformed = TimeDistributed(st_p2ed_lambda_layer, name='st_p2ed')(
-                tf.keras.layers.Concatenate(axis=-1)([input_tensor_raw, flows_p2ed]))
-            comp_transformed = tf.keras.layers.Lambda(lambda x: x, name='comp_transformed')(comp_transformed)
-            flows_p2ed = tf.keras.layers.Lambda(lambda x: x, name='flowfield_p2ed')(flows_p2ed)
+                keras.layers.Concatenate(axis=-1)([input_tensor_raw, flows_p2ed]))
+            comp_transformed = keras.layers.Lambda(lambda x: x, name='comp_transformed')(comp_transformed)
+            flows_p2ed = keras.layers.Lambda(lambda x: x, name='flowfield_p2ed')(flows_p2ed)
             print('comp transformed:', comp_transformed.shape)
 
-        flow = tf.keras.layers.Lambda(lambda x: x, name='flowfield_p2p')(flows)
-        transformed_mask = tf.keras.layers.Lambda(lambda x: x, name='transformed_mask')(transformed_mask)
-        transformed = tf.keras.layers.Lambda(lambda x: x, name='transformed')(transformed)
+        flow = keras.layers.Lambda(lambda x: x, name='flowfield_p2p')(flows)
+        transformed_mask = keras.layers.Lambda(lambda x: x, name='transformed_mask')(transformed_mask)
+        transformed = keras.layers.Lambda(lambda x: x, name='transformed')(transformed)
 
         outputs = [transformed, transformed_mask, flow]
         if COMPOSE_CONSISTENCY: outputs = [comp_transformed] + outputs + [flows_p2ed]
@@ -703,7 +705,7 @@ def create_RegistrationModel_inkl_mask(config):
         model = Model(name='simpleregister', inputs=[input_tensor_raw, input_mask_tensor],
                       outputs=outputs)
 
-        from tensorflow.keras.losses import mse
+        from keras.losses import mse
         from src.utils.Metrics import Grad, MSE_
         from src.utils.Metrics import dice_coef_loss
 
@@ -711,7 +713,7 @@ def create_RegistrationModel_inkl_mask(config):
         if COMPOSE_CONSISTENCY: losses = [MSE_().loss] + losses + [Grad('l2').loss]
         weights = [image_loss_weight, dice_loss_weight, reg_loss_weight]
         if COMPOSE_CONSISTENCY: weights = [image_loss_weight] + weights + [reg_loss_weight]
-        model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=learning_rate), loss=losses,
+        model.compile(optimizer=keras.optimizers.Adam(learning_rate=learning_rate), loss=losses,
                       loss_weights=weights)
 
     return model
@@ -725,7 +727,7 @@ def create_affine_transformer_fixed(config, networkname='affine_transformer_fixe
     :param config:  Key value pairs for image size and other network parameters
     :param networkname: string, name of this model scope
     :param fill_value:
-    :return: compiled tf.keras model
+    :return: compiled keras model
     """
     if tf.distribute.has_strategy():
         strategy = tf.distribute.get_strategy()
@@ -760,7 +762,7 @@ def create_dense_compose(config, networkname='dense_compose_displacement'):
     :param config:  Key value pairs for image size and other network parameters
     :param networkname: string, name of this model scope
     :param fill_value:
-    :return: compiled tf.keras model
+    :return: compiled keras model
     """
     if tf.distribute.has_strategy():
         strategy = tf.distribute.get_strategy()

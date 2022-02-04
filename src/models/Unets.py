@@ -1,15 +1,17 @@
+import atexit
 import logging
 import random
 
 import numpy as np
+import tensorflow
 import tensorflow as tf
-import tensorflow.keras as keras
-import tensorflow.keras.layers as kl
-from tensorflow.keras import backend as K
-from tensorflow.keras.layers import Dropout
-from tensorflow.keras.layers import Input
-from tensorflow.keras.layers import Multiply
-from tensorflow.keras.models import Model
+from tensorflow import keras
+import keras.layers as kl
+from keras import backend as K
+from keras.layers import Dropout
+from keras.layers import Input
+from keras.layers import Multiply
+from keras.models import Model
 
 import src.models.KerasLayers as ownkl
 import src.models.ModelUtils as mutils
@@ -18,7 +20,7 @@ import src.models.ModelUtils as mutils
 # hack to use the load_from_json in tf otherwise we get an exception
 # adapted/modified hack from here:
 # https://github.com/keras-team/keras-contrib/issues/488
-if "slice" not in keras.backend.__dict__:
+"""if "slice" not in keras.backend.__dict__:
     # this is a good indicator that we are using tensorflow.keras
     print('using tensorflow, need to monkey patch')
     try:
@@ -48,7 +50,7 @@ if "slice" not in keras.backend.__dict__:
                 len_size = keras.int_shape(size)[0] if is_tensor(size) else len(size)
                 if not (len(keras.int_shape(x)) == len_start == len_size):
                     raise ValueError('The dimension and the size of indices should match.')
-            return tf.slice(x, start, size)
+            return tf.slice(x, start, size)"""
 
 
 # Build U-Net model
@@ -63,9 +65,11 @@ def create_unet(config, metrics=None, networkname='unet', single_model=True, sup
     """
     if tf.distribute.has_strategy():
         strategy = tf.distribute.get_strategy()
+
     else:
         # distribute the training with the mirrored data paradigm across multiple gpus if available, if not use gpu 0
         strategy = tf.distribute.MirroredStrategy(devices=config.get('GPUS', ["/gpu:0"]))
+    atexit.register(strategy._extended._collective_ops._pool.close)
     with strategy.scope():
 
         inputs = Input((*config.get('DIM', [224, 224]), config.get('IMG_CHANNELS', 3)))

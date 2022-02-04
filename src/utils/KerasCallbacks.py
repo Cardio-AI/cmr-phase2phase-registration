@@ -7,10 +7,11 @@ import numpy as np
 from PIL import Image
 import matplotlib.pyplot as plt
 import tensorflow as tf
-from tensorflow.keras import backend as K
-from tensorflow.keras.callbacks import TensorBoard
-from tensorflow.keras.callbacks import Callback
-from tensorflow.keras.callbacks import EarlyStopping, ModelCheckpoint, ReduceLROnPlateau, LearningRateScheduler
+from tensorflow import keras
+from keras import backend as K
+from keras.callbacks import TensorBoard
+from keras.callbacks import Callback
+from keras.callbacks import EarlyStopping, ModelCheckpoint, ReduceLROnPlateau, LearningRateScheduler
 from src.visualization.Visualize import plot_3d_vol, plot_4d_vol, plot_displacement
 from src.visualization.Visualize import show_slice_transparent as show_slice
 from src.utils.Utils_io import ensure_dir
