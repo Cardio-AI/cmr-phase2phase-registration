@@ -86,10 +86,9 @@ def get_min_distance(vals):
     bigger = tf.reduce_max(vals[0:2], keepdims=True)
     mod = vals[2]
 
-    diff = bigger - smaller
-    diff_ring = tf.math.abs(mod - bigger + smaller)# we need to use the abs to avoid 0 - 0
+    diff = bigger - smaller # zero if our prediction is correct
+    diff_ring = tf.math.abs(mod - bigger + smaller) # maybe abs is no longer necessary
     min_diff = tf.reduce_min(tf.stack([diff, diff_ring]))
-    #tf.math.greater_equal(min_diff, 0) # this is an int, as we measure the distance between buckets for the metric
     return min_diff
 
 class Meandiff_loss:

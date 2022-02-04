@@ -769,8 +769,8 @@ class PhaseRegressionGenerator_v2(DataGenerator):
         # use the load_masked_img wrapper to enable masking of the images, currently not necessary, but nice to have
         model_inputs = load_masked_img(sitk_img_f=x, mask=self.MASKING_IMAGE,
                                        masking_values=self.MASKING_VALUES, replace=self.REPLACE_WILDCARD)
-
-        assert(model_inputs.GetSize()[-1]<= self.T_SHAPE),'CMR sequence is longer ({}) than defined network input shape ({})'.format(model_inputs.GetSize()[-1], self.T_SHAPE)
+        gt_length = model_inputs.GetSize()[-1]
+        assert(gt_length<= self.T_SHAPE),'CMR sequence is longer ({}) than defined network input shape ({})'.format(model_inputs.GetSize()[-1], self.T_SHAPE)
         # resample the temporal resolution
         # if AUGMENT_TEMP --> add a temporal augmentation factor within the range given by: AUGMENT_TEMP_RANGE
         t_spacing = self.T_SPACING
@@ -807,7 +807,7 @@ class PhaseRegressionGenerator_v2(DataGenerator):
         # Create a list of 3D volumes for resampling
         model_inputs = split_one_4d_sitk_in_list_of_3d_sitk(model_inputs, axis=0)
 
-        gt_length = len(model_inputs)
+
         # Returns the indices in the following order: 'ED#', 'MS#', 'ES#', 'PF#', 'MD#'
         if self.ISACDC:
             onehot_orig = get_phases_as_onehot_acdc(x, self.DF_METADATA, temporal_sampling_factor, gt_length)
@@ -950,18 +950,6 @@ class PhaseRegressionGenerator_v2(DataGenerator):
             logging.debug('temp augmentation with: {}'.format(rand))
             if self.DEBUG_MODE: plt.imshow(onehot); plt.show()
 
-        # Fake a ring behaviour by
-        # first, tile along t
-        # second smooth with a gausian Kernel,
-        # third split+maximise element-wise on both matrices
-        # here we introduce the model target
-        model_targets = np.roll(model_inputs,shift=-1, axis=0) # [1,2,3,0] = np.roll([0,1,2,3],shift=-1,axis=0)
-        model_inputs = np.tile(model_inputs, (reps, 1, 1, 1))
-        model_targets = np.tile(model_targets, (reps, 1, 1, 1))
-        onehot = np.tile(onehot, (reps, 1))
-        logging.debug('onehot repeated {}:'.format(reps))
-        if self.DEBUG_MODE: plt.imshow(onehot); plt.show()
-        # logging.debug('one-hot: \n{}'.format(onehot))
 
         if self.TARGET_SMOOTHING:
             # Smooth each temporal vector along the indices.
@@ -979,7 +967,22 @@ class PhaseRegressionGenerator_v2(DataGenerator):
             logging.debug('onehot smoothed with sigma={}:'.format(self.SIGMA))
             if self.DEBUG_MODE: plt.imshow(onehot); plt.show()
 
+        # we normalise before definition of the target, to make sure that we have the same distribution
+        # Fake a ring behaviour by
+        # first, tile along t
+        # second smooth with a gausian Kernel,
+        # third split+maximise element-wise on both matrices
+        # here we introduce the model target
+        model_inputs = normalise_image(model_inputs, normaliser=self.SCALER)  # normalise per 4D
+        model_targets = np.roll(model_inputs,shift=-1, axis=0) # [1,2,3,0] = np.roll([0,1,2,3],shift=-1,axis=0)
+        model_inputs = np.tile(model_inputs, (reps, 1, 1, 1))
+        model_targets = np.tile(model_targets, (reps, 1, 1, 1))
+        onehot = np.tile(onehot, (reps, 1))
+        logging.debug('onehot repeated {}:'.format(reps))
+        if self.DEBUG_MODE: plt.imshow(onehot); plt.show()
+
         # Split and maximize the tiled one-hot vector to make sure that the beginning and end are also smooth
+        # no longer necessary, as we smooth with 'wrap' mode.
         #first, second = np.split(onehot, indices_or_sections=2, axis=0)
         #onehot = np.maximum(first, second)
         onehot = onehot[:self.T_SHAPE]
@@ -998,13 +1001,11 @@ class PhaseRegressionGenerator_v2(DataGenerator):
 
         # Finally normalise the 4D volume in one value space
         # Normalise the one-hot along the first or second axis
-        # This can be done either by:
+        # This can be done by:
         # - divide each element by the sum of the elements + epsilon
         # 𝜎(𝐳)𝑖=𝑧𝑖∑𝐾𝑗=1𝑧𝑗+𝜖 for 𝑖=1,…,𝐾 and 𝐳=(𝑧1,…,𝑧𝐾)∈ℝ𝐾
         # - The standard (unit) softmax function 𝜎:ℝ𝐾→ℝ𝐾 is defined by the formula
         # 𝜎(𝐳)𝑖=𝑒𝑧𝑖∑𝐾𝑗=1𝑒𝑧𝑗 for 𝑖=1,…,𝐾 and 𝐳=(𝑧1,…,𝑧𝐾)∈ℝ𝐾
-        model_inputs = normalise_image(model_inputs, normaliser=self.SCALER)  # normalise per 4D
-        model_targets = normalise_image(model_targets, normaliser=self.SCALER)
         onehot = normalise_image(onehot, normaliser='minmax')
         # logging.debug('background: \n{}'.format(onehot))
 
@@ -1027,7 +1028,7 @@ class PhaseRegressionGenerator_v2(DataGenerator):
                 ((0, self.T_SHAPE - gt_length), (0, 0)))
 
         if self.ISACDC:
-            # before: axis 1 == z-axis: apex--> base, after: base --> apex
+            # before: axis 1 == z-axis: base --> apex, after:  apex--> base
             model_inputs = np.flip(model_inputs,axis=1)
             model_targets = np.flip(model_targets,axis=1)
 
