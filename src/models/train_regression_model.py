@@ -144,6 +144,7 @@ def train_fold(config, in_memory=False):
 
     # training
     initial_epoch = 0
+    #EPOCHS=1
     model.fit(
         x=batch_generator,
         validation_data=validation_generator,
@@ -156,6 +157,7 @@ def train_fold(config, in_memory=False):
         verbose=1)
 
     # free as much memory as possible
+    #tf.keras.backend.clear_session()
     del batch_generator
     del validation_generator
     del model
@@ -171,6 +173,7 @@ def train_fold(config, in_memory=False):
 def main(args=None, in_memory=False):
     import os
     os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
+    os.environ["TF_FORCE_GPU_ALLOW_GROWTH"] = "true"
     # ------------------------------------------define logging and working directory
     # import the packages inside this function enables to train on different folds
     from ProjectRoot import change_wd_to_project_root

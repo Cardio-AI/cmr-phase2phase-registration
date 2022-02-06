@@ -13,6 +13,7 @@ def predict(cfg_file, data_root='', c2l=False):
 
     """
     import json, logging, os
+    os.environ["TF_FORCE_GPU_ALLOW_GROWTH"] = "true"
     from logging import info
     import numpy as np
     from src.data.Dataset import get_trainings_files
@@ -24,6 +25,9 @@ def predict(cfg_file, data_root='', c2l=False):
     import tensorflow as tf
     tf.get_logger().setLevel('FATAL')
 
+    from src.utils.Tensorflow_helper import choose_gpu_by_id
+
+
     # load the experiment config
     if type(cfg_file) == type(''):
         with open(cfg_file, encoding='utf-8') as data_file:
@@ -31,6 +35,12 @@ def predict(cfg_file, data_root='', c2l=False):
     else:
         config = cfg_file
     globals().update(config)
+
+    # ------------------------------------------define GPU id/s to use
+    GPU_IDS = config.get('GPU_IDS', '0,1')
+    GPUS = choose_gpu_by_id(GPU_IDS)
+    print(GPUS)
+    print(tf.config.list_physical_devices('GPU'))
 
     EXPERIMENT = config.get('EXPERIMENT', 'UNDEFINED')
     Console_and_file_logger(EXPERIMENT, logging.INFO)
@@ -42,52 +52,50 @@ def predict(cfg_file, data_root='', c2l=False):
         config['DATA_PATH_SAX'] = os.path.join(data_root, 'sax')
         config['DF_FOLDS'] = os.path.join(data_root, 'df_kfold.csv')
         config['DF_META'] = os.path.join(data_root, 'SAx_3D_dicomTags_phase.csv')
-    # TODO: add a dataset flag for this script which allows different datasets, than the training dataset for inference
-    isacdc = False
-    if isacdc:
-        x_train_sax, y_train_sax, x_val_sax, y_val_sax = get_trainings_files(data_path='/mnt/ssd/data/acdc/3D/all',
-                                                                         path_to_folds_df='/mnt/ssd/data/acdc/3D/df_kfold.csv',
-                                                                         fold=config['FOLD'])
-    else:
-        x_train_sax, y_train_sax, x_val_sax, y_val_sax = get_trainings_files(data_path=config['DATA_PATH_SAX'],
+
+    x_train_sax, y_train_sax, x_val_sax, y_val_sax = get_trainings_files(data_path=config['DATA_PATH_SAX'],
                                                                          path_to_folds_df=config['DF_FOLDS'],
                                                                          fold=config['FOLD'])
     logging.info('SAX train CMR: {}, SAX train masks: {}'.format(len(x_train_sax), len(y_train_sax)))
     logging.info('SAX val CMR: {}, SAX val masks: {}'.format(len(x_val_sax), len(y_val_sax)))
 
     # turn off all augmentation operations while inference
-    config['SHUFFLE'] = False
-    config['AUGMENT'] = False
-    config['AUGMENT_PHASES'] = False
-    config['AUGMENT_TEMP'] = False
-    config['BATCHSIZE'] = 1
-    config['HIST_MATCHING'] = False
     # create another config for the validation data
+    # we want the prediction to run with batchsize of 1
+    # otherwise we might inference only on the even number of val files
+    # the mirrored strategy needs to get a single gpu instance named, otherwise batchsize=1 does not work
     val_config = config.copy()
+    val_config['SHUFFLE'] = False
+    val_config['AUGMENT'] = False
+    val_config['AUGMENT_PHASES'] = False
+    val_config['AUGMENT_TEMP'] = False
+    val_config['BATCHSIZE'] = 1
+    val_config['HIST_MATCHING'] = False
+    val_config['GPUS'] = ['/gpu:0']
     validation_generator = PhaseRegressionGenerator_v2(x_val_sax, x_val_sax, config=val_config)
 
-    model = create_PhaseRegressionModel_v2(config)
+    model = create_PhaseRegressionModel_v2(val_config)
     logging.info('Trying to load the model weights')
     logging.info('work dir: {}'.format(os.getcwd()))
-    logging.info('model weights dir: {}'.format(os.path.join(config['MODEL_PATH'], 'model.h5')))
-    model.load_weights(os.path.join(config['MODEL_PATH'], 'model.h5'))
+    logging.info('model weights dir: {}'.format(os.path.join(val_config['MODEL_PATH'], 'model.h5')))
+    model.load_weights(os.path.join(val_config['MODEL_PATH'], 'model.h5'))
     logging.info('loaded model weights as h5 file')
 
     # predict on the validation generator
     preds, moved, vects = model.predict(validation_generator)
     logging.info('Shape of the predictions: {}'.format(preds.shape))
 
-    # get all ground truth vectors
-    gts = np.stack([np.squeeze(y[0]) for x, y in validation_generator])
+    # get all ground truth vectors, each y is a list with [onehot,moved, zeros]
+    gts = np.concatenate([y[0] for x, y in validation_generator],axis=0)
     logging.info('Shape of GT: {}'.format(gts.shape))
 
-    pred_path = os.path.join(config['EXP_PATH'], 'pred')
-    moved_path = os.path.join(config['EXP_PATH'], 'moved')
+    pred_path = os.path.join(val_config['EXP_PATH'], 'pred')
+    moved_path = os.path.join(val_config['EXP_PATH'], 'moved')
     ensure_dir(pred_path)
     ensure_dir(moved_path)
-    pred_filename = os.path.join(pred_path, 'gtpred_fold{}.npy'.format(config['FOLD']))
-    moved_filename = os.path.join(moved_path, 'moved_f{}.npy'.format(config['FOLD']))
-    vects_filename = os.path.join(moved_path, 'vects_f{}.npy'.format(config['FOLD']))
+    pred_filename = os.path.join(pred_path, 'gtpred_fold{}.npy'.format(val_config['FOLD']))
+    moved_filename = os.path.join(moved_path, 'moved_f{}.npy'.format(val_config['FOLD']))
+    vects_filename = os.path.join(moved_path, 'vects_f{}.npy'.format(val_config['FOLD']))
     np.save(pred_filename, np.stack([gts, preds], axis=0))
     np.save(moved_filename, moved)
     np.save(vects_filename, vects)
