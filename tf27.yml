@@ -15,8 +15,6 @@ dependencies:
   - cffi=1.15.0=py38hd667e15_1
   - charset-normalizer=2.0.4=pyhd3eb1b0_0
   - cryptography=36.0.0=py38h9ce1e76_0
-  - cudatoolkit=11.3.1=h2bc3f7f_2
-  - cudnn=8.2.1=cuda11.3_0
   - debugpy=1.5.1=py38h295c915_0
   - decorator=5.1.1=pyhd3eb1b0_0
   - defusedxml=0.7.1=pyhd3eb1b0_0
