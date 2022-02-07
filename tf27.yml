@@ -33,4 +33,7 @@ dependencies:
     - simpleitk>=2.0
     - tensorboard>=2.8
     - tensorflow>=2.7
+    - pyyaml>=6.
+    - albumentations>=1.0
+    - pydot>=3.0
 prefix: /home/sven/anaconda3/envs/dcmr2
