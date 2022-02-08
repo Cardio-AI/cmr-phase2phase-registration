@@ -180,52 +180,54 @@ class StepDecay:
 
 
 
-class TrainValTensorBoard(TensorBoard):
-
-    def __init__(self, log_dir='./logs', **kwargs):
-
-        """
-        This Callback is neccesary to plot train and validation score in one subdirectory 
-        :param log_dir: tensorboard summary folder
-        :param kwargs: tensorboard config arguments
-        """
-
-        # Make the original `TensorBoard` log to a subdirectory 'training'
-        training_log_dir = os.path.join(log_dir, 'training')
-        ensure_dir(training_log_dir)
-        super(TrainValTensorBoard, self).__init__(training_log_dir, **kwargs)
-
-        # Log the validation metrics to a separate subdirectory
-        self.val_log_dir = os.path.join(log_dir, 'validation')
-        ensure_dir(self.val_log_dir)
-
-    def set_model(self, model):
-        # Setup writer for validation metrics
-        self.val_writer = tensorflow.summary.create_file_writer(self.val_log_dir)
-        super(TrainValTensorBoard, self).set_model(model)
-
-    def on_epoch_end(self, epoch, logs=None):
-        # Pop the validation logs and handle them separately with
-        # `self.val_writer`. Also rename the keys so that they can
-        # be plotted on the same figure with the training metrics
-        if epoch % 1 == 0:
-            logs = logs or {}
-            val_logs = {k.replace('val_', ''): v for k, v in logs.items() if k.startswith('val_')}
-            for name, value in val_logs.items():
-                summary = tensorflow.summary()
-                summary_value = summary.value.add()
-                summary_value.simple_value = value.item()
-                summary_value.tag = name
-                self.val_writer.add_summary(summary, epoch)
-            self.val_writer.flush()
-
-            # Pass the remaining logs to `TensorBoard.on_epoch_end`
-            logs = {k: v for k, v in logs.items() if not k.startswith('val_')}
-            super(TrainValTensorBoard, self).on_epoch_end(epoch, logs)
-
-    def on_train_end(self, logs=None):
-        super(TrainValTensorBoard, self).on_train_end(logs)
-        self.val_writer.close()
+# class TrainValTensorBoard(TensorBoard):
+#
+#     def __init__(self, log_dir='./logs', **kwargs):
+#
+#         """
+#         This Callback is neccesary to plot train and validation score in one subdirectory
+#         :param log_dir: tensorboard summary folder
+#         :param kwargs: tensorboard config arguments
+#         """
+#
+#         # Make the original `TensorBoard` log to a subdirectory 'training'
+#         training_log_dir = os.path.join(log_dir, 'training')
+#         ensure_dir(training_log_dir)
+#         super(TrainValTensorBoard, self).__init__(training_log_dir, **kwargs)
+#
+#         # Log the validation metrics to a separate subdirectory
+#         self.val_log_dir = os.path.join(log_dir, 'validation')
+#         ensure_dir(self.val_log_dir)
+#
+#     def set_model(self, model):
+#         # Setup writer for validation metrics
+#         self.val_writer = tf.summary.create_file_writer(self.val_log_dir)
+#         super(TrainValTensorBoard, self).set_model(model)
+#
+#     def on_epoch_end(self, epoch, logs=None):
+#         # Pop the validation logs and handle them separately with
+#         # `self.val_writer`. Also rename the keys so that they can
+#         # be plotted on the same figure with the training metrics
+#         if epoch % 1 == 0:
+#             with self.val_writer.as_default():
+#                 logs = logs or {}
+#                 val_logs = {k.replace('val_', ''): v for k, v in logs.items() if k.startswith('val_')}
+#                 for name, value in val_logs.items():
+#                     tf.summary.scalar(name=name,data=value.item(), step=epoch)
+#                     """summary = tensorflow.summary()
+#                     summary_value = summary.value.add()
+#                     summary_value.simple_value = value.item()
+#                     summary_value.tag = name
+#                     self.val_writer.add_summary(summary, epoch)
+#                 self.val_writer.flush()"""
+#             # Pass the remaining logs to `TensorBoard.on_epoch_end`
+#             logs = {k: v for k, v in logs.items() if not k.startswith('val_')}
+#             super(TrainValTensorBoard, self).on_epoch_end(epoch, logs)
+#
+#
+#     def on_train_end(self, logs=None):
+#         super(TrainValTensorBoard, self).on_train_end(logs)
+#         self.val_writer.close()
 
 class LRTensorBoard(TensorBoard):
     def __init__(self, log_dir, **kwargs):  # add other arguments to __init__ if you need
@@ -730,7 +732,7 @@ class PhaseRegressionCallback(Callback):
     # Usage:
     # custom_image_writer = CustomImageWriter(experiment_path, 10, create_feeds_for_tensorboard(batch_generator, val_generator)
     # model.fit_generator(batch_generator, val_generator, *args, callbacks=[custom_image_writer, ...]
-    # original code from:
+    # initial code from:
     # https://stackoverflow.com/questions/43784921/how-to-display-custom-images-in-tensorboard-using-keras?rq=1
 
     def __init__(self, log_dir='./logs/tmp/', image_freq=10, feed_inputs_4_display=None, dpi=200, f_size=(5, 5),
@@ -783,12 +785,12 @@ class PhaseRegressionCallback(Callback):
     def make_image(self, figure):
 
         """
+        Converts the matplotlib plot specified by 'figure' to a PNG image and
+        returns it. The supplied figure is closed and inaccessible after this call.
         Create a tf.Summary.Image from an ndarray
         :param numpy_img: Greyscale image with shape (x, y, 1)
         :return:
         """
-        """Converts the matplotlib plot specified by 'figure' to a PNG image and
-          returns it. The supplied figure is closed and inaccessible after this call."""
         # Save the plot to a PNG in memory.
         buf = io.BytesIO()
         plt.savefig(buf, format='png')
@@ -827,51 +829,52 @@ class PhaseRegressionCallback(Callback):
 
             # create one tensorboard entry per key in feed_inputs_display
             pred_i = 0
-            with self.writer.as_default():
 
-                for key, x, y in zip(self.keys, self.xs, self.ys):
-                    predictions = self.model.predict(x)
-                    if len(predictions) == 3:  # multi-output-model
-                        onehot_predictions, movings, vects = predictions
-                        onehot_y =  y[0] # batchsize = 2
+            # with self.writer.as_default():
+            for key, x, y in zip(self.keys, self.xs, self.ys):
+                predictions = self.model.predict(x)
+                if len(predictions) == 3:  # multi-output-model
+                    onehot_predictions, movings, vects = predictions
+                    onehot_y =  y[0] # y is a list with [onehot, moved, zeros], we are interested in the onehot
 
-                        gt, gt_msk = onehot_y[:, 0, ...], onehot_y[:, 1, ...]
+                    gt, gt_msk = onehot_y[:, 0, ...], onehot_y[:, 1, ...] # batchsize,2,time,phases
 
-                        # slice the volumes, we plot only the first patient (b) out of this batch
-                        for b in range(gt.shape[0]):
-                        #b = 0
-                            temp_y = gt[b] * gt_msk[b]
-                            # gt[idx][(gt_length),:] = 1 # draw a line at the gt length temporal position
-                            ind_gt = np.argmax(temp_y, axis=0)
-                            for t_idx,t in enumerate(ind_gt): # iterate over the 5 gt phases to plot the volume at these timesteps
-                                first_vol, second_vol = x[0][b][t], y[1][b][t]
-                                moved, vect = movings[b][t], vects[b][t]
-                                spatial_slices = first_vol.shape[0]
-                                # pick one upper, middle and lower slice as example
-                                picks = (np.array([1, 0.5, 0]) * spatial_slices).astype(int)
-                                picks = np.clip(picks, 0, spatial_slices-1)
-                                y_label = ['Basal', 'Mid', 'Apex']
-                                from src.utils.Metrics import MSE_
-                                mse_1 = MSE_().loss(second_vol,first_vol)
-                                mse_2 = MSE_().loss(second_vol, moved)
-                                col_titles = ['t1', 't2', 't1 moved', 'vect', 'magn', 't1-t2 \n {:6.4f}'.format(mse_1),
-                                              'moved-t2 \n {:6.4f}'.format(mse_2)]
+                    # iterate over the batchsize
+                    upper_plot_limit = 2
+                    for b in range(min(gt.shape[0],upper_plot_limit)): # set an upper limit, to save time and disk space
+                        temp_y = gt[b] * gt_msk[b] # mask each onehot by the gt mask/cardiac cycle length
+                        # gt[idx][(gt_length),:] = 1 # draw a line at the gt length temporal position
+                        ind_gt = np.argmax(temp_y, axis=0)
+                        for t_idx,t in enumerate(ind_gt): # iterate over the 5 gt phases to plot the volume at these timesteps
+                            first_vol, second_vol = x[0][b][t], y[1][b][t] # extract the cmr per phase
+                            moved, vect = movings[b][t], vects[b][t] #
+                            spatial_slices = first_vol.shape[0]
+                            # pick one upper, middle and lower slice as example
+                            picks = (np.array([1, 0.5, 0]) * spatial_slices).astype(int)
+                            picks = np.clip(picks, 0, spatial_slices-1)
+                            y_label = ['Basal', 'Mid', 'Apex']
+                            from src.utils.Metrics import MSE_
+                            mse_1 = MSE_().loss(second_vol,first_vol)
+                            mse_2 = MSE_().loss(second_vol, moved)
+                            col_titles = ['t1', 't2', 't1 moved', 'vect', 'magn', 't1-t2 \n {:6.4f}'.format(mse_1),
+                                          'moved-t2 \n {:6.4f}'.format(mse_2)]
+                            # create an overview figure which shows the displacement and error per phase on the CMR
+                            fig = plot_displacement(col_titles=col_titles,
+                                                    first_m=np.zeros_like(first_vol),
+                                                    first_vol=first_vol,
+                                                    moved=moved, moved_m=np.zeros_like(moved),
+                                                    picks=picks,second_m=np.zeros_like(second_vol),
+                                                    second_vol=second_vol, vect=vect, y_label=y_label,
+                                                    plot_masks=False)
 
-                                fig = plot_displacement(col_titles=col_titles,
-                                                        first_m=np.zeros_like(first_vol),
-                                                        first_vol=first_vol,
-                                                        moved=moved, moved_m=np.zeros_like(moved),
-                                                        picks=picks,second_m=np.zeros_like(second_vol),
-                                                        second_vol=second_vol, vect=vect, y_label=y_label,
-                                                        plot_masks=False)
-
+                            # add this overfiew figure to tensorflow
+                            with self.writer.as_default():
                                 tensorflow.summary.image(name='plot/{}/batch_{}/{}_{}/summary'.format(key, b, t, self.phases[t_idx]),
                                                          data=self.make_image(fig),
                                                          step=epoch)
 
-                    # logging.info(predictions.shape)
-                    # xs and ys have the shape n, x, y, 1, they are grouped by the key
-                    # count the samples provided by each key to sort them
+                # plot the onehot prediction/gt vector of one batch
+                with self.writer.as_default():
                     tensorflow.summary.image(name='plot/{}/_pred'.format(key, pred_i),
                                              data=self.make_image(show_phases(onehot_y, onehot_predictions)),
                                              step=epoch)

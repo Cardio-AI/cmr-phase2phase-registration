@@ -229,6 +229,7 @@ def create_PhaseRegressionModel_v2(config, networkname='PhaseRegressionModel'):
         loss = config.get('LOSS', 'mse').lower()
         mask_loss = config.get('MASK_LOSS', False)
         downsample_flow_features = config.get('PRE_GAP_CONV', False)
+        split_corners = config.get('SPLIT_CORNERS', False)
         interp_method = 'linear'
         indexing = 'ij'
         # TODO: this parameter is also used by the generator to define the number of channels
@@ -363,7 +364,9 @@ def create_PhaseRegressionModel_v2(config, networkname='PhaseRegressionModel'):
         # replace the last timestep my the 2nd last timestep, otherwise we might try to predict
         # the motion from the middle of a cardiac cycle to the first timestep (ED)
         # repeat the last time step
-        inputs_spatial_stacked = keras.layers.Concatenate(axis=1)([inputs_spatial_stacked[:,:-1], inputs_spatial_stacked[:,-2:-1]])
+        # For the last timestep
+        # this will result in different model input t,t and loss target t,t+1
+        #inputs_spatial_stacked = keras.layers.Concatenate(axis=1)([inputs_spatial_stacked[:,:-1], inputs_spatial_stacked[:,-2:-1]])
         print('Shape rolled and stacked: {}'.format(inputs_spatial_stacked.shape))
         pre_flows = TimeDistributed(unet, name='4d-p2p-unet')(inputs_spatial_stacked)
         print('Unet output shape: {}'.format(pre_flows.shape))
@@ -412,24 +415,22 @@ def create_PhaseRegressionModel_v2(config, networkname='PhaseRegressionModel'):
             flow_features = tf.transpose(flow_features, perm=[0, 2, 1, 3, 4, 5])
         print('flow features after conv lstm: {}'.format(flow_features.shape))
 
-        # slice the 3D sequence of features into on sequence per corner
-        # as our images are spatial aligned
-        # each 3D-sliced-corner-sequence represents one specific "part" of the heart
-        # finally concat them as channel, which makes them available to the LSTM layer
-        split=False
-        if split:
-            y, x = flow_features.shape[-3:-1]
-            dir_1 = flow_features[..., :y // 2, :x // 2,:]
-            dir_2 = flow_features[..., y // 2:, :x // 2,:]
-            dir_3 = flow_features[..., y // 2:, x // 2:,:]
-            dir_4 = flow_features[..., :y // 2, x // 2:,:]
-            flow_features = keras.layers.Concatenate(axis=-1,name='split_corners')([dir_1,dir_2,dir_3,dir_4])
-        print('flow features after split corners: {}'.format(flow_features.shape))
-
         if downsample_flow_features:
             flow_features = TimeDistributed(downsample)(flow_features)
         else:  # use a gap3D layer
-            flow_features = TimeDistributed(gap)(flow_features)
+            # slice the 3D sequence of features into on sequence per corner
+            # as our images are spatial aligned
+            # each 3D-sliced-corner-sequence represents one specific "part" of the heart
+            # finally concat them as channel, which makes them available to the LSTM layer
+            if split_corners: # average per corner per 3D volume, e.g.: top left, top right ...
+                y, x = flow_features.shape[-3:-1]
+                dir_1 = TimeDistributed(gap)(flow_features[..., :y // 2, :x // 2, :])
+                dir_2 = TimeDistributed(gap)(flow_features[..., y // 2:, :x // 2, :])
+                dir_3 = TimeDistributed(gap)(flow_features[..., y // 2:, x // 2:, :])
+                dir_4 = TimeDistributed(gap)(flow_features[..., :y // 2, x // 2:, :])
+                flow_features = keras.layers.Concatenate(axis=-1, name='split_corners')([dir_1, dir_2, dir_3, dir_4])
+            else: # average per 3D volume
+                flow_features = TimeDistributed(gap)(flow_features)
         flow_features = keras.layers.Reshape(target_shape=(flow_features.shape[1], flow_features.shape[-1]))(
             flow_features)
         print('flow features after downsample/gap layer: {}'.format(flow_features.shape))
@@ -451,7 +452,13 @@ def create_PhaseRegressionModel_v2(config, networkname='PhaseRegressionModel'):
 
         if add_bilstm:
             # min/max normlisation as lambda
-            minmax_lambda = lambda x: (x - tf.reduce_min(x)) / (tf.reduce_max(x) - tf.reduce_min(x) + keras.backend.epsilon())
+            minmax_lambda = lambda x: (x - tf.reduce_min(x)) / (
+                        tf.reduce_max(x) - tf.reduce_min(x) + keras.backend.epsilon())
+            minmax_lambda_tf = keras.layers.Lambda(lambda x:
+                                                   (x - tf.reduce_min(x)) / (
+                        tf.reduce_max(x) - tf.reduce_min(x) + keras.backend.epsilon()),
+                                                   name='minmaxscaling')
+
 
             """flow_features = keras.layers.BatchNormalization()(flow_features)
             flow_features = keras.layers.Conv1D(filters=16,kernel_size=3, padding='same')(flow_features)
@@ -462,8 +469,7 @@ def create_PhaseRegressionModel_v2(config, networkname='PhaseRegressionModel'):
 
             #flow_features = tf.keras.layers.LayerNormalization(axis=-1)(flow_features)
 
-            flow_features = minmax_lambda(flow_features)
-            #flow_features = keras.layers.BatchNormalization()(flow_features)
+            flow_features = minmax_lambda_tf(flow_features)
             flow_features = bi_lstm_layer(flow_features)
             flow_features = keras.layers.Dropout(rate=0.2)(flow_features)
             flow_features = bi_lstm_layer1(flow_features)
@@ -477,12 +483,19 @@ def create_PhaseRegressionModel_v2(config, networkname='PhaseRegressionModel'):
         print('Shape after final conv layer: {}'.format(onehot.shape))
         # add empty tensor with one-hot shape to align with gt
         if add_softmax: onehot = keras.activations.softmax(onehot, axis=softmax_axis+1)
+        act = keras.layers.Activation
+        stack_lambda_tf = keras.layers.Lambda(lambda x :
+                                              keras.layers.Activation('linear', dtype='float32')(
+                                                  tf.stack([x,
+                                                            tf.zeros_like(x, name='zero_padding')],
+                                                           axis=1, name='extend_onehot_by_zeros')),
+                                              name='onehot')
 
-        zeros = tf.zeros_like(onehot, name='zero_padding')
-        onehot = tf.stack([onehot, zeros], axis=1, name='extend_onehot_by_zeros')
+        """zeros = tf.zeros_like(onehot, name='zero_padding')
+        onehot = tf.stack([onehot, zeros], axis=1, name='extend_onehot_by_zeros')"""
 
         # define the model output names
-        onehot = keras.layers.Activation('linear', name='onehot', dtype='float32')(onehot)
+        onehot = stack_lambda_tf(onehot)
         transformed = keras.layers.Activation('linear', name='transformed', dtype='float32')(transformed)
         flows = keras.layers.Activation('linear', name='flows', dtype='float32')(flows)
 

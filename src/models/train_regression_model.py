@@ -134,9 +134,11 @@ def train_fold(config, in_memory=False):
         model.summary(line_length=140, print_fn=lambda x: fh.write(x + '\n'))
 
     tf.keras.utils.plot_model(
-        model, show_shapes=False,
+        model,
+        show_dtype=False,
+        show_shapes=True,
         to_file=os.path.join(FOLD_PATH, 'model.png'),
-        show_layer_names=True,
+        show_layer_names=False,
         rankdir='TB',
         expand_nested=False,
         dpi=96
