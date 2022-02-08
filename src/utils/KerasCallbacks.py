@@ -819,6 +819,7 @@ class PhaseRegressionCallback(Callback):
         """
 
         logs = logs or {}
+        upper_plot_limit = 2
         self.e += 1
         if self.e % self.freq == 0 or self.e < self.n_start_epochs:  # every n epoch (and the first 20 epochs), write pred in a TensorBorad summary file;
             summary_str = []
@@ -840,7 +841,7 @@ class PhaseRegressionCallback(Callback):
                     gt, gt_msk = onehot_y[:, 0, ...], onehot_y[:, 1, ...] # batchsize,2,time,phases
 
                     # iterate over the batchsize
-                    upper_plot_limit = 2
+
                     for b in range(min(gt.shape[0],upper_plot_limit)): # set an upper limit, to save time and disk space
                         temp_y = gt[b] * gt_msk[b] # mask each onehot by the gt mask/cardiac cycle length
                         # gt[idx][(gt_length),:] = 1 # draw a line at the gt length temporal position
@@ -876,7 +877,7 @@ class PhaseRegressionCallback(Callback):
                 # plot the onehot prediction/gt vector of one batch
                 with self.writer.as_default():
                     tensorflow.summary.image(name='plot/{}/_pred'.format(key, pred_i),
-                                             data=self.make_image(show_phases(onehot_y, onehot_predictions)),
+                                             data=self.make_image(show_phases(onehot_y[:upper_plot_limit], onehot_predictions[:upper_plot_limit])),
                                              step=epoch)
 
 class ImageSaver(Callback):

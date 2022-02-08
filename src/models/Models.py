@@ -280,6 +280,12 @@ def create_PhaseRegressionModel_v2(config, networkname='PhaseRegressionModel'):
         flow2direction_lambda = keras.layers.Lambda(
             lambda x: get_angle_tf(x, centers_tensor), name='flow2direction')
 
+        stack_lambda_tf = keras.layers.Lambda(lambda x:
+                                                  tf.stack([x,
+                                                            tf.zeros_like(x, name='zero_padding')],
+                                                           axis=1, name='extend_onehot_by_zeros'),
+                                              name='onehot_lambda')
+
         forward_conv_lstm_layer = keras.layers.ConvLSTM2D(filters=conv_lstm_units,
                                                              kernel_size=3,
                                                              strides=1,
@@ -483,25 +489,17 @@ def create_PhaseRegressionModel_v2(config, networkname='PhaseRegressionModel'):
         print('Shape after final conv layer: {}'.format(onehot.shape))
         # add empty tensor with one-hot shape to align with gt
         if add_softmax: onehot = keras.activations.softmax(onehot, axis=softmax_axis+1)
-        act = keras.layers.Activation
-        stack_lambda_tf = keras.layers.Lambda(lambda x :
-                                              keras.layers.Activation('linear', dtype='float32')(
-                                                  tf.stack([x,
-                                                            tf.zeros_like(x, name='zero_padding')],
-                                                           axis=1, name='extend_onehot_by_zeros')),
-                                              name='onehot')
 
-        """zeros = tf.zeros_like(onehot, name='zero_padding')
-        onehot = tf.stack([onehot, zeros], axis=1, name='extend_onehot_by_zeros')"""
 
         # define the model output names
         onehot = stack_lambda_tf(onehot)
+        onehot = keras.layers.Activation('linear', dtype='float32', name='onehot')(onehot)
         transformed = keras.layers.Activation('linear', name='transformed', dtype='float32')(transformed)
         flows = keras.layers.Activation('linear', name='flows', dtype='float32')(flows)
 
         outputs = [onehot, transformed, flows]
         from keras.losses import mse
-        from src.utils.Metrics import Grad, MSE_
+        from src.utils.Metrics import Grad
 
         weights = {
             'onehot': phase_loss_weight,
