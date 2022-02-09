@@ -465,19 +465,11 @@ def create_PhaseRegressionModel_v2(config, networkname='PhaseRegressionModel'):
                         tf.reduce_max(x) - tf.reduce_min(x) + keras.backend.epsilon()),
                                                    name='minmaxscaling')
 
-
-            """flow_features = keras.layers.BatchNormalization()(flow_features)
-            flow_features = keras.layers.Conv1D(filters=16,kernel_size=3, padding='same')(flow_features)
-            flow_features = keras.layers.Conv1D(filters=16, kernel_size=3, padding='same')(flow_features)
-            flow_features = keras.layers.BatchNormalization()(flow_features)"""
             print('Shape before LSTM layers: {}'.format(flow_features.shape))
-            #flow_features = tf.map_fn(minmax_lambda,flow_features) # per instance rescaling
-
-            #flow_features = tf.keras.layers.LayerNormalization(axis=-1)(flow_features)
 
             flow_features = minmax_lambda_tf(flow_features)
             flow_features = bi_lstm_layer(flow_features)
-            flow_features = keras.layers.Dropout(rate=0.2)(flow_features)
+            #flow_features = keras.layers.Dropout(rate=0.2)(flow_features)
             flow_features = bi_lstm_layer1(flow_features)
             print('Shape after LSTM layers: {}'.format(flow_features.shape))
 
