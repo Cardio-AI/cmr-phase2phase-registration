@@ -886,7 +886,7 @@ class PhaseRegressionGenerator_v2(DataGenerator):
                                                 interpolate=self.MSK_INTERPOLATION),
                                     zip(msk, new_size_inputs)))
             msk = np.stack(list(map(lambda x: sitk.GetArrayFromImage(x), msk)), axis=0)
-            model_inputs = align_inplane_with_ip(model_inputs, msk_file_name=msk, roll2septum=True, roll2lvbood=False)
+            model_inputs = align_inplane_with_ip(model_inputs, msk_file_name=msk, roll2septum=self.ROLL2SEPTUM, roll2lvbood=self.ROLL2LV)
 
         # performance test, keep t, crop the other dimensions to 1.5 times the target shape
         # This decreases the memory footprint and the computation time for further processing steps
