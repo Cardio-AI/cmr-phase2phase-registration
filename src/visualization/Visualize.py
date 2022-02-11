@@ -36,7 +36,7 @@ def get_metadata_maybe(sitk_img, key, default='not_found'):
     return value
 
 
-def show_2D_or_3D(img=None, mask=None, f_size=(8,8),dpi=100, interpol='none', allow_slicing=True):
+def show_2D_or_3D(img=None, mask=None, f_size=(25,3),dpi=100, interpol='none', allow_slicing=True, cmap='gray'):
     """
     Debug wrapper for 2D or 3D image/mask vizualisation
     wrapper checks the ndim and calls shoow_transparent or plot 3d
@@ -60,8 +60,6 @@ def show_2D_or_3D(img=None, mask=None, f_size=(8,8),dpi=100, interpol='none', al
     if not isinstance(mask, np.ndarray) and mask is not None:
         mask = mask.numpy().astype(np.float32)
 
-
-
     # dont print anything if no images nor masks are given
     if img is None and mask is None:
         logging.error('No image data given')
@@ -75,15 +73,17 @@ def show_2D_or_3D(img=None, mask=None, f_size=(8,8),dpi=100, interpol='none', al
 
 
     if dim == 2:
-        return show_slice_transparent(img, mask, f_size=f_size, dpi=dpi, interpol=interpol)
+        f_size=(8,8)
+        return show_slice_transparent(img, mask, f_size=f_size, dpi=dpi, interpol=interpol,cmap=cmap)
     elif dim == 3 and temp.shape[-1] == 1:  # data from the batchgenerator
-        return show_slice_transparent(img, mask, f_size=f_size, dpi=dpi, interpol=interpol)
+        f_size = (8, 8)
+        return show_slice_transparent(img, mask, f_size=f_size, dpi=dpi, interpol=interpol,cmap=cmap)
     elif dim == 3:
-        return plot_3d_vol(img_3d=img, mask_3d=mask, allow_slicing=allow_slicing)
+        return plot_3d_vol(img_3d=img, mask_3d=mask, fig_size=f_size,allow_slicing=allow_slicing,cmap=cmap)
     elif dim == 4 and temp.shape[-1] == 1:  # data from the batchgenerator
-        return plot_3d_vol(img_3d=img, mask_3d=mask, allow_slicing=allow_slicing)
+        return plot_3d_vol(img_3d=img, mask_3d=mask, fig_size=f_size,allow_slicing=allow_slicing,cmap=cmap)
     elif dim == 4 and temp.shape[-1] in [3,4]: # only mask
-        return plot_3d_vol(img_3d=temp, mask_3d=mask, allow_slicing=allow_slicing)
+        return plot_3d_vol(img_3d=temp, mask_3d=mask, fig_size=f_size,allow_slicing=allow_slicing,cmap=cmap)
     elif dim == 4:
         return plot_4d_vol(img_4d=img, mask_4d=mask)
     else:
@@ -250,7 +250,7 @@ def show_slice(img=[], mask=[], show=True, f_size=(15, 5)):
     """
 
 
-def show_slice_transparent(img=None, mask=None, show=True, f_size=(5, 5), ax=None, dpi=300, interpol='none'):
+def show_slice_transparent(img=None, mask=None, show=True, f_size=(5, 5), ax=None, dpi=300, interpol='none',cmap='gray'):
     """
     Plot image + masks in one figure
     """
@@ -327,7 +327,7 @@ def show_slice_transparent(img=None, mask=None, show=True, f_size=(5, 5), ax=Non
         x_ = (x_ - x_.min()) / (x_.max() - x_.min() + sys.float_info.epsilon)
         vmax=0.6
         alpha = .3
-    ax.imshow(x_, 'gray',vmin=0,vmax=vmax)
+    ax.imshow(x_, cmap=cmap,vmin=0,vmax=vmax)
     ax.imshow(y_, interpolation=interpol, alpha=alpha)
 
     if show:
@@ -727,7 +727,7 @@ def create_violin_plot(df, cols, ax, scale='linear', unit='mm'):
 
 
 def plot_3d_vol(img_3d, mask_3d=None, timestep=0, save=False, path='reports/figures/tetra/3D_vol/temp/',
-                fig_size=[25, 8], show=True, allow_slicing=True):
+                fig_size=[25, 8], show=True, allow_slicing=True,cmap='gray'):
     """
     plots a 3D nda, if a mask is given combine mask and image slices
     :param show:
@@ -792,15 +792,16 @@ def plot_3d_vol(img_3d, mask_3d=None, timestep=0, save=False, path='reports/figu
         ax = fig.add_subplot(row, img_3d.shape[0], idx+1)
 
         if mask_3d is not None:
-            ax = plot_fn(img=slice, mask=mask_3d[idx], show=True, ax=ax)
+            ax = plot_fn(img=slice, mask=mask_3d[idx], show=True, ax=ax, cmap=cmap)
         else:
+            #ax = plot_fn(img=slice, mask=None, show=True, ax=ax, cmap=cmap)
             mixed = show_slice(img=slice, mask=[], show=False)
-            ax.imshow(mixed)
+            ax.imshow(mixed, cmap=cmap)
 
         ax.set_xticks([])
         ax.set_yticks([])
         #real_index = idx + (idx * slice_n)
-        ax.set_title('z: {}'.format(idx), color='r', fontsize=plt.rcParams['font.size'])
+        #ax.set_title('{}'.format(idx), color='r', fontsize=plt.rcParams['font.size'])
 
 
     fig.subplots_adjust(wspace=0, hspace=0)
@@ -808,7 +809,6 @@ def plot_3d_vol(img_3d, mask_3d=None, timestep=0, save=False, path='reports/figu
         save_plot(fig, path, str(timestep), override=False)
 
     if show:
-        #fig.show()
         return fig
     else:
         fig.canvas.draw()

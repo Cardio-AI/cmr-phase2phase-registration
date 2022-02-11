@@ -623,6 +623,7 @@ class PhaseRegressionGenerator_v2(DataGenerator):
         self.AUGMENT_TEMP_RANGE = config.get('AUGMENT_TEMP_RANGE', (-3, 3))
         self.RESAMPLE_T = config.get('RESAMPLE_T', False)
         self.ROTATE = config.get('ROTATE', False)
+        self.TRANSLATE = config.get('TRANSLATE', True)
         self.ADD_SOFTMAX = config.get('ADD_SOFTMAX', False)
         self.SOFTMAX_AXIS = config.get('SOFTMAX_AXIS', 0)
         self.ROLL2SEPTUM = config.get('ROLL2SEPTUM', True) # default
@@ -866,7 +867,7 @@ class PhaseRegressionGenerator_v2(DataGenerator):
         # calc mean IPs
         # calc IP angle and rotation angle
         # rotate 4D with mean rotation angle and roll volume to center
-        if self.ROTATE:
+        if self.ROTATE or self.TRANSLATE:
             from src.data.Preprocess import align_inplane_with_ip
             if self.ISACDC:
                 import glob
@@ -886,7 +887,12 @@ class PhaseRegressionGenerator_v2(DataGenerator):
                                                 interpolate=self.MSK_INTERPOLATION),
                                     zip(msk, new_size_inputs)))
             msk = np.stack(list(map(lambda x: sitk.GetArrayFromImage(x), msk)), axis=0)
-            model_inputs = align_inplane_with_ip(model_inputs, msk_file_name=msk, roll2septum=self.ROLL2SEPTUM, roll2lvbood=self.ROLL2LV)
+            model_inputs = align_inplane_with_ip(model_inputs=model_inputs,
+                                                 msk_file_name=msk,
+                                                 roll2septum=self.ROLL2SEPTUM,
+                                                 roll2lvbood=self.ROLL2LV,
+                                                 rotate=self.ROTATE,
+                                                 translate=self.TRANSLATE)
 
         # performance test, keep t, crop the other dimensions to 1.5 times the target shape
         # This decreases the memory footprint and the computation time for further processing steps
