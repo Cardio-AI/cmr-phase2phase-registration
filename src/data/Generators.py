@@ -155,6 +155,7 @@ class BaseGenerator(tensorflow.keras.utils.Sequence):
         """
 
         t0 = time()
+        assert index<self.__len__(), 'invalid idx in batchgenerator: {} and len {}'.format(index, self.__len__())
         # collect n x indexes with n = Batchsize
         # starting from the given index parameter
         # which is in the range of  {0: len(dataset)/Batchsize}
