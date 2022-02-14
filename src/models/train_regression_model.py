@@ -7,6 +7,9 @@ def train_fold(config, in_memory=False):
     import tensorflow
     import tensorflow as tf
     tf.get_logger().setLevel('FATAL')
+    gpus = tf.config.experimental.list_physical_devices('GPU')
+    for gpu in gpus:
+        tf.config.experimental.set_memory_growth(gpu, True)
 
     from src.utils.Tensorflow_helper import choose_gpu_by_id
     # ------------------------------------------define GPU id/s to use
@@ -159,17 +162,13 @@ def train_fold(config, in_memory=False):
         verbose=1)
 
     # free as much memory as possible
-    #tf.keras.backend.clear_session()
+    tf.keras.backend.clear_session()
+    logging.info('Fold {} finished after {:0.3f} sec'.format(FOLD, time() - t0))
     del batch_generator
     del validation_generator
     del model
     gc.collect()
-
-    from src.models.predict_phase_reg_model import predict
-    predict(config)
-
-    logging.info('Fold {} finished after {:0.3f} sec'.format(FOLD, time() - t0))
-    return True
+    return config
 
 
 def main(args=None, in_memory=False):
@@ -185,8 +184,8 @@ def main(args=None, in_memory=False):
 
     # local imports
     # import external libs
-    import tensorflow as tf
-    tf.get_logger().setLevel('FATAL')
+    #import tensorflow as tf
+    #tf.get_logger().setLevel('FATAL')
     import cv2
     from src.utils.Utils_io import Console_and_file_logger, init_config
 
@@ -219,13 +218,16 @@ def main(args=None, in_memory=False):
     else:
         print('no config given, please select one from the  templates in exp/examples')
 
-
-
+    from src.models.predict_phase_reg_model import predict
     for f in config.get('FOLDS', [0]):
         print('starting fold: {}'.format(f))
         config_ = config.copy()
         config_['FOLD'] = f
-        train_fold(config_, in_memory=in_memory)
+        cfg = train_fold(config_, in_memory=in_memory)
+        predict(cfg)
+        gc.collect()
+
+        return True
         print('train fold: {} finished'.format(f))
 
     from src.models.evaluate_phase_reg import evaluate

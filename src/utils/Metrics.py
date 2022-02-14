@@ -38,9 +38,7 @@ def meandiff( y_true, y_pred, apply_sum=True, apply_average=True):
     -------
 
     """
-    #print(y_true.shape)
-    """if len(y_true) == 3: # multi input/output model
-        y_true, y_pred = y_true[0], y_pred[0]"""
+
     y_true, y_len_msk = tf.unstack(y_true,2,axis=1)
     y_pred, _ = tf.unstack(y_pred,2,axis=1)
 
@@ -128,8 +126,6 @@ def meandiff_loss_( y_true, y_pred, apply_sum=True, apply_average=True, as_loss=
     """
     # split gt mask and onehot
     # b, 2, t, phases
-    if len(y_true) == 3: # multi input/output model
-        y_true, y_pred = y_true[0], y_pred[0]
     y_true, y_len_msk = tf.unstack(y_true,2,axis=1)
     y_pred, _ = tf.unstack(y_pred,2,axis=1)
     # convert to tensor

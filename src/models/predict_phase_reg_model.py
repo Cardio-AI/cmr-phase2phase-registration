@@ -14,6 +14,8 @@ def predict(cfg_file, data_root='', c2l=False):
     """
     import json, logging, os
     os.environ["TF_FORCE_GPU_ALLOW_GROWTH"] = "true"
+    import tensorflow as tf
+    tf.get_logger().setLevel('FATAL')
     from logging import info
     import numpy as np
     from src.data.Dataset import get_trainings_files
@@ -22,8 +24,7 @@ def predict(cfg_file, data_root='', c2l=False):
     from src.models.Models import create_PhaseRegressionModel_v2
     from ProjectRoot import change_wd_to_project_root
     change_wd_to_project_root()
-    import tensorflow as tf
-    tf.get_logger().setLevel('FATAL')
+
 
     from src.utils.Tensorflow_helper import choose_gpu_by_id
 
