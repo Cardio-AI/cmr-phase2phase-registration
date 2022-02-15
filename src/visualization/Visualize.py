@@ -36,7 +36,7 @@ def get_metadata_maybe(sitk_img, key, default='not_found'):
     return value
 
 
-def show_2D_or_3D(img=None, mask=None, f_size=(25,3),dpi=100, interpol='none', allow_slicing=True, cmap='gray', fig=None):
+def show_2D_or_3D(img=None, mask=None, f_size=(25,3),dpi=100, interpol='none', allow_slicing=True, cmap='gray', fig=None, **kwargs):
     """
     Debug wrapper for 2D or 3D image/mask vizualisation
     wrapper checks the ndim and calls shoow_transparent or plot 3d
@@ -79,11 +79,11 @@ def show_2D_or_3D(img=None, mask=None, f_size=(25,3),dpi=100, interpol='none', a
         f_size = (8, 8)
         return show_slice_transparent(img, mask, f_size=f_size, dpi=dpi, interpol=interpol,cmap=cmap)
     elif dim == 3:
-        return plot_3d_vol(img_3d=img, mask_3d=mask, fig_size=f_size,allow_slicing=allow_slicing,cmap=cmap, fig=fig)
+        return plot_3d_vol(img_3d=img, mask_3d=mask, fig_size=f_size,allow_slicing=allow_slicing,cmap=cmap, fig=fig, **kwargs)
     elif dim == 4 and temp.shape[-1] == 1:  # data from the batchgenerator
-        return plot_3d_vol(img_3d=img, mask_3d=mask, fig_size=f_size,allow_slicing=allow_slicing,cmap=cmap, fig=fig)
+        return plot_3d_vol(img_3d=img, mask_3d=mask, fig_size=f_size,allow_slicing=allow_slicing,cmap=cmap, fig=fig, **kwargs)
     elif dim == 4 and temp.shape[-1] in [3,4]: # only mask
-        return plot_3d_vol(img_3d=temp, mask_3d=mask, fig_size=f_size,allow_slicing=allow_slicing,cmap=cmap, fig=fig)
+        return plot_3d_vol(img_3d=temp, mask_3d=mask, fig_size=f_size,allow_slicing=allow_slicing,cmap=cmap, fig=fig, **kwargs)
     elif dim == 4:
         return plot_4d_vol(img_4d=img, mask_4d=mask)
     else:
@@ -728,7 +728,7 @@ def create_violin_plot(df, cols, ax, scale='linear', unit='mm'):
 
 
 def plot_3d_vol(img_3d, mask_3d=None, timestep=0, save=False, path='reports/figures/tetra/3D_vol/temp/',
-                fig_size=[25, 8], show=True, allow_slicing=True,cmap='gray', fig=None):
+                fig_size=[25, 8], show=True, allow_slicing=True,cmap='gray', fig=None, **kwargs):
     """
     plots a 3D nda, if a mask is given combine mask and image slices
     :param show:
@@ -801,7 +801,7 @@ def plot_3d_vol(img_3d, mask_3d=None, timestep=0, save=False, path='reports/figu
             #fig = plot_fn(img=slice, mask=None, show=False, ax=ax, cmap=cmap)
             #ax = fig.gca()
             mixed = show_slice(img=slice, mask=[], show=False, normalize=False)
-            ax.imshow(mixed[...,0], cmap=cmap)
+            ax.imshow(mixed[...,0], cmap=cmap, **kwargs)
 
         ax.set_xticks([])
         ax.set_yticks([])

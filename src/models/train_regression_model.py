@@ -227,8 +227,6 @@ def main(args=None, in_memory=False):
         cfg = train_fold(config_, in_memory=in_memory)
         predict(cfg)
         gc.collect()
-
-        return True
         print('train fold: {} finished'.format(f))
 
     from src.models.evaluate_phase_reg import evaluate
