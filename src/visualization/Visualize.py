@@ -36,7 +36,7 @@ def get_metadata_maybe(sitk_img, key, default='not_found'):
     return value
 
 
-def show_2D_or_3D(img=None, mask=None, f_size=(25,3),dpi=100, interpol='none', allow_slicing=True, cmap='gray'):
+def show_2D_or_3D(img=None, mask=None, f_size=(25,3),dpi=100, interpol='none', allow_slicing=True, cmap='gray', fig=None):
     """
     Debug wrapper for 2D or 3D image/mask vizualisation
     wrapper checks the ndim and calls shoow_transparent or plot 3d
@@ -79,11 +79,11 @@ def show_2D_or_3D(img=None, mask=None, f_size=(25,3),dpi=100, interpol='none', a
         f_size = (8, 8)
         return show_slice_transparent(img, mask, f_size=f_size, dpi=dpi, interpol=interpol,cmap=cmap)
     elif dim == 3:
-        return plot_3d_vol(img_3d=img, mask_3d=mask, fig_size=f_size,allow_slicing=allow_slicing,cmap=cmap)
+        return plot_3d_vol(img_3d=img, mask_3d=mask, fig_size=f_size,allow_slicing=allow_slicing,cmap=cmap, fig=fig)
     elif dim == 4 and temp.shape[-1] == 1:  # data from the batchgenerator
-        return plot_3d_vol(img_3d=img, mask_3d=mask, fig_size=f_size,allow_slicing=allow_slicing,cmap=cmap)
+        return plot_3d_vol(img_3d=img, mask_3d=mask, fig_size=f_size,allow_slicing=allow_slicing,cmap=cmap, fig=fig)
     elif dim == 4 and temp.shape[-1] in [3,4]: # only mask
-        return plot_3d_vol(img_3d=temp, mask_3d=mask, fig_size=f_size,allow_slicing=allow_slicing,cmap=cmap)
+        return plot_3d_vol(img_3d=temp, mask_3d=mask, fig_size=f_size,allow_slicing=allow_slicing,cmap=cmap, fig=fig)
     elif dim == 4:
         return plot_4d_vol(img_4d=img, mask_4d=mask)
     else:
@@ -135,7 +135,7 @@ def create_eval_plot(df_dice, df_hd, df_vol, eval):
     plt.tight_layout()
     return fig
 
-def show_slice(img=[], mask=[], show=True, f_size=(15, 5)):
+def show_slice(img=[], mask=[], show=True, f_size=(15, 5), normalize=True):
     """
     Plot image + masks in one figure
     """
@@ -190,7 +190,8 @@ def show_slice(img=[], mask=[], show=True, f_size=(15, 5)):
     y_ = (y_).astype(np.float32)  # set a threshold for slices during training
 
     # scale image between 0 and 1
-    x_ = (x_ - x_.min()) / (x_.max() - x_.min() + sys.float_info.epsilon)
+    if normalize:
+        x_ = (x_ - x_.min()) / (x_.max() - x_.min() + sys.float_info.epsilon)
 
     # draw mask and image as rgb image, 
     # use the green channel for mask and image
@@ -727,7 +728,7 @@ def create_violin_plot(df, cols, ax, scale='linear', unit='mm'):
 
 
 def plot_3d_vol(img_3d, mask_3d=None, timestep=0, save=False, path='reports/figures/tetra/3D_vol/temp/',
-                fig_size=[25, 8], show=True, allow_slicing=True,cmap='gray'):
+                fig_size=[25, 8], show=True, allow_slicing=True,cmap='gray', fig=None):
     """
     plots a 3D nda, if a mask is given combine mask and image slices
     :param show:
@@ -784,8 +785,11 @@ def plot_3d_vol(img_3d, mask_3d=None, timestep=0, save=False, path='reports/figu
     mask_3d = mask_3d[::slice_n]if mask_3d is not None else mask_3d
 
     # number of subplots = no of slices in z-direction
-    fig = plt.figure(figsize=fig_size)
-    row = 1
+    if fig:
+        row = fig.gca().get_gridspec().nrows + 1 # add a new row
+    else:
+        fig = plt.figure(figsize=fig_size)
+        row = 1
 
     for idx, slice in enumerate(img_3d):  # iterate over all slices
         #row = idx//40 +1
@@ -794,9 +798,10 @@ def plot_3d_vol(img_3d, mask_3d=None, timestep=0, save=False, path='reports/figu
         if mask_3d is not None:
             ax = plot_fn(img=slice, mask=mask_3d[idx], show=True, ax=ax, cmap=cmap)
         else:
-            #ax = plot_fn(img=slice, mask=None, show=True, ax=ax, cmap=cmap)
-            mixed = show_slice(img=slice, mask=[], show=False)
-            ax.imshow(mixed, cmap=cmap)
+            #fig = plot_fn(img=slice, mask=None, show=False, ax=ax, cmap=cmap)
+            #ax = fig.gca()
+            mixed = show_slice(img=slice, mask=[], show=False, normalize=False)
+            ax.imshow(mixed[...,0], cmap=cmap)
 
         ax.set_xticks([])
         ax.set_yticks([])

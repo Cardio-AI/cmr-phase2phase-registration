@@ -162,6 +162,7 @@ def train_fold(config, in_memory=False):
         verbose=1)
 
     # free as much memory as possible
+    import gc
     tf.keras.backend.clear_session()
     logging.info('Fold {} finished after {:0.3f} sec'.format(FOLD, time() - t0))
     del batch_generator
@@ -179,7 +180,7 @@ def main(args=None, in_memory=False):
     # import the packages inside this function enables to train on different folds
     from ProjectRoot import change_wd_to_project_root
     change_wd_to_project_root()
-    import sys, os, datetime
+    import sys, os, datetime, gc
     sys.path.append(os.getcwd())
 
     # local imports

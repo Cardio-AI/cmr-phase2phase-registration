@@ -878,6 +878,7 @@ class PhaseRegressionGenerator_v2(DataGenerator):
             assert os.path.isfile(msk_name),'msk file name not given: {}'.format(msk_name)
             msk = sitk.ReadImage(msk_name)
             if msk.GetDimension()==4:
+                # here we dont know which idx is a real msk, keep 4D mask, and use later: get_first_idx(mask)
                 msk = split_one_4d_sitk_in_list_of_3d_sitk(msk, axis=0)
             else:
                 msk = [msk]
