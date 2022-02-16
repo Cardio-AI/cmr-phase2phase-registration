@@ -149,7 +149,7 @@ def train_fold(config, in_memory=False):
 
     # training
     initial_epoch = 0
-    #EPOCHS=1
+    EPOCHS=1
     model.fit(
         x=batch_generator,
         validation_data=validation_generator,
@@ -228,9 +228,7 @@ def main(args=None, in_memory=False):
         predict(cfg)
         gc.collect()
         print('train fold: {} finished'.format(f))
-
     from src.models.evaluate_phase_reg import evaluate
-
     evaluate(config.get('EXP_PATH'))
 
 
