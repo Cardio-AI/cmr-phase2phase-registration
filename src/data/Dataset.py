@@ -1484,7 +1484,6 @@ def get_phases_as_onehot_acdc(file_path, df, temporal_sampling_factor=1, length=
     if 'nii.gz' in patient_str:  # ACDC files e.g.: patient001_4d.nii.gz
         patient_str = re.search('patient(.{3})_', file_path)
         patient_str = patient_str.group(1).upper()
-        df['patient'] = df['patient'].str.zfill(3)
 
     assert len(
         patient_str) > 0, 'empty patient id found, please check the get_patient_id in fn train_fold(), usually there are path problems'

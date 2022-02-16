@@ -652,10 +652,12 @@ class PhaseRegressionGenerator_v2(DataGenerator):
             self.ISACDC = True
             logging.info('acdc file pattern in file name detected, modifying file loading...')
 
+
         # opens a dataframe with cleaned phases per patient
         self.METADATA_FILE = config.get('DF_META', '/mnt/ssd/data/gcn/02_imported_4D_unfiltered/SAx_3D_dicomTags_phase')
         df = pd.read_csv(self.METADATA_FILE,dtype={'patient':str, 'ED#':int, 'MS#':int, 'ES#':int, 'PF#':int, 'MD#':int})
         self.DF_METADATA = df[['patient', 'ED#', 'MS#', 'ES#', 'PF#', 'MD#']]
+        if self.ISACDC: self.DF_METADATA['patient'] = self.DF_METADATA['patient'].str.zfill(3)
 
 
         # create a 1D kernel with linearly increasing/decreasing values in the range(lower,upper),
