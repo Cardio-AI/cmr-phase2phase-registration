@@ -353,6 +353,8 @@ class SSIM:
 
             shape_ytrue = get_shape(y_true)
             t_shape = (shape_ytrue[0],shape_ytrue[-3],shape_ytrue[-2],shape_ytrue[1]*shape_ytrue[2])
+            #from skimage.metrics import structural_similarity as ssim_fn
+            #ssim = ssim_fn(im1=y_true, im2=y_pred, multichannel=True)
             img1 = tf.reshape(tensor=y_true, shape=t_shape)
             img2 = tf.reshape(tensor=y_pred, shape=t_shape)
             ssim = tf.image.ssim(img1, img2, max_val=1.0, filter_size=11,

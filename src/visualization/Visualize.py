@@ -141,6 +141,7 @@ def show_slice(img=[], mask=[], show=True, f_size=(15, 5), normalize=True):
     """
     mask_values = [1, 2, 3]
 
+
     if isinstance(img, sitk.Image):
         img = sitk.GetArrayFromImage(img).astype(np.float32)
 
@@ -192,7 +193,6 @@ def show_slice(img=[], mask=[], show=True, f_size=(15, 5), normalize=True):
     # scale image between 0 and 1
     if normalize:
         x_ = (x_ - x_.min()) / (x_.max() - x_.min() + sys.float_info.epsilon)
-
     # draw mask and image as rgb image, 
     # use the green channel for mask and image
     temp = np.zeros((x_.shape[0], x_.shape[1], 3), dtype=np.float32)
@@ -337,7 +337,7 @@ def show_slice_transparent(img=None, mask=None, show=True, f_size=(5, 5), ax=Non
         return fig
 
 
-def show_vec_transparent(img=None, mask=None, show=True, f_size=(5, 5), ax=None, dpi=300, interpol='none'):
+def show_vec_transparent(img=None, mask=None, show=True, f_size=(5, 5), ax=None, dpi=300, interpol='none', cmap=None):
     """
     Plot image + masks in one figure
     """
@@ -385,7 +385,7 @@ def show_vec_transparent(img=None, mask=None, show=True, f_size=(5, 5), ax=None,
 
     elif len(mask.shape) == 3 and mask.shape[2] == 3:  # handle mask with three channels
         y_ = (mask).astype(np.float32)
-        thres = 0.4
+        thres = 0.0
         lower = np.where(y_ < thres)
         upper = np.where(y_ > -thres)
         y_[lower and upper] = 0
@@ -800,8 +800,8 @@ def plot_3d_vol(img_3d, mask_3d=None, timestep=0, save=False, path='reports/figu
         else:
             #fig = plot_fn(img=slice, mask=None, show=False, ax=ax, cmap=cmap)
             #ax = fig.gca()
-            mixed = show_slice(img=slice, mask=[], show=False, normalize=False)
-            ax.imshow(mixed[...,0], cmap=cmap, **kwargs)
+            #mixed = show_slice(img=slice, mask=[], show=False, normalize=False)
+            ax.imshow(slice, cmap=cmap,**kwargs)
 
         ax.set_xticks([])
         ax.set_yticks([])
