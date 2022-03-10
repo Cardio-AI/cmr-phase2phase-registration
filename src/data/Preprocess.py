@@ -689,7 +689,7 @@ def align_inplane_with_ip(model_inputs, msk_file_name, roll2septum=True, roll2lv
     else: # use the mean squared error along t as definition of the center of change
         import tensorflow as tf
         border = 20
-        model_inputs = clip_quantile(model_inputs, .999)
+        model_inputs = clip_quantile(model_inputs, .99)
         model_inputs = normalise_image(model_inputs,normaliser='standard')
         temp_roll = np.roll(model_inputs, shift=-1, axis=0)
         mse_ = tf.keras.metrics.mean_squared_error(model_inputs[...,None],temp_roll[...,None]).numpy()
