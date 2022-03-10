@@ -426,12 +426,13 @@ class Grad:
 
         df = [tf.reduce_mean(K.batch_flatten(f), axis=-1) for f in dif]
         grad = tf.add_n(df) / len(df)
-        norm = tf.norm(y_pred, ord='euclidean', axis=-1)
-        norm = tf.reduce_mean(norm)
+        # ideally this should penalize unnecessary deformation in black areas
+        #norm = tf.norm(y_pred, ord='euclidean', axis=-1)
+        #norm = tf.reduce_mean(norm)
 
         if self.loss_mult is not None:
             grad *= self.loss_mult
-        return grad + norm
+        return grad
 
 class NCC:
     """

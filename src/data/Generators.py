@@ -627,8 +627,9 @@ class PhaseRegressionGenerator_v2(DataGenerator):
         self.TRANSLATE = config.get('TRANSLATE', True)
         self.ADD_SOFTMAX = config.get('ADD_SOFTMAX', False)
         self.SOFTMAX_AXIS = config.get('SOFTMAX_AXIS', 0)
-        self.ROLL2SEPTUM = config.get('ROLL2SEPTUM', True) # default
-        self.ROLL2LV = not self.ROLL2SEPTUM # either to septum or to lv blood pool
+        self.ROLL2SEPTUM = config.get('ROLL2SEPTUM', True)
+        self.ROLL2LV = config.get('ROLL2LV', True) # default, center crop according to the mean mse along t
+
         self.IN_MEMORY = in_memory
         self.THREAD_POOL = concurrent.futures.ThreadPoolExecutor(max_workers=12)
         self.config = config
@@ -1018,6 +1019,8 @@ class PhaseRegressionGenerator_v2(DataGenerator):
         # - The standard (unit) softmax function 𝜎:ℝ𝐾→ℝ𝐾 is defined by the formula
         # 𝜎(𝐳)𝑖=𝑒𝑧𝑖∑𝐾𝑗=1𝑒𝑧𝑗 for 𝑖=1,…,𝐾 and 𝐳=(𝑧1,…,𝑧𝐾)∈ℝ𝐾
         onehot = normalise_image(onehot, normaliser='minmax')
+        #model_inputs = normalise_image(model_inputs, normaliser=self.SCALER)
+        #model_targets = normalise_image(model_targets, normaliser=self.SCALER)
         # logging.debug('background: \n{}'.format(onehot))
 
         ax_to_normalise = 1

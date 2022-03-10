@@ -683,10 +683,20 @@ def align_inplane_with_ip(model_inputs, msk_file_name, roll2septum=True, roll2lv
     if roll2lvbood:
         center = nd.center_of_mass(mask3d==3)
         center = center[1:] # ignore z-axis for translation
-    else: # roll2septum is default fallback
-        # or mean septum wall
+    elif roll2septum: # roll2septum/mean septum wall is default fallback
         center = np.mean([fip,sip], axis=0).astype(int)
         center = center[::-1]
+    else: # use the mean squared error along t as definition of the center of change
+        import tensorflow as tf
+        minmax_lambda = lambda x: x[1] + (((x[0] - np.min(x[0])) * (x[2] - x[1])) / (np.max(x[0]) - np.min(x[0])))
+        model_inputs = clip_quantile(model_inputs, .999)
+        model_inputs = normalise_image(model_inputs,normaliser='standard')
+        temp_roll = np.roll(model_inputs, shift=-1, axis=0)
+        mse_ = tf.keras.metrics.mean_squared_error(model_inputs[...,None],temp_roll[...,None]).numpy()
+        mse_mean = np.mean(mse_, axis=0)
+        mse_mean_mask = mse_mean >0.01
+        center = nd.center_of_mass(mse_mean*mse_mean_mask)
+        center = center[1:]
 
     if translate:
         # translation to center of septum or lv bloodpool
