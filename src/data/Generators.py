@@ -915,7 +915,8 @@ class PhaseRegressionGenerator_v2(DataGenerator):
         if self.REPEAT: reps = int(np.ceil(self.T_SHAPE / gt_length))
 
         self.__plot_state_if_debug__(img=model_inputs[len(model_inputs) // 2], start_time=t1, step='resampled')
-        model_inputs = clip_quantile(model_inputs, .9999)
+        model_inputs = clip_quantile(model_inputs, .999)
+        model_inputs = normalise_image(model_inputs, normaliser=self.SCALER)  # normalise per 4D
         return model_inputs, onehot_orig, reps, gt_length
 
 
@@ -985,7 +986,6 @@ class PhaseRegressionGenerator_v2(DataGenerator):
         # second smooth with a gausian Kernel,
         # third split+maximise element-wise on both matrices
         # here we introduce the model target
-        model_inputs = normalise_image(model_inputs, normaliser=self.SCALER)  # normalise per 4D
         model_targets = np.roll(model_inputs,shift=-1, axis=0) # [1,2,3,0] = np.roll([0,1,2,3],shift=-1,axis=0)
         model_inputs = np.tile(model_inputs, (reps, 1, 1, 1))
         model_targets = np.tile(model_targets, (reps, 1, 1, 1))
