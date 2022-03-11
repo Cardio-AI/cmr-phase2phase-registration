@@ -71,13 +71,15 @@ def train_fold(config, in_memory=False):
 
     # get kfolded data from DATA_ROOT and subdirectories
     # Load SAX volumes
+    #FOLD=3
     x_train_sax, y_train_sax, x_val_sax, y_val_sax = get_trainings_files(data_path=DATA_PATH_SAX,
                                                                          path_to_folds_df=DF_FOLDS,
                                                                         fold=FOLD)
 
     """examples = 12
     x_train_sax, y_train_sax, x_val_sax, y_val_sax = x_train_sax[:examples], y_train_sax[:examples], x_val_sax[:examples], y_val_sax[:examples]"""
-    #x_train_sax = [x for x in x_train_sax if 'patient060' in x] * 4
+    #x_train_sax = [x for x in x_train_sax if 'patient027' in x] * 4
+    #x_val_sax = [x for x in x_val_sax if 'patient047' in x] * 4
     logging.info('SAX train CMR: {}, SAX train masks: {}'.format(len(x_train_sax), len(y_train_sax)))
     logging.info('SAX val CMR: {}, SAX val masks: {}'.format(len(x_val_sax), len(y_val_sax)))
 
@@ -87,6 +89,7 @@ def train_fold(config, in_memory=False):
     METADATA_FILE = DF_META
     df = pd.read_csv(METADATA_FILE, dtype={'patient':str, 'ED#':int, 'MS#':int, 'ES#':int, 'PF#':int, 'MD#':int})
     DF_METADATA = df[['patient', 'ED#', 'MS#', 'ES#', 'PF#', 'MD#']]
+    DF_METADATA['patient'] = DF_METADATA['patient'].str.zfill(3)
 
     files_ = x_train_sax + x_val_sax
     info('Check if we find the patient ID and phase mapping for all: {} files.'.format(len(files_)))
@@ -118,7 +121,6 @@ def train_fold(config, in_memory=False):
             logging.info(ind)
             logging.info('indices: \n{}'.format(indices))
     info('Done!')
-
     # instantiate the batchgenerators
     batch_generator = PhaseRegressionGenerator_v2(x_train_sax, x_train_sax, config=config, in_memory=in_memory)
     val_config = config.copy()
@@ -127,6 +129,34 @@ def train_fold(config, in_memory=False):
     val_config['HIST_MATCHING'] = False
     val_config['AUGMENT_TEMP'] = False
     validation_generator = PhaseRegressionGenerator_v2(x_val_sax, x_val_sax, config=val_config, in_memory=in_memory)
+
+    import matplotlib.pyplot as plt
+    from src.visualization.Visualize import show_2D_or_3D
+    # path_ = 'data/interim/{}_center_via_mse_threshold/'.format('acdc_volume')
+    # ensure_dir(path_)
+    # i = 0
+    # for b in batch_generator:
+    #     x,y = b
+    #     x = x[0]
+    #     for p in x:
+    #         fig, ax = plt.subplots()
+    #         show_2D_or_3D(p[0],fig=fig)
+    #         plt.savefig('{}{}.png'.format(path_,i))
+    #         plt.close()
+    #         i = i+1
+    # i = 0
+    # for b in validation_generator:
+    #     x,y = b
+    #     x = x[0]
+    #     for p in x:
+    #         fig, ax = plt.subplots()
+    #         show_2D_or_3D(p[0],fig=fig)
+    #         plt.savefig('{}v{}.png'.format(path_,i))
+    #         plt.close()
+    #         i = i+1
+
+
+
 
     # get model
     model = create_PhaseRegressionModel_v2(config)
