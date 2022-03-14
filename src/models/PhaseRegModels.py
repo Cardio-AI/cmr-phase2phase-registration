@@ -210,7 +210,7 @@ class PhaseRegressionModel():
             # If we roll and stack the input here,
             # we would ignore that the volumes are repeated and stop not at cardiac cycle
             # This would force the model to learn the motion from the middle of a cardiac cycle to the first timestep
-            # Additionally this will result in different model input and target for the border cases 0 and t
+            # Additionally this will result in different model input/target for the border cases 0 and t
             #inputs_spatial_stacked = keras.layers.Concatenate(axis=1)([inputs_spatial_stacked[:,:-1], inputs_spatial_stacked[:,-2:-1]])
 
             pre_flows = TimeDistributed(self.unet, name='4d-p2p-unet')(self.input_tensor)

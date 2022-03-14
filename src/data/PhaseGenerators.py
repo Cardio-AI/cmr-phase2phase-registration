@@ -670,10 +670,10 @@ class PhaseRegressionGenerator_v2(DataGenerator):
 
         # performance test, keep t, crop the other dimensions to 1.5 times the target shape
         # This decreases the memory footprint and the computation time for further processing steps
-        if not self.IN_MEMORY:  # keep the temporal resolution, otherwise we would center crop t
+        """if not self.IN_MEMORY:  # keep the temporal resolution, otherwise we would center crop t
             model_inputs = pad_and_crop(model_inputs,
                                         target_shape=(
-                                            model_inputs.shape[0], *(np.array(self.DIM) * 1.5).astype(np.int)))
+                                            model_inputs.shape[0], *(np.array(self.DIM) * 1.5).astype(np.int)))"""
 
         if apply_hist_matching:
             model_inputs = match_hist(model_inputs, ref)
@@ -685,8 +685,18 @@ class PhaseRegressionGenerator_v2(DataGenerator):
         if self.REPEAT: reps = int(np.ceil(self.T_SHAPE / gt_length))
 
         self.__plot_state_if_debug__(img=model_inputs[len(model_inputs) // 2], start_time=t1, step='resampled')
+
+        # flip base/apex for ACDC
+        if self.ISACDC:
+            # before: axis 1 == z-axis: base --> apex, after:  apex--> base
+            model_inputs = np.flip(model_inputs, axis=1)
+
+        # Center-crop z, x, y, keep t
+        # normalise
+        model_inputs = pad_and_crop(model_inputs, target_shape=(model_inputs.shape[0], *self.DIM))
         model_inputs = clip_quantile(model_inputs, .999)
         model_inputs = normalise_image(model_inputs, normaliser=self.SCALER)  # normalise per 4D
+
         return model_inputs, onehot_orig, reps, gt_length
 
     def __preprocess_one_image__(self, i, ID):
@@ -748,31 +758,19 @@ class PhaseRegressionGenerator_v2(DataGenerator):
             logging.debug('onehot smoothed with sigma={}:'.format(self.SIGMA))
             if self.DEBUG_MODE: plt.imshow(onehot); plt.show()
 
+        # roll
+        model_targets = np.roll(model_inputs, shift=-1, axis=0)  # [1,2,3,0] = np.roll([0,1,2,3],shift=-1,axis=0)
         # Fake a ring behaviour of the onehot vector by
         # first, tile along t
         # second smooth with a gausian Kernel,
         # third split+maximise element-wise on both matrices
         # we normalise before definition of the target, to make sure both are from the same distribution
-        model_targets = np.roll(model_inputs, shift=-1, axis=0)  # [1,2,3,0] = np.roll([0,1,2,3],shift=-1,axis=0)
-        model_inputs = np.tile(model_inputs, (reps, 1, 1, 1))
-        model_targets = np.tile(model_targets, (reps, 1, 1, 1))
-        onehot = np.tile(onehot, (reps, 1))
+
+        model_inputs = np.tile(model_inputs, (reps, 1, 1, 1))[:self.T_SHAPE]
+        model_targets = np.tile(model_targets, (reps, 1, 1, 1))[:self.T_SHAPE]
+        onehot = np.tile(onehot, (reps, 1))[:self.T_SHAPE]
         logging.debug('onehot repeated {}:'.format(reps))
         if self.DEBUG_MODE: plt.imshow(onehot); plt.show()
-
-        # Split and maximize the tiled one-hot vector to make sure that the beginning and end are also smooth
-        # no longer necessary, as we smooth with 'wrap' mode.
-        # first, second = np.split(onehot, indices_or_sections=2, axis=0)
-        # onehot = np.maximum(first, second)
-        onehot = onehot[:self.T_SHAPE]
-        model_inputs = model_inputs[:self.T_SHAPE]
-        model_targets = model_targets[:self.T_SHAPE]
-        logging.debug('onehot element-wise max and cropped to a length of {}:'.format(self.T_SHAPE))
-        if self.DEBUG_MODE: plt.imshow(onehot); plt.show()
-
-        # Center-crop z, x, y, t is already crop
-        model_inputs = pad_and_crop(model_inputs, target_shape=(self.T_SHAPE, *self.DIM))
-        model_targets = pad_and_crop(model_targets, target_shape=(self.T_SHAPE, *self.DIM))
 
         msk = np.ones_like(onehot)
         logging.debug('onehot pad/crop:')
@@ -807,11 +805,6 @@ class PhaseRegressionGenerator_v2(DataGenerator):
             msk = np.pad(
                 np.ones((gt_length, self.PHASES)),
                 ((0, self.T_SHAPE - gt_length), (0, 0)))
-
-        if self.ISACDC:
-            # before: axis 1 == z-axis: base --> apex, after:  apex--> base
-            model_inputs = np.flip(model_inputs, axis=1)
-            model_targets = np.flip(model_targets, axis=1)
 
         # test
         model_inputs = np.stack([model_inputs,model_targets], axis=-1)
