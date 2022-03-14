@@ -223,10 +223,10 @@ def create_PhaseRegressionModel_v2(config, networkname='PhaseRegressionModel'):
         interp_method = 'linear'
         indexing = 'ij'
         # TODO: this parameter is also used by the generator to define the number of channels
-        # here we stack the volume within the model manually, so keep that aligned!!!
+        # here we stack the volume within the model
         temp_config = config.copy()  # dont change the original config
         temp_config['IMG_CHANNELS'] = 2  # we roll the temporal axis and stack t-1, t and t+1 along the last axis
-        stack_axis = 1
+        temporal_axis = 1
 
         ############################# definition of the layers and blocks ######################################
         # start with very small deformation
@@ -247,9 +247,8 @@ def create_PhaseRegressionModel_v2(config, networkname='PhaseRegressionModel'):
         # concat the current frame with the previous on the last channel
         roll_concat_lambda_layer = keras.layers.Lambda(lambda x:
                                                           keras.layers.Concatenate(axis=-1, name='stack_with_moved')(
-                                                              [#tf.roll(x, shift=1, axis=stack_axis),
-                                                               x,
-                                                               tf.roll(x, shift=-1, axis=stack_axis)]))
+                                                              [x,
+                                                               tf.roll(x, shift=-1, axis=temporal_axis)]))
 
         norm_lambda = keras.layers.Lambda(
             lambda x: tf.norm(x, ord='euclidean', axis=-1, keepdims=True, name='flow2norm'), name='flow2norm')
@@ -372,50 +371,45 @@ def create_PhaseRegressionModel_v2(config, networkname='PhaseRegressionModel'):
         print('Transformed shape : {}'.format(transformed.shape))
         features_given = False
 
-        if (add_vect_norm and add_flows):
-            # add the magnitude as fourth channel
+        if (add_vect_norm and add_flows): # use the magnitude and flow
             tensor_magnitude = TimeDistributed(norm_lambda)(flows)
             flow_features = keras.layers.Concatenate(axis=-1)([flows, tensor_magnitude])
             features_given = True
             print('Inkl flow and norm shape: {}'.format(flow_features.shape))
-        elif add_vect_norm:
-            # add the magnitude as fourth channel
+        elif add_vect_norm: # use only the magnitude
             tensor_magnitude = TimeDistributed(norm_lambda)(flows)
             flow_features = tensor_magnitude
             features_given = True
             print('Inkl norm shape: {}'.format(flow_features.shape))
-        elif add_flows:
+        elif add_flows: # use only the flow
             flow_features = flows
             features_given = True
             print('Inkl flow shape: {}'.format(flow_features.shape))
 
         if add_vect_direction:
             directions = TimeDistributed(flow2direction_lambda)(flows)
-            print('directions shape: {}'.format(directions.shape))
             if features_given:
                 flow_features = keras.layers.Concatenate(axis=-1)(
                 [flow_features, directions])  # encode the spatial location of each vector
             else:
                 flow_features = directions
                 features_given = True
-            # add the location tensor as further channel
-            # flow_features = keras.layers.Concatenate(axis=-1)([flow_features, tf.tile(centers_tensor[tf.newaxis,...],multiples=[1,flow_features.shape[1],1,1,1,1])])
-        print('flow features inkl directions shape: {}'.format(flow_features.shape))
+            print('flow features inkl directions shape: {}'.format(flow_features.shape))
 
         # Apply an Bidirectional convLstm layer before downsampling
-        # ranspose t and z
+        # transpose t and z
         if add_conv_bilstm:
             flow_features = tf.transpose(flow_features, perm=[0, 2, 1, 3, 4, 5])
             print('transposed: {}'.format(flow_features.shape))
             flow_features = TimeDistributed(bi_conv_lstm_layer)(flow_features)
             flow_features = tf.transpose(flow_features, perm=[0, 2, 1, 3, 4, 5])
-        print('flow features after conv lstm: {}'.format(flow_features.shape))
+            print('flow features after Conv2D-LSTM: {}'.format(flow_features.shape))
 
         if downsample_flow_features:
             flow_features = TimeDistributed(downsample)(flow_features)
         else:  # use a gap3D layer
             # slice the 3D sequence of features into on sequence per corner
-            # as our images are spatial aligned
+            # as we could align the CMR spatially
             # each 3D-sliced-corner-sequence represents one specific "part" of the heart
             # finally concat them as channel, which makes them available to the LSTM layer
             if split_corners: # average per corner per 3D volume, e.g.: top left, top right ...
@@ -444,12 +438,8 @@ def create_PhaseRegressionModel_v2(config, networkname='PhaseRegressionModel'):
             else:
                 flow_features = flow_features2
 
-
-
         if add_bilstm:
-            # min/max normlisation as lambda
-            minmax_lambda = lambda x: (x - tf.reduce_min(x)) / (
-                        tf.reduce_max(x) - tf.reduce_min(x) + keras.backend.epsilon())
+            # min/max normalisation as lambda
             minmax_lambda_tf = keras.layers.Lambda(lambda x:
                                                    (x - tf.reduce_min(x)) / (
                         tf.reduce_max(x) - tf.reduce_min(x) + keras.backend.epsilon()),
@@ -459,7 +449,6 @@ def create_PhaseRegressionModel_v2(config, networkname='PhaseRegressionModel'):
 
             flow_features = minmax_lambda_tf(flow_features)
             flow_features = bi_lstm_layer(flow_features)
-            #flow_features = keras.layers.Dropout(rate=0.2)(flow_features)
             flow_features = bi_lstm_layer1(flow_features)
             print('Shape after LSTM layers: {}'.format(flow_features.shape))
 
@@ -471,7 +460,6 @@ def create_PhaseRegressionModel_v2(config, networkname='PhaseRegressionModel'):
         print('Shape after final conv layer: {}'.format(onehot.shape))
         # add empty tensor with one-hot shape to align with gt
         if add_softmax: onehot = keras.activations.softmax(onehot, axis=softmax_axis+1)
-
 
         # define the model output names
         onehot = stack_lambda_tf(onehot)
