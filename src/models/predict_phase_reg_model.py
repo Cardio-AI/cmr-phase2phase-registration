@@ -20,8 +20,8 @@ def predict(cfg_file, data_root='', c2l=False):
     import numpy as np
     from src.data.Dataset import get_trainings_files
     from src.utils.Utils_io import Console_and_file_logger, ensure_dir
-    from src.data.Generators import PhaseRegressionGenerator_v2
-    from src.models.Models import create_PhaseRegressionModel_v2
+    from src.data.PhaseGenerators import PhaseRegressionGenerator_v2
+    from src.models.PhaseRegModels import PhaseRegressionModel
     from ProjectRoot import change_wd_to_project_root
     change_wd_to_project_root()
 
@@ -75,7 +75,7 @@ def predict(cfg_file, data_root='', c2l=False):
     val_config['GPUS'] = ['/gpu:0']
     validation_generator = PhaseRegressionGenerator_v2(x_val_sax, x_val_sax, config=val_config)
 
-    model = create_PhaseRegressionModel_v2(val_config)
+    model = PhaseRegressionModel(val_config).get_model()
     logging.info('Trying to load the model weights')
     logging.info('work dir: {}'.format(os.getcwd()))
     logging.info('model weights dir: {}'.format(os.path.join(val_config['MODEL_PATH'], 'model.h5')))

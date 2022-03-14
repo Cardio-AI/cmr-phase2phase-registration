@@ -834,6 +834,8 @@ class PhaseRegressionCallback(Callback):
             # with self.writer.as_default():
             for key, x, y in zip(self.keys, self.xs, self.ys):
                 predictions = self.model.predict(x)
+                # remove the target from x, we dont need it for plotting
+                x = [x[0][...,0:1]]
                 if len(predictions) == 3:  # multi-output-model
                     onehot_predictions, movings, vects = predictions
                     onehot_y =  y[0] # y is a list with [onehot, moved, zeros], we are interested in the onehot

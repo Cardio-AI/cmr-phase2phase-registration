@@ -30,7 +30,7 @@ def train_fold(config, in_memory=False):
     from src.utils.KerasCallbacks import get_callbacks
     from src.data.Dataset import get_trainings_files, all_files_in_df
     from src.data.PhaseGenerators import PhaseRegressionGenerator_v2
-    from src.models.PhaseRegModels import create_PhaseRegressionModel_v2
+    from src.models.PhaseRegModels import PhaseRegressionModel
 
     # make all config params known to the local namespace
     locals().update(config)
@@ -119,7 +119,8 @@ def train_fold(config, in_memory=False):
     #         i = i+1
 
     # get model
-    model = create_PhaseRegressionModel_v2(config)
+    #model = create_PhaseRegressionModel_v2(config)
+    model = PhaseRegressionModel(config=config).get_model()
 
     # write the model summary to a txt file
     with open(os.path.join(FOLD_PATH, 'model_summary.txt'), 'w') as fh:

@@ -449,7 +449,9 @@ class PhaseRegressionGenerator_v2(DataGenerator):
 
         # if this is the case we have a sequence of 3D volumes or a sequence of 2D images
         # b, t, z, x, y, 1
-        self.X_SHAPE = np.empty((self.BATCHSIZE, self.T_SHAPE, *self.DIM, 1), dtype=np.float32)
+        # test --> 2
+        self.X_SHAPE = np.empty((self.BATCHSIZE, self.T_SHAPE, *self.DIM, 2), dtype=np.float32)
+        self.X_ROLLED_SHAPE = np.empty((self.BATCHSIZE, self.T_SHAPE, *self.DIM, 1), dtype=np.float32)
         self.Y_SHAPE = np.empty((self.BATCHSIZE, 2, *self.TARGET_SHAPE),
                                 dtype=np.float32)  # onehot and mask with gt length
 
@@ -512,7 +514,7 @@ class PhaseRegressionGenerator_v2(DataGenerator):
 
         # Initialization
         x = np.empty_like(self.X_SHAPE)  # model input
-        y2 = np.empty_like(self.X_SHAPE)  # rolled volume
+        y2 = np.empty_like(self.X_ROLLED_SHAPE)  # rolled volume
         y = np.empty_like(self.Y_SHAPE)  # model output
 
         futures = set()
@@ -811,12 +813,15 @@ class PhaseRegressionGenerator_v2(DataGenerator):
             model_inputs = np.flip(model_inputs, axis=1)
             model_targets = np.flip(model_targets, axis=1)
 
+        # test
+        model_inputs = np.stack([model_inputs,model_targets], axis=-1)
+
         onehot = np.stack([onehot, msk], axis=0)
         # make sure we do not introduce nans to the model
         assert not np.any(np.isnan(onehot))
         assert not np.any(np.isnan(model_inputs))
         assert not np.any(np.isnan(model_targets))
-        return model_inputs[..., None], model_targets[..., None], onehot, i, ID, time() - t0
+        return model_inputs, model_targets[..., None], onehot, i, ID, time() - t0
 
 
 import linecache
