@@ -809,3 +809,14 @@ def get_ip_from_2dmask(nda, debug=False, rev=False):
     if rev: first, second = (first[1], first[0]), (second[1], second[0])
 
     return first, second
+
+
+def calc_resampled_size(sitk_img, target_spacing):
+    if type(target_spacing) in [list, tuple]:
+        target_spacing = np.array(target_spacing)
+    old_size = np.array(sitk_img.GetSize())
+    old_spacing = np.array(sitk_img.GetSpacing())
+    logging.debug('old size: {}, old spacing: {}, target spacing: {}'.format(old_size, old_spacing,
+                                                                             target_spacing))
+    new_size = (old_size * old_spacing) / target_spacing
+    return list(np.around(new_size).astype(np.int))

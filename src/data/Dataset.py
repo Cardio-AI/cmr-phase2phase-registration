@@ -1848,3 +1848,48 @@ def save_phases(nda, experiment_, suffix):
     # invert the axis
     nda = np.einsum('tzyxc->cxyzt', nda)
     _ = [save_3d(nda[..., t], f_name.replace('.nii', '_{}_.nii'.format(t))) for t in range(nda.shape[-1])]
+
+
+def all_files_in_df(METADATA_FILE, x_train_sax, x_val_sax):
+    import pandas as pd
+    import os, re, logging
+    all_present = True
+
+    df = pd.read_csv(METADATA_FILE, dtype={'patient': str, 'ED#': int, 'MS#': int, 'ES#': int, 'PF#': int, 'MD#': int})
+    DF_METADATA = df[['patient', 'ED#', 'MS#', 'ES#', 'PF#', 'MD#']]
+    DF_METADATA['patient'] = DF_METADATA['patient'].str.zfill(3)
+    files_ = x_train_sax + x_val_sax
+    logging.info('Check if we find the patient ID and phase mapping for all: {} files.'.format(len(files_)))
+    for x in files_:
+        try:
+            patient_str, ind, indices = '', '', ''
+            patient_str = re.search('-(.{8})_', x)
+            if patient_str:  # GCN data
+                patient_str = patient_str.group(1).upper()
+                assert (
+                        len(patient_str) == 8), 'matched patient ID from the phase sheet has a length of: {}, expected a length of 8 for GCN data'.format(
+                    len(patient_str))
+            else:  # DMD data
+                patient_str = os.path.basename(x).split('_volume')[0].lower()
+
+            if 'nii.gz' in patient_str:  # ACDC files e.g.: patient001_4d.nii.gz
+                patient_str = re.search('patient(.{3})_', x)
+                patient_str = patient_str.group(1).upper()
+
+            assert len(
+                patient_str) > 0, 'empty patient id found, please check the get_patient_id in fn train_fold(), usually there are path problems'
+            # returns the indices in the following order: 'ED#', 'MS#', 'ES#', 'PF#', 'MD#'
+            # reduce by one, as the indexes start at 0, the excel-sheet at 1
+            ind = DF_METADATA[DF_METADATA.patient.str.upper().str.contains(patient_str)][
+                ['ED#', 'MS#', 'ES#', 'PF#', 'MD#']]
+            indices = ind.values[0].astype(int) - 1
+            if len(indices) == 0:
+                all_present = False
+
+        except Exception as e:
+            logging.info(e)
+            logging.info(patient_str)
+            logging.info(ind)
+            logging.info('indices: \n{}'.format(indices))
+    logging.info('Check done!')
+    return all_present

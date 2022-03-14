@@ -17,15 +17,10 @@ import tensorflow
 from scipy.ndimage import gaussian_filter1d
 
 from src.data.Dataset import describe_sitk, split_one_4d_sitk_in_list_of_3d_sitk, get_phases_as_onehot_gcn, \
-    get_phases_as_onehot_acdc, get_n_windows_from_single4D, get_phases_as_idx_gcn, get_phases_as_idx_acdc, match_hist, \
-    get_n_windows_between_phases_from_single4D, get_phases_as_idx_dmd
+    get_phases_as_onehot_acdc,  match_hist
 from src.data.Preprocess import resample_3D, clip_quantile, normalise_image, transform_to_binary_mask, load_masked_img, \
-    augmentation_compose_2d_3d_4d, pad_and_crop, resample_t_of_4d, load_msk, get_first_idx
+    augmentation_compose_2d_3d_4d, pad_and_crop, calc_resampled_size, align_inplane_with_ip
 from src.visualization.Visualize import show_2D_or_3D
-
-
-#    get_patient, get_img_msk_files_from_split_dir
-
 
 class BaseGenerator(tensorflow.keras.utils.Sequence):
     """
@@ -408,7 +403,6 @@ class DataGenerator(BaseGenerator):
         self.__plot_state_if_debug__(img_nda, mask_nda, t1, 'after crop')
 
         return img_nda[..., np.newaxis], mask_nda, i, ID, time() - t0
-
 class PhaseRegressionGenerator_v2(DataGenerator):
     """
     yields n input volumes and n output volumes
@@ -442,7 +436,7 @@ class PhaseRegressionGenerator_v2(DataGenerator):
         self.ADD_SOFTMAX = config.get('ADD_SOFTMAX', False)
         self.SOFTMAX_AXIS = config.get('SOFTMAX_AXIS', 0)
         self.ROLL2SEPTUM = config.get('ROLL2SEPTUM', True)
-        self.ROLL2LV = config.get('ROLL2LV', True) # default, center crop according to the mean mse along t
+        self.ROLL2LV = config.get('ROLL2LV', True)  # default, center crop according to the mean mse along t
 
         self.IN_MEMORY = in_memory
         self.THREAD_POOL = concurrent.futures.ThreadPoolExecutor(max_workers=12)
@@ -467,37 +461,34 @@ class PhaseRegressionGenerator_v2(DataGenerator):
             self.ISACDC = True
             logging.info('acdc file pattern in file name detected, modifying file loading...')
 
-
         # opens a dataframe with cleaned phases per patient
-        self.METADATA_FILE = config.get('DF_META', '/mnt/ssd/data/gcn/02_imported_4D_unfiltered/SAx_3D_dicomTags_phase')
-        df = pd.read_csv(self.METADATA_FILE,dtype={'patient':str, 'ED#':int, 'MS#':int, 'ES#':int, 'PF#':int, 'MD#':int})
-        self.DF_METADATA = df[['patient', 'ED#', 'MS#', 'ES#', 'PF#', 'MD#']]
-        if self.ISACDC: self.DF_METADATA['patient'] = self.DF_METADATA['patient'].str.zfill(3)
+        self.METADATA_FILE = config.get('DF_META', None)
+        if os.path.exists(self.METADATA_FILE):
+            df = pd.read_csv(self.METADATA_FILE,
+                             dtype={'patient': str, 'ED#': int, 'MS#': int, 'ES#': int, 'PF#': int, 'MD#': int})
+            self.DF_METADATA = df[['patient', 'ED#', 'MS#', 'ES#', 'PF#', 'MD#']]
+            if self.ISACDC: self.DF_METADATA['patient'] = self.DF_METADATA['patient'].str.zfill(3)
+        else:
+            self.DF_METADATA = None
 
-
-        # create a 1D kernel with linearly increasing/decreasing values in the range(lower,upper),
-        # insert a fixed number in the middle, as this reflect the correct idx,
-        # which might should have an greater weighting than an linear function could reflect
         logging.info('Temporal phase augmentation: \n{}'
                      '\n'
                      'Repeat volume: \n{}'.format(self.AUGMENT_PHASES, self.REPEAT))
 
-        # in memory preprocessing for the cluster
-        # in memory training for the cluster
+        # in memory pre-processing, watch your memory footprint
         if self.IN_MEMORY:
             print('in memory preprocessing')
             zipped = list()
-            futures = [self.THREAD_POOL.submit(self.__fix_preprocessing__,i,i) for i in range(len(self.IMAGES))]
+            futures = [self.THREAD_POOL.submit(self.__fix_preprocessing__, i, i) for i in range(len(self.IMAGES))]
             for i, future in enumerate(as_completed(futures)):
                 zipped.append(future.result())
             self.model_inputs, self.onehots, self.reps, self.gt_lengths = list(map(list, zip(*zipped)))
 
         self.MASKS = None  # need to check if this is still necessary!
 
-        # define a random seed for albumentations
         random.seed(config.get('SEED', 42))
         logging.info('params of generator:')
-        exclude_vars = ['IMAGES', 'LABELS', 'model_inputs','onehots', 'reps', 'gt_lengths', 'config']
+        exclude_vars = ['IMAGES', 'LABELS', 'model_inputs', 'onehots', 'reps', 'gt_lengths', 'config']
         valid_var_types = [int, str, list, bool]
         logging.info(list((k, v) for k, v in vars(self).items() if
                           type(v) in valid_var_types and str(k) not in exclude_vars))
@@ -518,17 +509,15 @@ class PhaseRegressionGenerator_v2(DataGenerator):
         [(batchsize, *dim, n_channels)],
         [(batchsize, self.T_SHAPE, number_of_classes), (batchsize, *dim, n_channels), (batchsize, *dim, 3)]
         """
-        # use this for batch wise histogram-reference selection
-        self.on_batch_end()
 
         # Initialization
         x = np.empty_like(self.X_SHAPE)  # model input
-        y2 = np.empty_like(self.X_SHAPE) # rolled volume
+        y2 = np.empty_like(self.X_SHAPE)  # rolled volume
         y = np.empty_like(self.Y_SHAPE)  # model output
 
         futures = set()
 
-        # spawn one thread per worker
+        # One thread per worker
         t0 = time()
         ID = ''
         # Generate data
@@ -545,7 +534,7 @@ class PhaseRegressionGenerator_v2(DataGenerator):
                 logging.error(
                     'Exception {} in datagenerator with: image: {} or mask: {}'.format(str(e), self.IMAGES[ID],
                                                                                        self.LABELS[ID]))
-                raise e # testing phase --> make sure all errors are handled
+                raise e  # testing phase --> make sure all errors are handled
 
         for i, future in enumerate(as_completed(futures)):
             # use the indexes to order the batch
@@ -571,12 +560,12 @@ class PhaseRegressionGenerator_v2(DataGenerator):
 
         return tuple([[x], [y, y2, np.zeros((*y2.shape[:-1], 3))]])
 
-    def __fix_preprocessing__(self,i,ID):
+    def __fix_preprocessing__(self, i, ID):
 
         t0 = time()
         t1 = time()
         ref = None
-        apply_hist_matching=False
+        apply_hist_matching = False
         if self.HIST_MATCHING and random.random() <= self.AUGMENT_PROB:
             apply_hist_matching = True
             ignore_z = 1
@@ -586,55 +575,30 @@ class PhaseRegressionGenerator_v2(DataGenerator):
 
         x = self.IMAGES[ID]
 
-        # use the load_masked_img wrapper to enable masking of the images, currently not necessary, but nice to have
+        # use the load_masked_img wrapper to enable masking of the images by any label,
+        # currently not needed, but nice to have for later experiments
         model_inputs = load_masked_img(sitk_img_f=x, mask=self.MASKING_IMAGE,
                                        masking_values=self.MASKING_VALUES, replace=self.REPLACE_WILDCARD)
         gt_length = model_inputs.GetSize()[-1]
-        assert(gt_length<= self.T_SHAPE),'CMR sequence is longer ({}) than defined network input shape ({})'.format(model_inputs.GetSize()[-1], self.T_SHAPE)
-        # resample the temporal resolution
-        # if AUGMENT_TEMP --> add a temporal augmentation factor within the range given by: AUGMENT_TEMP_RANGE
+        assert (gt_length <= self.T_SHAPE), 'CMR sequence is longer ({}) than defined network input shape ({})'.format(
+            model_inputs.GetSize()[-1], self.T_SHAPE)
         t_spacing = self.T_SPACING
-        # TODO: this will only augment once, move it to variable pre-processing or remove
-        if False:
-        #if self.AUGMENT_TEMP:
-            t_spacing = t_spacing + random.randint(self.AUGMENT_TEMP_RANGE[0],
-                                                                     self.AUGMENT_TEMP_RANGE[1])
         logging.debug('t-spacing: {}'.format(t_spacing))
+        temporal_sampling_factor = 1  # dont scale the indices if we dont resample T
 
-        if False:
-        #if self.AUGMENT_TEMP or self.RESAMPLE_T:
-            # read recent physical temporal spacing
-            # if non is given or set to 1, set the recent t spacing to the config t spacing
-            # if temp resampling is activated it will resample in  a range of tspacing +/- range
-            recent_t = self.T_SPACING
-            recent_spacing = model_inputs.GetSpacing()
-            if self.RESAMPLE_T: # take the physical spacing of t from the CMR
-                if len(recent_spacing) == 4:# if we have a spacing for t
-                    recent_t = recent_spacing[-1]
-                    if recent_t == 1: # if it is useless --> 1
-                        recent_t = self.T_SPACING
-                        model_inputs.SetSpacing((*recent_spacing[:-1],recent_t ))
-            else: # fallback to the config value, here we just resample with by the factor of temp augmentation
-                recent_t = self.T_SPACING
-                model_inputs.SetSpacing((*recent_spacing[:-1], recent_t))
-
-            temporal_sampling_factor = recent_t / t_spacing
-            if temporal_sampling_factor!=1: # we dont need to resample if factor ==1
-                model_inputs = resample_t_of_4d(model_inputs, t_spacing=t_spacing, interpolation=self.IMG_INTERPOLATION,
-                                            ismask=False)
-        else:
-            temporal_sampling_factor = 1  # dont scale the indices if we dont resample T
         # Create a list of 3D volumes for resampling
         model_inputs = split_one_4d_sitk_in_list_of_3d_sitk(model_inputs, axis=0)
 
-
-        # Returns the indices in the following order: 'ED#', 'MS#', 'ES#', 'PF#', 'MD#'
-        if self.ISACDC:
-            onehot_orig = get_phases_as_onehot_acdc(x, self.DF_METADATA, temporal_sampling_factor, gt_length)
-        elif self.ISDMD:
-            onehot_orig = get_phases_as_onehot_gcn(x, self.DF_METADATA, temporal_sampling_factor, gt_length)
-        else: # gcn/tof data phases minus 1
-            onehot_orig = get_phases_as_onehot_gcn(x, self.DF_METADATA, temporal_sampling_factor, gt_length)
+        if self.DF_METADATA is not None:
+            # Returns the indices in the following order: 'ED#', 'MS#', 'ES#', 'PF#', 'MD#'
+            if self.ISACDC:
+                onehot_orig = get_phases_as_onehot_acdc(x, self.DF_METADATA, temporal_sampling_factor, gt_length)
+            elif self.ISDMD:
+                onehot_orig = get_phases_as_onehot_gcn(x, self.DF_METADATA, temporal_sampling_factor, gt_length)
+            else:  # gcn/tof data phases minus 1
+                onehot_orig = get_phases_as_onehot_gcn(x, self.DF_METADATA, temporal_sampling_factor, gt_length)
+        else:  # self-supervised or supervised
+            onehot_orig = np.ones(gt_length, self.PHASES)
         # 5,t --> t,5
         onehot_orig = onehot_orig.T
         logging.debug('onehot initialised:')
@@ -642,24 +606,12 @@ class PhaseRegressionGenerator_v2(DataGenerator):
 
         if self.RESAMPLE:
             if model_inputs[0].GetDimension() in [2, 3]:
-
                 # calculate the new size (after resample with the given spacing) of each 3D volume
                 # sitk.spacing has the opposite order than np.shape and tf.shape
                 # In the config we use the numpy order z, y, x which needs to be reversed for sitk
-                def calc_resampled_size(sitk_img, target_spacing):
-                    if type(target_spacing) in [list, tuple]:
-                        target_spacing = np.array(target_spacing)
-                    old_size = np.array(sitk_img.GetSize())
-                    old_spacing = np.array(sitk_img.GetSpacing())
-                    logging.debug('old size: {}, old spacing: {}, target spacing: {}'.format(old_size, old_spacing,
-                                                                                             target_spacing))
-                    new_size = (old_size * old_spacing) / target_spacing
-                    return list(np.around(new_size).astype(np.int))
-
                 # transform the spacing from numpy representation towards the sitk representation
                 target_spacing = list(reversed(self.SPACING))
                 new_size_inputs = list(map(lambda elem: calc_resampled_size(elem, target_spacing), model_inputs))
-
             else:
                 raise NotImplementedError('dimension not supported: {}'.format(model_inputs[0].GetDimension()))
 
@@ -679,32 +631,33 @@ class PhaseRegressionGenerator_v2(DataGenerator):
         # transform to nda for further processing
         model_inputs = np.stack(list(map(lambda x: sitk.GetArrayFromImage(x), model_inputs)), axis=0)
 
-        # load a valid 3D or 4D mask, resample with the same parameters as done with the CMR
-        # get idx of valid mask
-        # get IPs of one timestep
-        # calc mean IPs
-        # calc IP angle and rotation angle
-        # rotate 4D with mean rotation angle and roll volume to center
+        # spatial alignment via Masks (Septum, LV COM) or MSE over time
+        # and/or via translation (septum, LV-com or mse) or rotation (septum)
         if self.ROTATE or self.TRANSLATE:
-            from src.data.Preprocess import align_inplane_with_ip
+            # load a valid 3D or 4D mask, resample with the same parameters as done with the CMR
+            # get idx of valid mask
+            # get IPs of one timestep
+            # calc mean IPs
+            # calc IP angle and rotation angle
+            # rotate 4D with mean rotation angle and roll volume to center
             if self.ISACDC:
                 import glob
                 msk_name = sorted(glob.glob(x.split('_4d.nii.gz')[0].replace('sax', 'msk_ed') + '*'))[0]
             else:
                 msk_name = x.replace('clean', 'mask')
-            assert os.path.isfile(msk_name),'msk file name not given: {}'.format(msk_name)
+            assert os.path.isfile(msk_name), 'msk file name not given: {}'.format(msk_name)
             msk = sitk.ReadImage(msk_name)
-            if msk.GetDimension()==4:
+            if msk.GetDimension() == 4:
                 # here we dont know which idx is a real msk, keep 4D mask, and use later: get_first_idx(mask)
                 msk = split_one_4d_sitk_in_list_of_3d_sitk(msk, axis=0)
             else:
-                msk = [msk]
+                msk = [msk]  # this is already a 3D mask
             msk = list(map(lambda x:
-                                    resample_3D(sitk_img=x[0],
-                                                size=x[1],
-                                                spacing=target_spacing,
-                                                interpolate=self.MSK_INTERPOLATION),
-                                    zip(msk, new_size_inputs)))
+                           resample_3D(sitk_img=x[0],
+                                       size=x[1],
+                                       spacing=target_spacing,
+                                       interpolate=self.MSK_INTERPOLATION),
+                           zip(msk, new_size_inputs)))
             msk = np.stack(list(map(lambda x: sitk.GetArrayFromImage(x), msk)), axis=0)
             model_inputs = align_inplane_with_ip(model_inputs=model_inputs,
                                                  msk_file_name=msk,
@@ -715,9 +668,10 @@ class PhaseRegressionGenerator_v2(DataGenerator):
 
         # performance test, keep t, crop the other dimensions to 1.5 times the target shape
         # This decreases the memory footprint and the computation time for further processing steps
-        if not self.IN_MEMORY: # keep the temporal resolution, otherwise we would center crop t
+        if not self.IN_MEMORY:  # keep the temporal resolution, otherwise we would center crop t
             model_inputs = pad_and_crop(model_inputs,
-                                    target_shape=(model_inputs.shape[0], *(np.array(self.DIM) * 1.5).astype(np.int)))
+                                        target_shape=(
+                                            model_inputs.shape[0], *(np.array(self.DIM) * 1.5).astype(np.int)))
 
         if apply_hist_matching:
             model_inputs = match_hist(model_inputs, ref)
@@ -732,8 +686,6 @@ class PhaseRegressionGenerator_v2(DataGenerator):
         model_inputs = clip_quantile(model_inputs, .999)
         model_inputs = normalise_image(model_inputs, normaliser=self.SCALER)  # normalise per 4D
         return model_inputs, onehot_orig, reps, gt_length
-
-
 
     def __preprocess_one_image__(self, i, ID):
 
@@ -750,10 +702,11 @@ class PhaseRegressionGenerator_v2(DataGenerator):
         """
 
         t0 = time()
-        if self.IN_MEMORY: # load pre-loaded images from the current gen object
-            model_inputs, onehot, reps, gt_length = self.model_inputs[ID], self.onehots[ID], self.reps[ID], self.gt_lengths[ID]
+        if self.IN_MEMORY:  # load pre-loaded images from the current gen object
+            model_inputs, onehot, reps, gt_length = self.model_inputs[ID], self.onehots[ID], self.reps[ID], \
+                                                    self.gt_lengths[ID]
         else:
-            model_inputs, onehot, reps, gt_length = self.__fix_preprocessing__(i,ID)
+            model_inputs, onehot, reps, gt_length = self.__fix_preprocessing__(i, ID)
         t1 = time()
         if self.AUGMENT:
             # pad and crop in-plane to augment as less as possible
@@ -769,14 +722,13 @@ class PhaseRegressionGenerator_v2(DataGenerator):
         # as temporal ring, which could be shifted by a random starting idx along the T-axis
         # by this we can augment the starting phase
         if self.AUGMENT_PHASES:
-            # [1,2,3,0] = np.roll([0,1,2,3],shift=-1,axis=0)
+            # [1,2,3,0] = np.roll([0,1,2,3],shift=-1,axis=0) <- shift=-1 <- shift to the left side
             lower, upper = self.AUGMENT_PHASES_RANGE
             rand = random.randint(lower, upper)
             onehot = np.roll(onehot, shift=rand, axis=0)
-            model_inputs = np.roll(model_inputs,shift=rand,axis=0)
+            model_inputs = np.roll(model_inputs, shift=rand, axis=0)
             logging.debug('temp augmentation with: {}'.format(rand))
             if self.DEBUG_MODE: plt.imshow(onehot); plt.show()
-
 
         if self.TARGET_SMOOTHING:
             # Smooth each temporal vector along the indices.
@@ -786,7 +738,7 @@ class PhaseRegressionGenerator_v2(DataGenerator):
             # The 1D Gaus could be extended to a 2D Gaus
             # This would define a uncertainty for phase2frame and frame2phase
             # unfortunately the experiments are worse
-            # onehot = nd.gaussian_filter(input=onehot, sigma=self.SIGMA, mode='mirror')
+            # onehot = nd.gaussian_filter(input=onehot, sigma=self.SIGMA, mode='wrap')
 
             onehot = np.apply_along_axis(
                 lambda x: gaussian_filter1d(x, sigma=self.SIGMA, mode='wrap'),
@@ -794,13 +746,12 @@ class PhaseRegressionGenerator_v2(DataGenerator):
             logging.debug('onehot smoothed with sigma={}:'.format(self.SIGMA))
             if self.DEBUG_MODE: plt.imshow(onehot); plt.show()
 
-        # we normalise before definition of the target, to make sure that we have the same distribution
-        # Fake a ring behaviour by
+        # Fake a ring behaviour of the onehot vector by
         # first, tile along t
         # second smooth with a gausian Kernel,
         # third split+maximise element-wise on both matrices
-        # here we introduce the model target
-        model_targets = np.roll(model_inputs,shift=-1, axis=0) # [1,2,3,0] = np.roll([0,1,2,3],shift=-1,axis=0)
+        # we normalise before definition of the target, to make sure both are from the same distribution
+        model_targets = np.roll(model_inputs, shift=-1, axis=0)  # [1,2,3,0] = np.roll([0,1,2,3],shift=-1,axis=0)
         model_inputs = np.tile(model_inputs, (reps, 1, 1, 1))
         model_targets = np.tile(model_targets, (reps, 1, 1, 1))
         onehot = np.tile(onehot, (reps, 1))
@@ -809,20 +760,20 @@ class PhaseRegressionGenerator_v2(DataGenerator):
 
         # Split and maximize the tiled one-hot vector to make sure that the beginning and end are also smooth
         # no longer necessary, as we smooth with 'wrap' mode.
-        #first, second = np.split(onehot, indices_or_sections=2, axis=0)
-        #onehot = np.maximum(first, second)
+        # first, second = np.split(onehot, indices_or_sections=2, axis=0)
+        # onehot = np.maximum(first, second)
         onehot = onehot[:self.T_SHAPE]
         model_inputs = model_inputs[:self.T_SHAPE]
         model_targets = model_targets[:self.T_SHAPE]
         logging.debug('onehot element-wise max and cropped to a length of {}:'.format(self.T_SHAPE))
         if self.DEBUG_MODE: plt.imshow(onehot); plt.show()
 
-        # Center-crop z, x, y, keep t as it is
+        # Center-crop z, x, y, t is already crop
         model_inputs = pad_and_crop(model_inputs, target_shape=(self.T_SHAPE, *self.DIM))
         model_targets = pad_and_crop(model_targets, target_shape=(self.T_SHAPE, *self.DIM))
 
         msk = np.ones_like(onehot)
-        logging.debug('onehot pap and cropped:')
+        logging.debug('onehot pad/crop:')
         if self.DEBUG_MODE: plt.imshow(onehot); plt.show()
 
         # Finally normalise the 4D volume in one value space
@@ -833,17 +784,17 @@ class PhaseRegressionGenerator_v2(DataGenerator):
         # - The standard (unit) softmax function 𝜎:ℝ𝐾→ℝ𝐾 is defined by the formula
         # 𝜎(𝐳)𝑖=𝑒𝑧𝑖∑𝐾𝑗=1𝑒𝑧𝑗 for 𝑖=1,…,𝐾 and 𝐳=(𝑧1,…,𝑧𝐾)∈ℝ𝐾
         onehot = normalise_image(onehot, normaliser='minmax')
-        #model_inputs = normalise_image(model_inputs, normaliser=self.SCALER)
-        #model_targets = normalise_image(model_targets, normaliser=self.SCALER)
+        # model_inputs = normalise_image(model_inputs, normaliser=self.SCALER)
+        # model_targets = normalise_image(model_targets, normaliser=self.SCALER)
         # logging.debug('background: \n{}'.format(onehot))
 
-        ax_to_normalise = 1
         # Normalise the one-hot vector, with softmax
+        # For the MSE-loss we currently dont need a normalisation step of the onehot
         if self.ADD_SOFTMAX:
             onehot = np.apply_along_axis(
-            lambda x: np.exp(x)/ np.sum(np.exp(x)),
-            self.SOFTMAX_AXIS, onehot)
-        # For the MSE-loss we currently dont need a normalisation step of the onehot
+                lambda x: np.exp(x) / np.sum(np.exp(x)),
+                self.SOFTMAX_AXIS, onehot)
+
         # logging.debug('normalised (sum phases per timestep == 1): \n{}'.format(onehot))
         self.__plot_state_if_debug__(img=model_inputs[len(model_inputs) // 2], start_time=t1,
                                      step='clipped cropped and pad')
@@ -857,11 +808,11 @@ class PhaseRegressionGenerator_v2(DataGenerator):
 
         if self.ISACDC:
             # before: axis 1 == z-axis: base --> apex, after:  apex--> base
-            model_inputs = np.flip(model_inputs,axis=1)
-            model_targets = np.flip(model_targets,axis=1)
+            model_inputs = np.flip(model_inputs, axis=1)
+            model_targets = np.flip(model_targets, axis=1)
 
         onehot = np.stack([onehot, msk], axis=0)
-        # make sure we do not introduce Nans to the model
+        # make sure we do not introduce nans to the model
         assert not np.any(np.isnan(onehot))
         assert not np.any(np.isnan(model_inputs))
         assert not np.any(np.isnan(model_targets))

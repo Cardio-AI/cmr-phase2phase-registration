@@ -2,11 +2,13 @@
 
 
 def train_fold(config, in_memory=False):
-    # make sure all necessary params in config are set
-    # if not set them with default values
+    # make sure necessary config params are given, otherwise replace with default
     import tensorflow
     import tensorflow as tf
+    import numpy as np
     tf.get_logger().setLevel('FATAL')
+    tf.random.set_seed(config.get('SEED', 42))
+    np.random.seed(config.get('SEED', 42))
     gpus = tf.config.experimental.list_physical_devices('GPU')
     for gpu in gpus:
         tf.config.experimental.set_memory_growth(gpu, True)
@@ -18,22 +20,17 @@ def train_fold(config, in_memory=False):
     print(GPUS)
     print(tf.config.list_physical_devices('GPU'))
     # ------------------------------------------ import helpers
-    # this should import glob, os, and many other standard libs
     #from tensorflow.python.client import device_lib
-    import gc, logging, os, datetime, re
-    from logging import info
+    # import external libs
+    from time import time
+    import logging, os
 
     # local imports
     from src.utils.Utils_io import Console_and_file_logger, init_config, ensure_dir
     from src.utils.KerasCallbacks import get_callbacks
-    from src.data.Dataset import get_trainings_files
-    from src.data.Generators import PhaseRegressionGenerator_v2
-    from src.models.Models import create_PhaseRegressionModel_v2
-    from src.models.Models import create_PhaseRegressionModel
-
-    # import external libs
-    import pandas as pd
-    from time import time
+    from src.data.Dataset import get_trainings_files, all_files_in_df
+    from src.data.PhaseGenerators import PhaseRegressionGenerator_v2
+    from src.models.PhaseRegModels import create_PhaseRegressionModel_v2
 
     # make all config params known to the local namespace
     locals().update(config)
@@ -59,9 +56,9 @@ def train_fold(config, in_memory=False):
 
 
     DATA_PATH_SAX = config.get('DATA_PATH_SAX')
-    DF_FOLDS = config.get('DF_FOLDS')
-    DF_META = config.get('DF_META', '/mnt/ssd/data/gcn/02_imported_4D_unfiltered/SAx_3D_dicomTags_phase.csv')
-    EPOCHS = config.get('EPOCHS')
+    DF_FOLDS = config.get('DF_FOLDS', None)
+    DF_META = config.get('DF_META', None)
+    EPOCHS = config.get('EPOCHS', 100)
 
     Console_and_file_logger(path=FOLD_PATH, log_lvl=logging.INFO)
     config = init_config(config=locals(), save=True)
@@ -69,59 +66,25 @@ def train_fold(config, in_memory=False):
     logging.info('Visible devices:\n{}'.format(tf.config.list_physical_devices()))
     #logging.info('Local devices: \n {}'.format(device_lib.list_local_devices()))
 
-    # get kfolded data from DATA_ROOT and subdirectories
-    # Load SAX volumes
-    #FOLD=3
+    # get k-fold data from DATA_ROOT and subdirectories
     x_train_sax, y_train_sax, x_val_sax, y_val_sax = get_trainings_files(data_path=DATA_PATH_SAX,
                                                                          path_to_folds_df=DF_FOLDS,
                                                                         fold=FOLD)
 
     """examples = 12
     x_train_sax, y_train_sax, x_val_sax, y_val_sax = x_train_sax[:examples], y_train_sax[:examples], x_val_sax[:examples], y_val_sax[:examples]"""
-    #x_train_sax = [x for x in x_train_sax if 'patient027' in x] * 4
-    #x_val_sax = [x for x in x_val_sax if 'patient047' in x] * 4
+    #x_train_sax = [x for x in x_train_sax if 'patient009' in x] * 4
+    x_val_sax = [x for x in x_val_sax if 'patient009' in x] * 4
     logging.info('SAX train CMR: {}, SAX train masks: {}'.format(len(x_train_sax), len(y_train_sax)))
     logging.info('SAX val CMR: {}, SAX val masks: {}'.format(len(x_val_sax), len(y_val_sax)))
 
     t0 = time()
     # check if we find each patient in the corresponding dataframe
+    if DF_META is not None and os.path.exists(DF_META):
+       all_given = all_files_in_df(DF_META, x_train_sax, x_val_sax)
+       logging.info('found all patients in df meta: {}'.format(all_given))
 
-    METADATA_FILE = DF_META
-    df = pd.read_csv(METADATA_FILE, dtype={'patient':str, 'ED#':int, 'MS#':int, 'ES#':int, 'PF#':int, 'MD#':int})
-    DF_METADATA = df[['patient', 'ED#', 'MS#', 'ES#', 'PF#', 'MD#']]
-    DF_METADATA['patient'] = DF_METADATA['patient'].str.zfill(3)
-
-    files_ = x_train_sax + x_val_sax
-    info('Check if we find the patient ID and phase mapping for all: {} files.'.format(len(files_)))
-    for x in files_:
-        try:
-            patient_str, ind, indices = '','',''
-            patient_str = re.search('-(.{8})_', x)
-            if patient_str: # GCN data
-                patient_str = patient_str.group(1).upper()
-                assert (len(patient_str) == 8), 'matched patient ID from the phase sheet has a length of: {}, expected a length of 8 for GCN data'.format(
-                    len(patient_str))
-            else: # DMD data
-                patient_str = os.path.basename(x).split('_volume')[0].lower()
-
-            if 'nii.gz' in patient_str:  # ACDC files e.g.: patient001_4d.nii.gz
-                patient_str = re.search('patient(.{3})_', x)
-                patient_str = patient_str.group(1).upper()
-
-            assert len(
-                patient_str) > 0, 'empty patient id found, please check the get_patient_id in fn train_fold(), usually there are path problems'
-            # returns the indices in the following order: 'ED#', 'MS#', 'ES#', 'PF#', 'MD#'
-            # reduce by one, as the indexes start at 0, the excel-sheet at 1
-            ind = DF_METADATA[DF_METADATA.patient.str.contains(patient_str)][['ED#', 'MS#', 'ES#', 'PF#', 'MD#']]
-            indices = ind.values[0].astype(int) - 1
-
-        except Exception as e:
-            info(e)
-            logging.info(patient_str)
-            logging.info(ind)
-            logging.info('indices: \n{}'.format(indices))
-    info('Done!')
-    # instantiate the batchgenerators
+    # Create the batchgenerators
     batch_generator = PhaseRegressionGenerator_v2(x_train_sax, x_train_sax, config=config, in_memory=in_memory)
     val_config = config.copy()
     val_config['AUGMENT'] = False
@@ -155,9 +118,6 @@ def train_fold(config, in_memory=False):
     #         plt.close()
     #         i = i+1
 
-
-
-
     # get model
     model = create_PhaseRegressionModel_v2(config)
 
@@ -166,6 +126,7 @@ def train_fold(config, in_memory=False):
         # Pass the file handle in as a lambda function to make it callable
         model.summary(line_length=140, print_fn=lambda x: fh.write(x + '\n'))
 
+    # plot the model structure as graph
     tf.keras.utils.plot_model(
         model,
         show_dtype=False,
