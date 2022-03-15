@@ -416,7 +416,8 @@ class Grad:
         returns Tensor of size [bs]
         """
         #y_pred = tf.where(tf.math.is_nan(y_pred), tf.zeros_like(y_pred), y_pred)
-        #return tf.norm(y_pred, axis=-1)
+        #norm = tf.norm(y_pred, axis=-1)
+        #return norm /
 
         if self.penalty == 'l1':
             dif = [tf.abs(f) for f in self._diffs(y_pred)]
@@ -424,10 +425,16 @@ class Grad:
             assert self.penalty == 'l2', 'penalty can only be l1 or l2. Got: %s' % self.penalty
             dif = [f * f for f in self._diffs(y_pred)]
 
+        #y_pred = tf.transpose(y_pred, [0, 1, 2, 4, 3])
+        #print(y_pred.shape)
+        #norm = tf.norm(y_pred, ord='euclidean', axis=-1)
+        #dif = dif + norm
+
         df = [tf.reduce_mean(K.batch_flatten(f), axis=-1) for f in dif]
         grad = tf.add_n(df) / len(df)
         # ideally this should penalize unnecessary deformation in black areas
-        #norm = tf.norm(y_pred, ord='euclidean', axis=-1)
+        #temp = tf.where(tf.math.is_nan(y_pred), tf.zeros_like(y_pred), y_pred)
+        #norm = tf.norm(temp, ord='euclidean', axis=-1)
         #norm = tf.reduce_mean(norm)
 
         if self.loss_mult is not None:
