@@ -100,8 +100,11 @@ def predict(cfg_file, data_root='', c2l=False):
     np.save(pred_filename, np.stack([gts, preds], axis=0))
     np.save(moved_filename, moved)
     np.save(vects_filename, vects)
-    logging.info('saved as: \n{} \ndone!'.format(pred_filename))
 
+    patients_filename = os.path.join(pred_path, 'patients.txt')
+    with open(patients_filename, "a+") as f:
+        _ = [f.write(str(val_config['FOLD']) + '_' + os.path.basename(elem) +'\n') for elem in x_val_sax]
+    logging.info('saved as: \n{}\n{} \ndone!'.format(pred_filename, patients_filename))
 
 if __name__ == "__main__":
     import argparse, os, sys, glob
@@ -126,8 +129,8 @@ if __name__ == "__main__":
     initial_search_pattern = 'config/config.json' # path to one experiment
     search_path = os.path.join(results.exp_root, initial_search_pattern)
     cfg_files = sorted(glob.glob(search_path))
-    if len(cfg_files) == 0:
-        search_pattern = '**/**/config/config.json'
+    if len(cfg_files) == 0: # we called this script with the experiment root, search for fold sub-folders
+        search_pattern = '**/config/config.json'
         search_path = os.path.join(results.exp_root, search_pattern)
         print(search_path)
         cfg_files = sorted(glob.glob(search_path))

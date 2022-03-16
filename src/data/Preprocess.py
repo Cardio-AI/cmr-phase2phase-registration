@@ -688,15 +688,16 @@ def align_inplane_with_ip(model_inputs, msk_file_name, roll2septum=True, roll2lv
         center = center[::-1]
     else: # use the mean squared error along t as definition of the center of change
         import tensorflow as tf
-        border = 20
+        ny, nx = model_inputs.shape[-2:]
+        border = int((ny/100)*20)
         temp = clip_quantile(model_inputs, .99)
         temp = normalise_image(temp,normaliser='standard')
         temp_roll = np.roll(temp, shift=-1, axis=0)
-        # ignore the mse between t0 and t-1, as this might reflect the cut cmr sequence
+        # ignore the mse between frame t0 and t-1, as this might reflect the cut cmr sequence
         mse_ = tf.keras.metrics.mean_squared_error(temp[:-1,...,None],temp_roll[:-1,...,None]).numpy()
         mse_mean = np.mean(mse_, axis=0)
-        mse_mean_mask = mse_mean >np.percentile(mse_,95)
-        center = nd.center_of_mass((mse_mean*mse_mean_mask)[:,border:-border,border:-border]) # ignore the borders
+        mse_mean_mask = mse_mean >np.percentile(mse_mean,95)
+        center = nd.center_of_mass((mse_mean_mask)[:,border:-border,border:-border]) # ignore the borders
         center = np.array(center[1:]) + border
 
     if translate:

@@ -633,6 +633,11 @@ class PhaseRegressionGenerator_v2(DataGenerator):
         # transform to nda for further processing
         model_inputs = np.stack(list(map(lambda x: sitk.GetArrayFromImage(x), model_inputs)), axis=0)
 
+        # flip base/apex for ACDC
+        if self.ISACDC:
+            # before: axis 1 == z-axis: base --> apex, after:  apex--> base
+            model_inputs = np.flip(model_inputs, axis=1)
+
         # spatial alignment via Masks (Septum, LV COM) or MSE over time
         # and/or via translation (septum, LV-com or mse) or rotation (septum)
         if self.ROTATE or self.TRANSLATE:
@@ -685,11 +690,6 @@ class PhaseRegressionGenerator_v2(DataGenerator):
         if self.REPEAT: reps = int(np.ceil(self.T_SHAPE / gt_length))
 
         self.__plot_state_if_debug__(img=model_inputs[len(model_inputs) // 2], start_time=t1, step='resampled')
-
-        # flip base/apex for ACDC
-        if self.ISACDC:
-            # before: axis 1 == z-axis: base --> apex, after:  apex--> base
-            model_inputs = np.flip(model_inputs, axis=1)
 
         # Center-crop z, x, y, keep t
         # normalise

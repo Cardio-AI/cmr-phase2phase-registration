@@ -73,7 +73,7 @@ def train_fold(config, in_memory=False):
 
     """examples = 12
     x_train_sax, y_train_sax, x_val_sax, y_val_sax = x_train_sax[:examples], y_train_sax[:examples], x_val_sax[:examples], y_val_sax[:examples]"""
-    #x_train_sax = [x for x in x_train_sax if 'patient009' in x] * 4
+    x_train_sax = [x for x in x_train_sax if 'patient047' in x] * 4
     #x_val_sax = [x for x in x_val_sax if 'patient009' in x] * 4
     logging.info('SAX train CMR: {}, SAX train masks: {}'.format(len(x_train_sax), len(y_train_sax)))
     logging.info('SAX val CMR: {}, SAX val masks: {}'.format(len(x_val_sax), len(y_val_sax)))
