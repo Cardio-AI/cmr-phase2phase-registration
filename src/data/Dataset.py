@@ -1857,7 +1857,7 @@ def all_files_in_df(METADATA_FILE, x_train_sax, x_val_sax):
 
     df = pd.read_csv(METADATA_FILE, dtype={'patient': str, 'ED#': int, 'MS#': int, 'ES#': int, 'PF#': int, 'MD#': int})
     DF_METADATA = df[['patient', 'ED#', 'MS#', 'ES#', 'PF#', 'MD#']]
-    DF_METADATA['patient'] = DF_METADATA['patient'].str.zfill(3)
+    DF_METADATA['patient'] = DF_METADATA['patient'].str.zfill(3).copy()
     files_ = x_train_sax + x_val_sax
     logging.info('Check if we find the patient ID and phase mapping for all: {} files.'.format(len(files_)))
     for x in files_:
@@ -1893,3 +1893,49 @@ def all_files_in_df(METADATA_FILE, x_train_sax, x_val_sax):
             logging.info('indices: \n{}'.format(indices))
     logging.info('Check done!')
     return all_present
+
+
+def load_phase_reg_exp(exp_root):
+    """
+    Load the predicted numpy files of a 4-fold cross validation experiment
+
+    Parameters
+    ----------
+    exp_root : (str) path to the experiment root
+
+    Returns (tuple of ndarrays), nda_vects, gt, pred, gt_len, mov, patients
+    -------
+
+    """
+    pathstovectnpy = sorted(glob.glob(os.path.join(exp_root, 'moved', '*vects_*.npy')))
+    print(pathstovectnpy)
+    nda_vects = np.concatenate([np.load(path_) for path_ in pathstovectnpy], axis=0)
+    print(nda_vects.shape)
+
+    # load the phase gt and pred
+    pred_path = os.path.join(exp_root, 'pred')
+    pathtsophasenpy = sorted(glob.glob(os.path.join(pred_path, '*gtpred*.npy')))
+    print(pathtsophasenpy)
+    nda_phase = np.concatenate([np.load(path_) for path_ in pathtsophasenpy], axis=1)
+    print(nda_phase.shape)
+    gt_, pred_ = np.split(nda_phase, axis=0, indices_or_sections=2)
+    print(gt_.shape)
+    gt = gt_[0, :, 0]
+    pred = pred_[0, :, 0]
+    print(gt.shape)
+    gt_len = gt_[0, :, 1]
+
+    # load some moved examples for easier understanding of the dimensions
+    pathtomoved = sorted(glob.glob(os.path.join(exp_root, 'moved', '*moved*.npy')))
+    print(len(pathtomoved))
+    mov = np.concatenate([np.load(path_) for path_ in pathtomoved], axis=0)
+    print(mov.shape)  # patient,time,spatial-z,y,x,channel, e.g.: 69,40,16,64,64,1
+
+    # load a mapping to the original patient ids
+    patients = []
+    if os.path.exists(os.path.join(pred_path, 'patients.txt')):
+        with open(os.path.join(pred_path, 'patients.txt'), "r") as f_:
+            lines = f_.readlines()
+            _ = [patients.append(p) for p in lines]
+
+    return nda_vects, gt, pred, gt_len, mov, patients

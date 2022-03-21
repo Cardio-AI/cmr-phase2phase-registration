@@ -343,7 +343,7 @@ class PhaseRegressionModel():
                     'transformed': own_metr.MSE(masked=self.mask_loss, loss_fn=keras.losses.mae, onehot=False),
                     'flows': Grad('l2').loss}
 
-            else:  # default fallback --> MSE - works the best
+            else:  # default fallback --> MSE - works well
                 losses = {
                     'onehot': own_metr.MSE(masked=self.mask_loss, loss_fn=keras.losses.mse,onehot=True),
                     'transformed': own_metr.MSE(masked=self.mask_loss, loss_fn=keras.losses.mse,onehot=False),
@@ -368,7 +368,10 @@ class PhaseRegressionModel():
             [print(l.name, l.input_shape, l.dtype) for l in model.layers]"""
             return model
 
-
+def get_idxs_tf(x):
+    return tf.cast(
+        tf.reshape(tf.where(tf.ones((x[0], x[1], x[2]))), (x[0], x[1], x[2], 3)),
+        tf.float32)
 
 
 # ST to apply m to an volume
