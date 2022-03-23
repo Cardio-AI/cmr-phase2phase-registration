@@ -439,7 +439,7 @@ class PhaseRegressionGenerator_v2(DataGenerator):
         self.ROLL2LV = config.get('ROLL2LV', True)  # default, center crop according to the mean mse along t
 
         self.IN_MEMORY = in_memory
-        self.THREAD_POOL = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+        self.THREAD_POOL = concurrent.futures.ThreadPoolExecutor(max_workers=12)
         self.config = config
 
         if self.REPEAT:
