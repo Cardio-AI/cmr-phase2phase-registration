@@ -95,28 +95,28 @@ def train_fold(config, in_memory=False):
 
     import matplotlib.pyplot as plt
     from src.visualization.Visualize import show_2D_or_3D
-    # path_ = 'data/interim/{}_center_via_mse_threshold/'.format('acdc_volume')
-    # ensure_dir(path_)
-    # i = 0
-    # for b in batch_generator:
-    #     x,y = b
-    #     x = x[0]
-    #     for p in x:
-    #         fig, ax = plt.subplots()
-    #         show_2D_or_3D(p[0],fig=fig)
-    #         plt.savefig('{}{}.png'.format(path_,i))
-    #         plt.close()
-    #         i = i+1
-    # i = 0
-    # for b in validation_generator:
-    #     x,y = b
-    #     x = x[0]
-    #     for p in x:
-    #         fig, ax = plt.subplots()
-    #         show_2D_or_3D(p[0],fig=fig)
-    #         plt.savefig('{}v{}.png'.format(path_,i))
-    #         plt.close()
-    #         i = i+1
+    path_ = 'data/interim/{}_centers_via_mse_threshold/'.format('acdc_volume')
+    ensure_dir(path_)
+    i = 0
+    for b in batch_generator:
+        x,y = b
+        x = x[0]
+        for p in x:
+            fig, ax = plt.subplots()
+            show_2D_or_3D(p[0,...,0:1],fig=fig)
+            plt.savefig('{}{}.png'.format(path_,i))
+            plt.close()
+            i = i+1
+    i = 0
+    for b in validation_generator:
+        x,y = b
+        x = x[0]
+        for p in x:
+            fig, ax = plt.subplots()
+            show_2D_or_3D(p[0,...,0:1],fig=fig)
+            plt.savefig('{}v{}.png'.format(path_,i))
+            plt.close()
+            i = i+1
 
     # get model
     #model = create_PhaseRegressionModel_v2(config)

@@ -1856,7 +1856,7 @@ def all_files_in_df(METADATA_FILE, x_train_sax, x_val_sax):
     all_present = True
 
     df = pd.read_csv(METADATA_FILE, dtype={'patient': str, 'ED#': int, 'MS#': int, 'ES#': int, 'PF#': int, 'MD#': int})
-    DF_METADATA = df[['patient', 'ED#', 'MS#', 'ES#', 'PF#', 'MD#']]
+    DF_METADATA = df[['patient', 'ED#', 'MS#', 'ES#', 'PF#', 'MD#']].copy()
     DF_METADATA['patient'] = DF_METADATA['patient'].str.zfill(3).copy()
     files_ = x_train_sax + x_val_sax
     logging.info('Check if we find the patient ID and phase mapping for all: {} files.'.format(len(files_)))

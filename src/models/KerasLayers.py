@@ -914,6 +914,25 @@ def get_angle_tf(a, b):
     # deg = rad * (180.0/pi)
     return cos[..., tf.newaxis]
 
+def get_angle_np(a, b):
+    # this should work for batches of n-dimensional vectors
+    # α = arccos[(a · b) / (|a| * |b|)]
+    # |v| = √(x² + y² + z²)
+    """
+    in 3D space
+    If vectors a = [xa, ya, za], b = [xb, yb, zb], then:
+    α = arccos[(xa * xb + ya * yb + za * zb) / (√(xa2 + ya2 + za2) * √(xb2 + yb2 + zb2))]
+    """
+    # import math as m
+    # pi = tf.constant(m.pi)
+    #b = np.cast(b, dtype=a.dtype)
+    inner = np.einsum('...i,...i->...', a, b)
+    norms = np.linalg.norm(a, axis=-1) * np.linalg.norm(b, axis=-1)  # [...,None]
+    cos = inner / (norms + sys.float_info.epsilon)
+    # rad = tf.math.acos(tf.clip_by_value(cos, -1.0, 1.0))
+    # rad2deg conversion
+    # deg = rad * (180.0/pi)
+    return cos[..., np.newaxis]
 
 class SpatialTransformer(Layer):
     """
