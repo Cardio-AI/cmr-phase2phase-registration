@@ -73,8 +73,9 @@ def train_fold(config, in_memory=False):
 
     """examples = 12
     x_train_sax, y_train_sax, x_val_sax, y_val_sax = x_train_sax[:examples], y_train_sax[:examples], x_val_sax[:examples], y_val_sax[:examples]"""
-    #x_train_sax = [x for x in x_train_sax if 'patient047' in x] * 4
-    #x_val_sax = [x for x in x_val_sax if 'patient009' in x] * 4
+    #x_train_sax = [x for x in x_train_sax if '047' in x] * 4
+    #x_val_sax = [x for x in x_val_sax if '38' in x] * 4
+    #x_train_sax = x_val_sax
     logging.info('SAX train CMR: {}, SAX train masks: {}'.format(len(x_train_sax), len(y_train_sax)))
     logging.info('SAX val CMR: {}, SAX val masks: {}'.format(len(x_val_sax), len(y_val_sax)))
 
@@ -85,6 +86,7 @@ def train_fold(config, in_memory=False):
        logging.info('found all patients in df meta: {}'.format(all_given))
 
     # Create the batchgenerators
+    #config['SHUFFLE'] = False
     batch_generator = PhaseRegressionGenerator_v2(x_train_sax, x_train_sax, config=config, in_memory=in_memory)
     val_config = config.copy()
     val_config['AUGMENT'] = False
@@ -95,28 +97,32 @@ def train_fold(config, in_memory=False):
 
     import matplotlib.pyplot as plt
     from src.visualization.Visualize import show_2D_or_3D
-    # path_ = 'data/interim/{}_centers_via_mse_threshold/'.format('acdc_volume')
-    # ensure_dir(path_)
-    # i = 0
-    # for b in batch_generator:
-    #     x,y = b
-    #     x = x[0]
-    #     for p in x:
-    #         fig, ax = plt.subplots()
-    #         show_2D_or_3D(p[0,...,0:1],fig=fig)
-    #         plt.savefig('{}{}.png'.format(path_,i))
-    #         plt.close()
-    #         i = i+1
-    # i = 0
-    # for b in validation_generator:
-    #     x,y = b
-    #     x = x[0]
-    #     for p in x:
-    #         fig, ax = plt.subplots()
-    #         show_2D_or_3D(p[0,...,0:1],fig=fig)
-    #         plt.savefig('{}v{}.png'.format(path_,i))
-    #         plt.close()
-    #         i = i+1
+    debug = 0 # make sure single threaded
+    if debug:
+        path_ = 'data/interim/{}_centers_via_mse_threshold/'.format('acdc_volume')
+        ensure_dir(path_)
+        i = 0
+        for b in batch_generator:
+            x,y = b
+            x = x[0]
+            for p in x:
+                patient = os.path.basename(batch_generator.IMAGES[i]).split('_')[0]
+                fig, ax = plt.subplots()
+                show_2D_or_3D(p[0,...,0:1],fig=fig)
+                plt.savefig('{}{}_{}.png'.format(path_,i,patient))
+                plt.close()
+                i = i+1
+        i = 0
+        for b in validation_generator:
+            x,y = b
+            x = x[0]
+            for p in x:
+                patient = os.path.basename(validation_generator.IMAGES[i]).split('_')[0]
+                fig, ax = plt.subplots()
+                show_2D_or_3D(p[0,...,0:1],fig=fig)
+                plt.savefig('{}v{}_{}.png'.format(path_,i,patient))
+                plt.close()
+                i = i+1
 
     # get model
     #model = create_PhaseRegressionModel_v2(config)

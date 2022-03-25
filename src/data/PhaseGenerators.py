@@ -694,7 +694,7 @@ class PhaseRegressionGenerator_v2(DataGenerator):
         # Center-crop z, x, y, keep t
         # normalise
         model_inputs = pad_and_crop(model_inputs, target_shape=(model_inputs.shape[0], *self.DIM))
-        model_inputs = clip_quantile(model_inputs, .999)
+        model_inputs = clip_quantile(model_inputs, .95) # lower_boundary=-1*np.quantile(-1*model_inputs, .90)
         model_inputs = normalise_image(model_inputs, normaliser=self.SCALER)  # normalise per 4D
 
         return model_inputs, onehot_orig, reps, gt_length

@@ -688,39 +688,45 @@ def align_inplane_with_ip(model_inputs, msk_file_name, roll2septum=True, roll2lv
         center = center[::-1]
     else: # use the mean squared error along t as definition of the center of change
         import tensorflow as tf
-        # ny, nx = model_inputs.shape[-2:]
-        # border = int((ny/100)*20)
-        # temp = clip_quantile(model_inputs, .99)
-        # # normalise per timestep
-        # temp = normalise_image(temp,normaliser='standard')
-        # temp_roll = np.roll(temp, shift=-1, axis=0)
-        # # ignore the mse between frame t0 and t-1, as this might reflect the cut cmr sequence
-        # mse_ = tf.keras.metrics.mean_squared_error(temp[:-1,...,None],temp_roll[:-1,...,None]).numpy()
-        # mse_ = np.stack([normalise_image(elem, normaliser='minmax') for elem in mse_], axis=0)
-        # mse_mean = np.mean(mse_, axis=0)
-        # mse_mean_mask = mse_mean >np.percentile(mse_mean,95)
-        # center = nd.center_of_mass((mse_mean_mask)[:,border:-border,border:-border]) # ignore the borders
-        # center = np.array(center[1:]) + border
-
         ##### new
-        ny, nx = model_inputs.shape[-2:]
+        nz, ny, nx = model_inputs.shape[-3:]
         border_percentage = 20
         gray_percentile_threshold = .99
-        mse_threshold = 95
-        border = int((ny / 100) * border_percentage)
-        temp = clip_quantile(model_inputs, gray_percentile_threshold)
-        temp = normalise_image(temp, normaliser='standard')
+        mse_threshold = 90
+        median_filter_size = 3
+        nyx = np.array([int(ny),int(nx)])
+        border = ((nyx / 100) * border_percentage).astype(np.int)
+        temp = clip_quantile(model_inputs, gray_percentile_threshold,lower_boundary=-1*np.quantile(-1*model_inputs, .90))
+        temp = normalise_image(temp[:-1,nz//4:, border[0]:-border[0], border[1]:-border[1]], normaliser='standard')
         temp_roll = np.roll(temp, shift=-1, axis=0)
         # ignore the mse between frame t0 and t-1, as this might reflect the cut cmr sequence
-        mse_ = tf.keras.metrics.mean_squared_error(temp[:-1, ..., None], temp_roll[:-1, ..., None]).numpy()
+        mse_ = tf.keras.metrics.mean_squared_error(temp[..., None], temp_roll[..., None]).numpy()
         # normalise per timestep, less change in diastole
-        mse_ = np.stack([normalise_image(elem, normaliser='minmax') for elem in mse_], axis=0)
-        #mse_mean = np.mean(mse_, axis=0)
-        mse_mean_mask = mse_ > np.percentile(mse_, mse_threshold)
+        #mse_ = np.stack([normalise_image(elem, normaliser='minmax') for elem in mse_], axis=0)
+        mse_smooth = ndimage.gaussian_filter(mse_, median_filter_size)
+        mse_mean = np.mean(mse_smooth, axis=0)
+        from skimage.measure import label
+
+        def getLargestCC(segmentation):
+            labels = label(segmentation)
+            assert (labels.max() != 0)  # assume at least 1 CC
+            largestCC = labels == np.argmax(np.bincount(labels.flat)[1:]) + 1
+            return largestCC
+
+        mse_mean_mask = mse_mean > np.percentile(mse_mean, mse_threshold)
+        detected_percentage = (100/mse_mean_mask.size) * mse_mean_mask.sum()
+        if detected_percentage<10:
+            mse_mean_mask_filter = getLargestCC(mse_mean_mask)
+        else:
+            mse_mean_mask_filter = mse_mean_mask
         # extract one mse center per t, this should be more robust to outliers than com of a mean mse
-        centers = np.array([nd.center_of_mass(elem[:, border:-border, border:-border]) for elem in mse_mean_mask ])
-        center = centers.mean(axis=0)
-        center = np.array(center[1:]) + border # ignore the z-index
+        try:
+            center = nd.center_of_mass(mse_mean_mask_filter)
+            center = np.array(center[1:]) + border
+            #centers = np.array([nd.center_of_mass(elem[:, border:-border, border:-border]) for elem in mse_mean_mask if elem[:, border:-border, border:-border].max()>0])
+        except Exception as e:
+            print('centers')
+            print(e)
 
     if translate:
         # translation to center of septum or lv bloodpool
