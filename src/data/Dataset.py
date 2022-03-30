@@ -1383,7 +1383,7 @@ def get_phases_as_onehot_gcn(file_path, df, temporal_sampling_factor=1, length=-
                     len(patient_str) == 8), 'matched patient ID from the phase sheet has a length of: {}, expected a length of 8 for GCN data'.format(
             len(patient_str))
     else:  # DMD data
-        patient_str = os.path.basename(file_path).split('_volume')[0].lower()
+        patient_str = os.path.basename(file_path).split('_volume')[0].upper()
 
     if 'nii.gz' in patient_str:  # ACDC files e.g.: patient001_4d.nii.gz
         patient_str = re.search('patient(.{3})_', file_path)
@@ -1395,7 +1395,7 @@ def get_phases_as_onehot_gcn(file_path, df, temporal_sampling_factor=1, length=-
     # Returns the indices in the following order: 'ED#', 'MS#', 'ES#', 'PF#', 'MD#'
     # Reduce the indices of the excel sheet by one, as the indexes start at 0, the excel-sheet at 1
     # Transform them into an one-hot representation
-    indices = df[df.patient.str.contains(patient_str)][
+    indices = df[df.patient.str.upper().str.contains(patient_str.upper())][
         ['ED#', 'MS#', 'ES#', 'PF#', 'MD#']]
     #if np.all(indices): # returns true if there are no zeros in this array (which means that they started counting at 1)
     indices = indices.values[0].astype(int) - 1
@@ -1880,9 +1880,9 @@ def all_files_in_df(METADATA_FILE, x_train_sax, x_val_sax):
                 patient_str) > 0, 'empty patient id found, please check the get_patient_id in fn train_fold(), usually there are path problems'
             # returns the indices in the following order: 'ED#', 'MS#', 'ES#', 'PF#', 'MD#'
             # reduce by one, as the indexes start at 0, the excel-sheet at 1
-            ind = DF_METADATA[DF_METADATA.patient.str.upper().str.contains(patient_str)][
+            ind = DF_METADATA[DF_METADATA.patient.str.upper().str.contains(patient_str.upper())][
                 ['ED#', 'MS#', 'ES#', 'PF#', 'MD#']]
-            indices = ind.values[0].astype(int) - 1
+            indices = ind.values[0].astype(int)
             if len(indices) == 0:
                 all_present = False
 
@@ -1891,6 +1891,7 @@ def all_files_in_df(METADATA_FILE, x_train_sax, x_val_sax):
             logging.info(patient_str)
             logging.info(ind)
             logging.info('indices: \n{}'.format(indices))
+            all_present = False
     logging.info('Check done!')
     return all_present
 

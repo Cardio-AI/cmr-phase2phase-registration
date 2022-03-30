@@ -437,9 +437,10 @@ class PhaseRegressionGenerator_v2(DataGenerator):
         self.SOFTMAX_AXIS = config.get('SOFTMAX_AXIS', 0)
         self.ROLL2SEPTUM = config.get('ROLL2SEPTUM', True)
         self.ROLL2LV = config.get('ROLL2LV', True)  # default, center crop according to the mean mse along t
+        workers = config.get('WORKERS', 12)
 
         self.IN_MEMORY = in_memory
-        self.THREAD_POOL = concurrent.futures.ThreadPoolExecutor(max_workers=12)
+        self.THREAD_POOL = concurrent.futures.ThreadPoolExecutor(max_workers=workers)
         self.config = config
 
         if self.REPEAT:

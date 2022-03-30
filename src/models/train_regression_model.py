@@ -87,6 +87,8 @@ def train_fold(config, in_memory=False):
 
     # Create the batchgenerators
     #config['SHUFFLE'] = False
+    #config['WORKERS'] = 1
+    #config['BATCHSIZE'] = 1
     batch_generator = PhaseRegressionGenerator_v2(x_train_sax, x_train_sax, config=config, in_memory=in_memory)
     val_config = config.copy()
     val_config['AUGMENT'] = False
@@ -97,9 +99,9 @@ def train_fold(config, in_memory=False):
 
     import matplotlib.pyplot as plt
     from src.visualization.Visualize import show_2D_or_3D
-    debug = 0 # make sure single threaded
+    debug = 1 # make sure single threaded
     if debug:
-        path_ = 'data/interim/{}_centers_via_mse_threshold/'.format('acdc_volume')
+        path_ = 'data/interim/{}_center_smooth_via_mse_threshold/'.format('dmd_volume')
         ensure_dir(path_)
         i = 0
         for b in batch_generator:
