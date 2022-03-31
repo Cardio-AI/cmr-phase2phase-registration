@@ -753,10 +753,10 @@ def get_center_by_mse(model_inputs):
     else:
         mse_mean_mask_filter = mse_mean_mask
     # extract one mse center per t, this should be more robust to outliers than com of a mean mse
-    try:  # smoothed center, move center from vol center towards the mse center of mass
-        center_vol = np.array(mse_mean_mask_filter.shape) // 2  # center of volume
+    try:  # smoothed center, move center from vol center towards the mse center of mass, performs little worse
+        #center_vol = np.array(mse_mean_mask_filter.shape) // 2  # center of volume
         center = nd.center_of_mass(mse_mean_mask_filter)
-        center = (np.array(center_vol) + np.array(center)) // 2
+        #center = (np.array(center_vol) + np.array(center)) // 2
         center = np.array(center[1:]) + border
         # centers = np.array([nd.center_of_mass(elem[:, border:-border, border:-border]) for elem in mse_mean_mask if elem[:, border:-border, border:-border].max()>0])
     except Exception as e:

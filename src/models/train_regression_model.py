@@ -99,7 +99,7 @@ def train_fold(config, in_memory=False):
 
     import matplotlib.pyplot as plt
     from src.visualization.Visualize import show_2D_or_3D
-    debug = 1 # make sure single threaded
+    debug = 0 # make sure single threaded
     if debug:
         path_ = 'data/interim/{}_center_smooth_via_mse_threshold/'.format('dmd_volume')
         ensure_dir(path_)
