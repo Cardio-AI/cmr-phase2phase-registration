@@ -110,3 +110,5 @@ target/
 logs/tfdbg2_logdir/
 
 *.avi
+
+*.mp4
