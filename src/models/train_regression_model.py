@@ -85,7 +85,7 @@ def train_fold(config, in_memory=False):
        all_given = all_files_in_df(DF_META, x_train_sax, x_val_sax)
        logging.info('found all patients in df meta: {}'.format(all_given))
 
-    debug = 1  # make sure single threaded
+    debug = 0  # make sure single threaded
     # Create the batchgenerators
     if debug:
         config['SHUFFLE'] = False
