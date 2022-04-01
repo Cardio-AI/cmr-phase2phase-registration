@@ -108,3 +108,5 @@ target/
 *.zip
 
 logs/tfdbg2_logdir/
+
+*.avi

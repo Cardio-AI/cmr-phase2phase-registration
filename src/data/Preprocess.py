@@ -722,15 +722,18 @@ def get_center_by_mse(model_inputs):
 
     """
     import tensorflow as tf
+    from src.visualization.Visualize import show_2D_or_3D
+    import matplotlib.pyplot as plt
     nz, ny, nx = model_inputs.shape[-3:]
     border_percentage = 20
     gray_percentile_threshold = .99
+    lower_gray_percentile_threshold = .90 # .90
     mse_threshold = 90
     gaus_sigma = 3
     nyx = np.array([int(ny), int(nx)])
     border = ((nyx / 100) * border_percentage).astype(np.int)
     temp = clip_quantile(model_inputs, gray_percentile_threshold,
-                         lower_boundary=-1 * np.quantile(-1 * model_inputs, .90))
+                         lower_boundary=-1 * np.quantile(-1 * model_inputs, lower_gray_percentile_threshold))
     temp = normalise_image(temp[:-1, nz // 4:, border[0]:-border[0], border[1]:-border[1]], normaliser='standard')
     temp_roll = np.roll(temp, shift=-1, axis=0)
     # ignore the mse between frame t0 and t-1, as this might reflect the cut cmr sequence
@@ -747,21 +750,24 @@ def get_center_by_mse(model_inputs):
         return largestCC
 
     mse_mean_mask = mse_mean > np.percentile(mse_mean, mse_threshold)
-    detected_percentage = (100 / mse_mean_mask.size) * mse_mean_mask.sum()
-    if detected_percentage < 10:
-        mse_mean_mask_filter = getLargestCC(mse_mean_mask)
-    else:
-        mse_mean_mask_filter = mse_mean_mask
+    #detected_percentage = (100 / mse_mean_mask.size) * mse_mean_mask.sum()
+    #if detected_percentage < 10:
+    mse_mean_mask_filter = getLargestCC(mse_mean_mask)
+    reduced_part = mse_mean_mask_filter.sum()/mse_mean_mask.sum()
+    # else:
+    #     mse_mean_mask_filter = mse_mean_mask
     # extract one mse center per t, this should be more robust to outliers than com of a mean mse
     try:  # smoothed center, move center from vol center towards the mse center of mass, performs little worse
-        #center_vol = np.array(mse_mean_mask_filter.shape) // 2  # center of volume
         center = nd.center_of_mass(mse_mean_mask_filter)
-        #center = (np.array(center_vol) + np.array(center)) // 2
+        if reduced_part < 0.7: # this is a strong indicator that there are more than two possible focuses, better use the center
+            center = np.array(mse_mean_mask_filter.shape) // 2  # center of volume
+            #center = (np.array(center_vol) + np.array(center)) // 2
         center = np.array(center[1:]) + border
         # centers = np.array([nd.center_of_mass(elem[:, border:-border, border:-border]) for elem in mse_mean_mask if elem[:, border:-border, border:-border].max()>0])
     except Exception as e:
         print('centers')
         print(e)
+        center = np.array(mse_mean_mask_filter.shape) // 2 # center of volume
     return center
 
 
