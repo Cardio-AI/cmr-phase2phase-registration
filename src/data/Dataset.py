@@ -1940,3 +1940,128 @@ def load_phase_reg_exp(exp_root):
             _ = [patients.append(p) for p in lines]
 
     return nda_vects, gt, pred, gt_len, mov, patients
+
+
+def load_tof_phase_gt(filename='/mnt/ssd/data/tof/02_imported_4D_unfiltered/SAx_3D_dicomTags_phase.csv'):
+    """
+    Load a csv file with the ground truth idx per phase
+    This method behave different for the ACDC GT
+    Parameters
+    ----------
+    filename : (str) path to the csv file
+
+    Returns pd.DataFrame with ['patient', 'ED#', 'MS#', 'ES#', 'PF#', 'MD#']
+    -------
+
+    """
+
+    # tof, this phase2idx mapping starts with idx 1, we need a format where we start with 0
+    gt_df = pd.read_csv(filename)
+    gt_df['patient'] = gt_df['patient'].str.lower()
+    gt_df = gt_df[['patient', 'ED#', 'MS#', 'ES#', 'PF#', 'MD#']]
+    print('min\n', gt_df[['ED#', 'MS#', 'ES#', 'PF#', 'MD#']].min())
+    gt_df[['ED#', 'MS#', 'ES#', 'PF#', 'MD#']] = gt_df[['ED#', 'MS#', 'ES#', 'PF#', 'MD#']] - 1
+    gt_df[['ED#', 'MS#', 'ES#', 'PF#', 'MD#']] = gt_df[['ED#', 'MS#', 'ES#', 'PF#', 'MD#']].astype('int')
+    gt_df = gt_df.drop_duplicates(subset='patient')
+    return gt_df
+
+def load_acdc_phase_gt(filename='/mnt/ssd/data/acdc/02_imported_4D_unfiltered/SAx_3D_dicomTags_phase.csv'):
+    # acdc
+    # load gt in the same order as this dataframe, merge on patient
+    gt_df = pd.read_csv(filename)
+    gt_df['patient'] = gt_df['patient'].apply(lambda x: str(x).zfill(3))
+    #print('min\n', gt_df[['ED#', 'MS#', 'ES#', 'PF#', 'MD#']].min())
+    return gt_df
+
+def calc_vol_along_t(file_4d, label=3):
+    """
+    Calc the volume over time for a given 4D CMR filename and a label
+    labels are usually encoded as:
+    0,1,2,3 = background,RV,MYO,LV
+    Parameters
+    ----------
+    file_4d : (str) filename for a 4D CMR
+    label : (int) defining the flat value for a label of interest
+
+    Returns (list) with len(list)== 4D_cmr.shape[0] and the corresponding 3D volumes in ml
+    -------
+
+    """
+    temp = sitk.ReadImage(file_4d)
+    assert temp.GetDimension()==4,'please provide a list of 4D files, got: {}'.format(temp.GetDimension())
+    spacing = temp.GetSpacing()
+    nda = sitk.GetArrayFromImage(temp)
+    lv_voxels = (nda==label).sum(axis=(1,2,3))
+    voxel_size = spacing[0]*spacing[1]*spacing[2]
+    lv_voxels = (lv_voxels*voxel_size)/1000
+    return lv_voxels
+
+def create_lv_vol_df(filenames, dataset='acdc'):
+    """
+    Create a dataframe with:
+
+    df = pd.DataFrame({'patient_long':patients_long,
+                   'patient': patients,
+                   'ed': ed_idxs,
+                   'es': es_idxs,
+                   'volume_change': volumes
+                  'cycle_len': cycle_len}
+
+    Parameters
+    ----------
+    filenames : (list of str) list of full paths to 4D CMR files (should work with nrrd and nifti)
+    dataset : (str) either 'acdc' or 'tof'
+
+    Returns pd.DataFrame
+    -------
+
+    """
+
+    assert len(filenames)>0,'please provide a list of 4D files'
+    assert dataset in ['acdc', 'tof']
+
+    volumes = [calc_vol_along_t(x) for x in filenames]
+    ed_idxs = [np.argmax(x) for x in volumes]
+    es_idxs = [np.argmin(x) for x in volumes]
+    cycle_len = [sitk.ReadImage(x).GetSize()[-1] for x in filenames]
+    patients_long = [os.path.basename(x).split('_')[0] for x in filenames]
+
+    # the patient id is different depending on the dataset
+    if dataset.lower() == 'acdc':
+        patients = [x.split('patient')[1] for x in patients_long]
+    else:
+        patients = [x.split('-')[1].lower() for x in patients_long]
+
+    return pd.DataFrame({'patient_long': patients_long,
+                       'patient': patients,
+                       'ed_idxs': ed_idxs,
+                       'es_idxs': es_idxs,
+                       'volume_change': volumes,
+                       'cycle_len': cycle_len})
+
+def predict_phase_from_vol(filenames, dataset):
+    """
+    Calc the LV volume per 3D volume and predict the ED/ES phase
+    Merge the prediction with the gt
+    Calc the pFD per ED/ES
+    Calc the Accuracy per ED/ES
+    Parameters
+    ----------
+    filenames : list of 4D filenames
+    dataset : (str) one of ['acdc', 'tof']
+
+    Returns
+    -------
+
+    """
+    # predict the LV volume over time, create a dataframe
+    df = create_lv_vol_df(filenames=filenames, dataset=dataset)
+
+    # load the gt
+    if dataset == 'acdc':
+        gt_df = load_acdc_phase_gt()
+    else:
+        gt_df = load_tof_phase_gt()
+
+    # inner join of pred and gt
+    return pd.merge(left=df, right=gt_df, how='inner', on='patient')

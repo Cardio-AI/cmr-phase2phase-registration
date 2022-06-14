@@ -894,7 +894,7 @@ def get_centers_tf(x):
         tf.tile(tf.convert_to_tensor([x[0] // 2, x[1] // 2, x[2] // 2])[tf.newaxis, tf.newaxis, tf.newaxis, ...],
                 (x[0], x[1], x[2], 1)), tf.float32)
 
-def get_angle_tf(a, b):
+def get_angle_tf(a, b, indegree=False):
     # this should work for batches of n-dimensional vectors
     # α = arccos[(a · b) / (|a| * |b|)]
     # |v| = √(x² + y² + z²)
@@ -903,18 +903,21 @@ def get_angle_tf(a, b):
     If vectors a = [xa, ya, za], b = [xb, yb, zb], then:
     α = arccos[(xa * xb + ya * yb + za * zb) / (√(xa2 + ya2 + za2) * √(xb2 + yb2 + zb2))]
     """
-    # import math as m
-    # pi = tf.constant(m.pi)
+    import math as m
+    pi = tf.constant(m.pi)
     b = tf.cast(b, dtype=a.dtype)
     inner = tf.einsum('...i,...i->...', a, b)
     norms = tf.norm(a, ord='euclidean', axis=-1) * tf.norm(b, ord='euclidean', axis=-1)  # [...,None]
     cos = inner / (norms + sys.float_info.epsilon)
-    # rad = tf.math.acos(tf.clip_by_value(cos, -1.0, 1.0))
-    # rad2deg conversion
-    # deg = rad * (180.0/pi)
+    if indegree:
+        rad = tf.math.acos(cos)
+        #rad = tf.math.acos(tf.clip_by_value(cos, -1.0, 1.0)) # need to check if this is necessary
+        # rad2deg conversion
+        deg = rad * (180.0/pi)
+        cos = deg
     return cos[..., tf.newaxis]
 
-def get_angle_np(a, b):
+def get_angle_np(a, b, indegree=False):
     # this should work for batches of n-dimensional vectors
     # α = arccos[(a · b) / (|a| * |b|)]
     # |v| = √(x² + y² + z²)
@@ -923,15 +926,18 @@ def get_angle_np(a, b):
     If vectors a = [xa, ya, za], b = [xb, yb, zb], then:
     α = arccos[(xa * xb + ya * yb + za * zb) / (√(xa2 + ya2 + za2) * √(xb2 + yb2 + zb2))]
     """
-    # import math as m
-    # pi = tf.constant(m.pi)
+    import math as m
+    pi = m.pi
     #b = np.cast(b, dtype=a.dtype)
     inner = np.einsum('...i,...i->...', a, b)
     norms = np.linalg.norm(a, axis=-1) * np.linalg.norm(b, axis=-1)  # [...,None]
     cos = inner / (norms + sys.float_info.epsilon)
-    # rad = tf.math.acos(tf.clip_by_value(cos, -1.0, 1.0))
-    # rad2deg conversion
-    # deg = rad * (180.0/pi)
+    if indegree:
+        rad = np.arccos(np.clip(cos, -1.0, 1.0))
+        #rad = np.arccos(cos)
+        # rad2deg conversion
+        deg = rad * (180.0 / pi)
+        cos = deg
     return cos[..., np.newaxis]
 
 class SpatialTransformer(Layer):

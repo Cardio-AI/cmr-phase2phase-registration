@@ -127,7 +127,6 @@ def train_fold(config, in_memory=False):
                 i = i+1
 
     # get model
-    #model = create_PhaseRegressionModel_v2(config)
     model = PhaseRegressionModel(config=config).get_model()
 
     # write the model summary to a txt file
@@ -203,7 +202,7 @@ def main(args=None, in_memory=False):
         # Define new paths, so that we make sure that:
         # 1. we dont overwrite a previous config
         # 2. cluster based trainings are compatible with saving locally (cluster/local)
-        # we dont need to initialise this config, as it should already have the correct formatings,
+        # we dont need to initialise this config, as it should already have the correct format,
         # The fold configs will be saved within each fold run
         # add a timestep to each project to make repeated experiments unique
         EXPERIMENT = config.get('EXPERIMENT', 'UNDEFINED')

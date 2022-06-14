@@ -577,7 +577,6 @@ class MotionDataGenerator(DataGenerator):
             self.__plot_state_if_debug__(img=model_inputs[0], mask=model_outputs[0], start_time=t1, step='augmented')
             t1 = time()
 
-        # TODO: check if the newaxis command is still used
         # clip, pad/crop and normalise & extend last axis
         model_inputs = map(lambda x: clip_quantile(x, .9999), model_inputs)
         model_inputs = list(map(lambda x: pad_and_crop(x, target_shape=self.DIM), model_inputs))
