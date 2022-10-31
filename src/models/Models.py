@@ -311,8 +311,14 @@ def create_RegistrationModel_inkl_mask(config):
             # repeat ED along the t-axis
             # add the ed phase as 4th channel to each phase
             # replace t shifted by the ed phase as second input for the compose flow
+            # x[:, 0:1, ..., -1:] --> the shape is B, Phases, Z, X, Y, C
+            # The order of the volumes in our channel depends on the parameter "register_backwards",
+            # if register_backwards: Channel 0 ==Phase-1 (shift to the left); Channel 1==Phase
+            # else: Channel 0==Phase; Channel 1==Phase-1 (shift to the left)
+            # Here we slice the ED 3D volume and choose the last channel, which represents the actual frame
+            # in our stack lambda layers we use the first Channel for transformation
             stack_lambda_layer = keras.layers.Lambda(
-                lambda x: keras.layers.Concatenate(axis=-1)([x[...,1:], tf.repeat(x[:, 0:1, ..., -1:], x.shape[1], axis=1)]),
+                lambda x: keras.layers.Concatenate(axis=-1)([x[...,0:1], tf.repeat(x[:, 0:1, ..., -1:], x.shape[1], axis=1)]),
                 name='stack_ed')
             input_tensor = input_tensor_raw
             input_tensor_ed = stack_lambda_layer(input_tensor_raw)
@@ -335,9 +341,9 @@ def create_RegistrationModel_inkl_mask(config):
             keras.layers.Concatenate(axis=-1)([input_mask_tensor, flows]))
 
         if COMPOSE_CONSISTENCY:
-            # here we feed
+            # 2nd encoder for p2ed graph flow
             unet_ed = create_unet(config_temp, single_model=False)
-            pre_flows = TimeDistributed(unet_ed, name='unet_ed')(input_tensor_ed)
+            pre_flows = TimeDistributed(unet, name='unet_ed')(input_tensor_ed)
             # composed flowfield should move each phase to ED
             flows_p2ed = TimeDistributed(conv_layer_p2ed, name='unet2flow_ed2p')(pre_flows)
             comp_transformed = TimeDistributed(st_p2ed_lambda_layer, name='st_p2ed')(
@@ -357,7 +363,7 @@ def create_RegistrationModel_inkl_mask(config):
                       outputs=outputs)
 
         from keras.losses import mse
-        from src.utils.Metrics import Grad, MSE_
+        from src.utils.Metrics import Grad, MSE_, SSIM
         from src.utils.Metrics import dice_coef_loss
 
         losses = [MSE_().loss, dice_coef_loss, Grad('l2').loss]
