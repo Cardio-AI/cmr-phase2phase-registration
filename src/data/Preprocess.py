@@ -12,12 +12,11 @@ from src.data.Dataset import describe_sitk, get_metadata_maybe, copy_meta_and_sa
 import numpy as np
 import scipy.ndimage as nd
 
-from albumentations import GridDistortion, RandomRotate90, Compose, ReplayCompose, Flip, Transpose, OneOf, IAAAdditiveGaussianNoise, \
-    MotionBlur, MedianBlur, Blur, OpticalDistortion, IAAPiecewiseAffine, CLAHE, IAASharpen, IAAEmboss, \
-    RandomBrightnessContrast, HueSaturationValue, ElasticTransform, CenterCrop, PadIfNeeded, RandomBrightness, Downscale, ShiftScaleRotate
+from albumentations import GridDistortion, RandomRotate90, Compose, ReplayCompose, Downscale, ShiftScaleRotate, Flip, Transpose, OneOf, IAAAdditiveGaussianNoise, \
+    MotionBlur, MedianBlur, Blur, OpticalDistortion, IAAPiecewiseAffine, CLAHE, IAASharpen, IAAEmboss
 import cv2
 from src.data.Dataset import copy_meta
-from albumentations.augmentations.transforms import PadIfNeeded, GaussNoise, RandomGamma
+#from albumentations.augmentations.transforms import PadIfNeeded, GaussNoise, RandomGamma
 
 
 def load_masked_img(sitk_img_f, mask=False, masking_values = [1,2,3], replace=('img','msk'), mask_labels=[0,1,2,3], maskAll=True, is_mask=False):
