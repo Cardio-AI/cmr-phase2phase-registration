@@ -310,11 +310,13 @@ def create_RegistrationModel_inkl_mask(config):
             # extract the ed phase as volume
             # repeat ED along the t-axis
             # add the ed phase as 4th channel to each phase
+            # replace t shifted by the ed phase as second input for the compose flow
             stack_lambda_layer = keras.layers.Lambda(
-                lambda x: keras.layers.Concatenate(axis=-1)([x, tf.repeat(x[:, 0:1, ..., -1:], x.shape[1], axis=1)]),
+                lambda x: keras.layers.Concatenate(axis=-1)([x[...,1:], tf.repeat(x[:, 0:1, ..., -1:], x.shape[1], axis=1)]),
                 name='stack_ed')
-            input_tensor = stack_lambda_layer(input_tensor_raw)
-            config_temp['IMG_CHANNELS'] = config.get('IMG_CHANNELS', 1) + 1  # extend the config, for the u-net creation
+            input_tensor = input_tensor_raw
+            input_tensor_ed = stack_lambda_layer(input_tensor_raw)
+            config_temp['IMG_CHANNELS'] = config.get('IMG_CHANNELS', 1)  # extend the config, for the u-net creation
         else:
             input_tensor = input_tensor_raw
 
@@ -333,6 +335,9 @@ def create_RegistrationModel_inkl_mask(config):
             keras.layers.Concatenate(axis=-1)([input_mask_tensor, flows]))
 
         if COMPOSE_CONSISTENCY:
+            # here we feed
+            unet_ed = create_unet(config_temp, single_model=False)
+            pre_flows = TimeDistributed(unet_ed, name='unet_ed')(input_tensor_ed)
             # composed flowfield should move each phase to ED
             flows_p2ed = TimeDistributed(conv_layer_p2ed, name='unet2flow_ed2p')(pre_flows)
             comp_transformed = TimeDistributed(st_p2ed_lambda_layer, name='st_p2ed')(

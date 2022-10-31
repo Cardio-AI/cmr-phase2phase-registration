@@ -69,7 +69,7 @@ def create_unet(config, metrics=None, networkname='unet', single_model=True, sup
     else:
         # distribute the training with the mirrored data paradigm across multiple gpus if available, if not use gpu 0
         strategy = tf.distribute.MirroredStrategy(devices=config.get('GPUS', ["/gpu:0"]))
-    atexit.register(strategy._extended._collective_ops._pool.close)
+    #atexit.register(strategy._extended._collective_ops._pool.close)
     with strategy.scope():
 
         inputs = Input((*config.get('DIM', [224, 224]), config.get('IMG_CHANNELS', 3)))
