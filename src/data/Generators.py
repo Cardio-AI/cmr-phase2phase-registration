@@ -1185,6 +1185,13 @@ class PhaseMaskWindowGenerator(DataGenerator):
 
         # crop before smoothing, this improves the speed of the following steps
         # and reduces the memory footprint
+        model_inputs, model_m_inputs = align_inplane_with_ip(model_inputs=model_inputs,
+                                                             msk_file_name=model_m_inputs,
+                                                             roll2septum=False,
+                                                             roll2lvbood=True,
+                                                             rotate=False,
+                                                             translate=True)
+
         model_inputs = pad_and_crop(model_inputs, target_shape=(model_inputs.shape[0], *self.DIM))
         model_m_inputs = pad_and_crop(model_m_inputs, target_shape=(model_m_inputs.shape[0], *self.DIM))
         logging.debug('pad/crop took: {:0.3f} s'.format(time() - t1))
@@ -1218,6 +1225,9 @@ class PhaseMaskWindowGenerator(DataGenerator):
         # temporal order of these channels: [nda[idx_shift_to_left], nda[idx_middle], nda[idxs]]
         combined = np.stack(combined, axis=-1)
         combined_m = np.stack(combined_m, axis=-1)
+
+
+
         logging.debug('stacking took: {:0.3f} s'.format(time() - t1))
         t1 = time()
 

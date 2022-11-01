@@ -637,7 +637,6 @@ def get_ip_from_mask_3d(msk_3d, debug=False, keepdim=False, rev=False):
             pass
 
     return first_ips, second_ips
-
 def align_inplane_with_ip(model_inputs, msk_file_name, roll2septum=True, roll2lvbood=False, rotate=True, translate=True):
     '''
     Rotate a 4d SAX CMR stack according to the RV insertion points of a corresponding mask
@@ -652,39 +651,25 @@ def align_inplane_with_ip(model_inputs, msk_file_name, roll2septum=True, roll2lv
     -------
 
     '''
-
-    if type(msk_file_name) == type(''):
-        mask = sitk.GetArrayFromImage(sitk.ReadImage(msk_file_name))
-    else:
-        mask = msk_file_name
-    # t,z,y,x --> numpy order of dimensions
-    # Find the first labelled time step, could also be done for all labelled time steps
-    if mask.ndim==3:
-        mask3d = mask
-    elif mask.shape[0] ==1:
-        mask3d = mask[0]
-    else:
-        i = get_first_idx(mask)
-        mask3d = mask[i]
-
-    import matplotlib.pyplot as plt
-    from src.visualization.Visualize import show_2D_or_3D
-    # first roll to center of mean septum,
-    # than rotate to a 90 degree angle between the septum and the x-axis
-    # Get the anterior and inferior insertion points for all valid slices
-    fips, sips = get_ip_from_mask_3d(mask3d)
-    # average both points to find the mean fip and sip per volume
-    fip = np.array(fips).mean(axis=0)
-    sip = np.array(sips).mean(axis=0)
-
+    if roll2lvbood or roll2septum: # for this alignment we need a mask
+        if type(msk_file_name) == type(''):
+            mask = sitk.GetArrayFromImage(sitk.ReadImage(msk_file_name))
+        else:
+            mask = msk_file_name
+        # t,z,y,x --> numpy order of dimensions
+        # Find the first labelled time step, could also be done for all labelled time steps
+        if mask.ndim==3:
+            mask3d = mask
+        elif mask.shape[0] ==1:
+            mask3d = mask[0]
+        else:
+            i = get_first_idx(mask)
+            mask3d = mask[i]
 
     # Move to center of lv bloodpool
     if roll2lvbood:
-        center = nd.center_of_mass(mask3d==3)
+        center = nd.center_of_mass(mask3d==1)
         center = center[1:] # ignore z-axis for translation
-    elif roll2septum: # roll2septum/mean septum wall is default fallback
-        center = np.mean([fip,sip], axis=0).astype(int)
-        center = center[::-1]
     else: # use the mean squared error along t as definition of the center of change
 
         ##### new
@@ -692,21 +677,23 @@ def align_inplane_with_ip(model_inputs, msk_file_name, roll2septum=True, roll2lv
 
     if translate:
         # translation to center of septum or lv bloodpool
-        ny, nx = model_inputs.shape[-2:]
-        ry = int(ny//2-center[0])
-        rx = int(nx//2-center[1])
+        nz, ny, nx = model_inputs.shape[-3:]
+        ry = int(ny//2-center[-2])
+        rx = int(nx//2-center[-1])
         model_inputs = np.roll(model_inputs, ry, axis=-2) # roll the y-axis
         model_inputs = np.roll(model_inputs, rx, axis=-1) # roll the x-axis
-
-    if rotate:
-        # Calc the angle between the mean septum and the x-axis
-        ip_angle = get_angle2x(fip, sip)
-        # How much do we want to rotate
-        rot_angle = ip_angle - 90
-        # Rotate the 4D volume in-plane (x,y-axis)
-        model_inputs = ndimage.rotate(model_inputs, angle=rot_angle, reshape=False, order=1, axes=(-2, -1))
-
-    return model_inputs
+        mask = np.roll(mask, ry, axis=-2)  # roll the y-axis
+        mask = np.roll(mask, rx, axis=-1)  # roll the x-axis
+        if len(center) == 3:
+            # we are interested to focus on the midcavity slices
+            # the y-axis goes from basal (0) to the apical (z-1) area
+            # our mse based focus will result in a more basal focus coordinate for z
+            # as the basal area of the heart is bigger than the apical
+            # to overcome this we shift the focus by 20% into the apical direction
+            rz = int(nz // 2 - np.ceil(center[0]) - model_inputs.shape[1]*0.2) # ceiling will move less to the base
+            model_inputs = np.roll(model_inputs, rz, axis=-3)  # roll the z-axis
+            mask = np.roll(mask, rz, axis=-3)  # roll the z-axis
+    return model_inputs, mask
 
 
 def get_center_by_mse(model_inputs):
