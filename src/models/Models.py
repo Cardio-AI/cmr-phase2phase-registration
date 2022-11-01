@@ -256,6 +256,9 @@ def create_RegistrationModel_inkl_mask(config):
     A registration wrapper for 3D image2image registration
     """
     import random
+    from keras.losses import mse
+    from src.utils.Metrics import Grad, MSE_, SSIM
+    from src.utils.Metrics import dice_coef_loss
     if tf.distribute.has_strategy():
         strategy = tf.distribute.get_strategy()
     else:
@@ -271,6 +274,7 @@ def create_RegistrationModel_inkl_mask(config):
         reg_loss_weight = config.get('REG_LOSS_WEIGHT', 0.001)
         learning_rate = config.get('LEARNING_RATE', 0.001)
         COMPOSE_CONSISTENCY = config.get('COMPOSE_CONSISTENCY', False)
+        image_loss = config.get('IMAGE_LOSS', 'ssim').lower()
         config_temp = config.copy()
 
         # input vol with timesteps, z, x, y, c -> =number of input timesteps
@@ -322,7 +326,6 @@ def create_RegistrationModel_inkl_mask(config):
                 name='stack_ed')
             input_tensor = input_tensor_raw
             input_tensor_ed = stack_lambda_layer(input_tensor_raw)
-            config_temp['IMG_CHANNELS'] = config.get('IMG_CHANNELS', 1)  # extend the config, for the u-net creation
         else:
             input_tensor = input_tensor_raw
 
@@ -341,8 +344,8 @@ def create_RegistrationModel_inkl_mask(config):
             keras.layers.Concatenate(axis=-1)([input_mask_tensor, flows]))
 
         if COMPOSE_CONSISTENCY:
-            # 2nd encoder for p2ed graph flow
-            unet_ed = create_unet(config_temp, single_model=False)
+            # two options, either a 2nd unet for p2ed graph flow, or we re-use the existing one, with the p2ed CMR stack
+            #unet_ed = create_unet(config_temp, single_model=False)
             pre_flows = TimeDistributed(unet, name='unet_ed')(input_tensor_ed)
             # composed flowfield should move each phase to ED
             flows_p2ed = TimeDistributed(conv_layer_p2ed, name='unet2flow_ed2p')(pre_flows)
@@ -362,15 +365,18 @@ def create_RegistrationModel_inkl_mask(config):
         model = Model(name='simpleregister', inputs=[input_tensor_raw, input_mask_tensor],
                       outputs=outputs)
 
-        from keras.losses import mse
-        from src.utils.Metrics import Grad, MSE_, SSIM
-        from src.utils.Metrics import dice_coef_loss
+        if image_loss == 'mse':
+            image_loss_fn = MSE_.loss
+        elif image_loss == 'ssim':
+            image_loss_fn = SSIM()
 
-        losses = [MSE_().loss, dice_coef_loss, Grad('l2').loss]
+
+        losses = [image_loss_fn, dice_coef_loss, Grad('l2').loss]
         if COMPOSE_CONSISTENCY: losses = [MSE_().loss] + losses + [Grad('l2').loss]
         weights = [image_loss_weight, dice_loss_weight, reg_loss_weight]
         if COMPOSE_CONSISTENCY: weights = [image_loss_weight] + weights + [reg_loss_weight]
-        model.compile(optimizer=keras.optimizers.Adam(learning_rate=learning_rate), loss=losses,
+        model.compile(optimizer=keras.optimizers.Adam(learning_rate=learning_rate),
+                      loss=losses,
                       loss_weights=weights)
 
     return model
