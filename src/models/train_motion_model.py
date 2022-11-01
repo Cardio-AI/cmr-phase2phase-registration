@@ -15,7 +15,10 @@ def train_fold(config, in_memory=False):
     # this should import glob, os, and many other standard libs
     from tensorflow.python.client import device_lib
     import tensorflow as tf
+    import numpy as np
     tf.get_logger().setLevel('FATAL')
+    tf.random.set_seed(config.get('SEED', 42))
+    np.random.seed(config.get('SEED', 42))
     import gc, logging, os, datetime, re
     from logging import info
 
@@ -44,15 +47,15 @@ def train_fold(config, in_memory=False):
         "%Y-%m-%d_%H_%M"))  # add a timestep to each project to make repeated experiments unique
 
     EXPERIMENTS_ROOT = 'exp/'
-    EXP_PATH = os.path.join(EXPERIMENTS_ROOT, EXPERIMENT, timestemp)
-    MODEL_PATH = os.path.join(EXP_PATH, 'model', )
-    TENSORBOARD_PATH = os.path.join(EXP_PATH, 'tensorboard_logs')
-    CONFIG_PATH = os.path.join(EXP_PATH, 'config')
-    HISTORY_PATH = os.path.join(EXP_PATH, 'history')
+    EXP_PATH = config.get('EXP_PATH')
+    FOLD_PATH = os.path.join(EXP_PATH, 'f{}'.format(FOLD))
+    MODEL_PATH = os.path.join(FOLD_PATH, 'model', )
+    TENSORBOARD_PATH = os.path.join(FOLD_PATH, 'tensorboard_logs')
+    CONFIG_PATH = os.path.join(FOLD_PATH, 'config')
+
     ensure_dir(MODEL_PATH)
     ensure_dir(TENSORBOARD_PATH)
     ensure_dir(CONFIG_PATH)
-    ensure_dir(HISTORY_PATH)
 
     DATA_PATH_SAX = config.get('DATA_PATH_SAX')
     DF_FOLDS = config.get('DF_FOLDS')

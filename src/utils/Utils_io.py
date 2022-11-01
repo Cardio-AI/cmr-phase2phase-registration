@@ -27,7 +27,6 @@ def show_available_gpus():
 
     import os
     import tensorflow as tf
-    from tensorflow.keras import backend as K
     from tensorflow.python.client import device_lib
 
     gpus = [x for x in device_lib.list_local_devices() if x.device_type == 'GPU']
