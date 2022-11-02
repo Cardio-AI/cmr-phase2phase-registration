@@ -854,6 +854,13 @@ class PhaseWindowGenerator(DataGenerator):
         # get the volumes of each phase window
         # combined --> t-w, t, t+w, We can use this window in different combinations as input and target
 
+        model_inputs, model_m_inputs = align_inplane_with_ip(model_inputs=model_inputs,
+                                                             msk_file_name=model_m_inputs,
+                                                             roll2septum=False,
+                                                             roll2lvbood=True,
+                                                             rotate=False,
+                                                             translate=True)
+
         if self.BETWEEN_PHASES:
             combined = get_n_windows_between_phases_from_single4D(model_inputs, idx,
                                                                   register_backwards=self.REGISTER_BACKWARDS)
@@ -862,12 +869,7 @@ class PhaseWindowGenerator(DataGenerator):
 
         logging.debug('windowing slicing took: {:0.3f} s'.format(time() - t1))
         t1 = time()
-        model_inputs, model_m_inputs = align_inplane_with_ip(model_inputs=model_inputs,
-                                                             msk_file_name=model_m_inputs,
-                                                             roll2septum=False,
-                                                             roll2lvbood=True,
-                                                             rotate=False,
-                                                             translate=True)
+
 
         # --------------- Image Augmentation, this is done in 2D -------------
         if self.AUGMENT and random.random() <= self.AUGMENT_PROB:
