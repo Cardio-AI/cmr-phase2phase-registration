@@ -274,7 +274,18 @@ def create_RegistrationModel_inkl_mask(config):
         reg_loss_weight = config.get('REG_LOSS_WEIGHT', 0.001)
         learning_rate = config.get('LEARNING_RATE', 0.001)
         COMPOSE_CONSISTENCY = config.get('COMPOSE_CONSISTENCY', False)
-        image_loss = config.get('IMAGE_LOSS', 'ssim').lower()
+        image_loss = config.get('IMAGE_LOSS', 'mse').lower()
+        image_comp_loss = config.get('IMAGE_COMP_LOSS', 'mse').lower()
+        if image_loss == 'ssim':
+            image_loss_fn = SSIM()
+        else:
+            image_loss_fn = MSE_().loss
+        if image_comp_loss =='ssim':
+            image_comp_loss_fn = SSIM()
+        else:
+            image_comp_loss_fn = MSE_().loss
+
+
         config_temp = config.copy()
 
         # input vol with timesteps, z, x, y, c -> =number of input timesteps
@@ -365,14 +376,8 @@ def create_RegistrationModel_inkl_mask(config):
         model = Model(name='simpleregister', inputs=[input_tensor_raw, input_mask_tensor],
                       outputs=outputs)
 
-        if image_loss == 'mse':
-            image_loss_fn = MSE_.loss
-        elif image_loss == 'ssim':
-            image_loss_fn = SSIM()
-
-
         losses = [image_loss_fn, dice_coef_loss, Grad('l2').loss]
-        if COMPOSE_CONSISTENCY: losses = [MSE_().loss] + losses + [Grad('l2').loss]
+        if COMPOSE_CONSISTENCY: losses = [image_comp_loss_fn] + losses + [Grad('l2').loss]
         weights = [image_loss_weight, dice_loss_weight, reg_loss_weight]
         if COMPOSE_CONSISTENCY: weights = [image_loss_weight] + weights + [reg_loss_weight]
         model.compile(optimizer=keras.optimizers.Adam(learning_rate=learning_rate),
