@@ -747,6 +747,8 @@ class PhaseWindowGenerator(DataGenerator):
             model_inputs = load_masked_img(sitk_img_f=x, mask=self.MASKING_IMAGE,
                                            masking_values=self.MASKING_VALUES, replace=self.REPLACE_WILDCARD,
                                            maskAll=False)
+        model_m_inputs = load_msk(f_name=x,
+                                  valid_labels=[2])
         logging.debug('load and masking took: {:0.3f} s'.format(time() - t1))
         t1 = time()
 
@@ -769,6 +771,7 @@ class PhaseWindowGenerator(DataGenerator):
         # --------------- SPLIT IN 3D SITK IMAGES-------------
         # Create a list of 3D volumes for volume resampling
         model_inputs = split_one_4d_sitk_in_list_of_3d_sitk(model_inputs, axis=0, prob=self.AUGMENT_PROB)
+        model_m_inputs = split_one_4d_sitk_in_list_of_3d_sitk(model_m_inputs, axis=0, prob=self.AUGMENT_PROB)
         logging.debug('split in t x 3D took: {:0.3f} s'.format(time() - t1))
         t1 = time()
 
@@ -819,6 +822,14 @@ class PhaseWindowGenerator(DataGenerator):
                                                 interpolate=self.IMG_INTERPOLATION),  # sitk.sitkLinear
                                     zip(model_inputs, new_size_inputs)))
 
+            # CHANGED
+            model_m_inputs = list(map(lambda x:
+                                      resample_3D(sitk_img=x[0],
+                                                  size=x[1],
+                                                  spacing=target_spacing,
+                                                  interpolate=self.MSK_INTERPOLATION),  # sitk.nearest
+                                      zip(model_m_inputs, new_size_inputs)))
+
         logging.debug('Spacing after resample: {}'.format(model_inputs[0].GetSpacing()))
         logging.debug('Size after resample: {}'.format(model_inputs[0].GetSize()))
         logging.debug('spatial resampling took: {:0.3f} s'.format(time() - t1))
@@ -827,6 +838,8 @@ class PhaseWindowGenerator(DataGenerator):
         # --------------- CONTINUE WITH ND-ARRAYS --------------
         # transform to nda for further processing
         model_inputs = np.stack(list(map(lambda x: sitk.GetArrayFromImage(x), model_inputs)), axis=0)
+        model_m_inputs = np.stack(list(map(lambda x: sitk.GetArrayViewFromImage(x), model_m_inputs)), axis=0)
+
         logging.debug('transform to nda took: {:0.3f} s'.format(time() - t1))
         t1 = time()
         self.__plot_state_if_debug__(img=model_inputs[len(model_inputs) // 2], start_time=t1, step='resampled')
@@ -849,6 +862,12 @@ class PhaseWindowGenerator(DataGenerator):
 
         logging.debug('windowing slicing took: {:0.3f} s'.format(time() - t1))
         t1 = time()
+        model_inputs, model_m_inputs = align_inplane_with_ip(model_inputs=model_inputs,
+                                                             msk_file_name=model_m_inputs,
+                                                             roll2septum=False,
+                                                             roll2lvbood=True,
+                                                             rotate=False,
+                                                             translate=True)
 
         # --------------- Image Augmentation, this is done in 2D -------------
         if self.AUGMENT and random.random() <= self.AUGMENT_PROB:
