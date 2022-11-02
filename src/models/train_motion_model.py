@@ -227,7 +227,6 @@ def main(args=None):
     from src.models.Evaluate_moved_myo import calc_dice
     from src.models.predict_motion_model import pred_fold
 
-    config['EPOCHS'] = 1
     for f in config.get('FOLDS', [0]):
         print('starting fold: {}'.format(f))
         config_ = config.copy()
