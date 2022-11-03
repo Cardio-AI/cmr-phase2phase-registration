@@ -233,7 +233,7 @@ def main(args=None):
         cfg = train_fold(config_)
         pred_fold(cfg)
         exp_path = cfg.get('EXP_PATH')
-        
+
     gt_path = os.path.join(exp_path, 'gt_m')
     pred_path = os.path.join(exp_path, 'pred_m')
     calc_dice(gt_path, pred_path, exp_path)

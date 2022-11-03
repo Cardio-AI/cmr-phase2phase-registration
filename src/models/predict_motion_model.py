@@ -217,24 +217,22 @@ def main(args=None):
     EXPERIMENTS_ROOT = 'exp/'
     import glob
     import os
+    import json
     for exp_fold in list(sorted(glob.glob(os.path.join(args.exp, 'f*/')))):
-        #for cfg in list(sorted(glob.glob(os.path.join(args.exp, '**/','config/config.json')))):
 
-        #if args.exp:
-        import json
         cfg = os.path.join(exp_fold, 'config/config.json')
         print('config given: {}'.format(cfg))
         # load the experiment config
         with open(cfg, encoding='utf-8') as data_file:
             config = json.loads(data_file.read())
 
-            EXPERIMENT = config.get('EXPERIMENT', 'UNDEFINED')
-            Console_and_file_logger(EXPERIMENT, logging.INFO)
-            info('Loaded config for experiment: {}'.format(EXPERIMENT))
+        EXPERIMENT = config.get('EXPERIMENT', 'UNDEFINED')
+        Console_and_file_logger(EXPERIMENT, logging.INFO)
+        info('Loaded config for experiment: {}'.format(EXPERIMENT))
 
-            # make relative paths absolute
-            config['MODEL_PATH'] = os.path.join(exp_fold, 'model/')
-            config['EXP_PATH'] = exp_fold
+        # make relative paths absolute
+        config['MODEL_PATH'] = os.path.join(exp_fold, 'model/')
+        config['EXP_PATH'] = exp_fold
 
                 # Load SAX volumes
                 # cluster to local data mapping
