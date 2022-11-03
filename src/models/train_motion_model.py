@@ -161,13 +161,12 @@ def train_fold(config, in_memory=False):
         del model
         del cb
         gc.collect()
-        return config
 
     except Exception as e:
         logging.error(e)
 
     logging.info('Fold {} finished after {:0.3f} sec'.format(FOLD, time() - t0))
-    return True
+    return config
 
 
 def main(args=None):
@@ -232,13 +231,13 @@ def main(args=None):
         config_ = config.copy()
         config_['FOLD'] = f
         cfg = train_fold(config_)
-
         pred_fold(cfg)
         exp_path = cfg.get('EXP_PATH')
-        gt_path = os.path.join(exp_path, 'gt_m')
-        pred_path = os.path.join(exp_path, 'pred_m')
-        calc_dice(gt_path, pred_path, exp_path)
-        print('train fold: {}'.format(f))
+        
+    gt_path = os.path.join(exp_path, 'gt_m')
+    pred_path = os.path.join(exp_path, 'pred_m')
+    calc_dice(gt_path, pred_path, exp_path)
+    print('train fold: {}'.format(f))
 
 
 if __name__ == "__main__":
