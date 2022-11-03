@@ -1238,6 +1238,7 @@ class PhaseMaskWindowGenerator(DataGenerator):
         else:  # Extract the motion at each phase, defined by the window size
             # combined --> t-w, t, t+w, We can use this window in different combinations as input and target
             combined = get_n_windows_from_single4D(model_inputs, idx, window_size=self.WINDOW_SIZE)
+            combined_m = get_n_windows_from_single4D(model_m_inputs, idx, window_size=self.WINDOW_SIZE)
 
         logging.debug('windowing slicing took: {:0.3f} s'.format(time() - t1))
         t1 = time()

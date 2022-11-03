@@ -274,6 +274,7 @@ def create_RegistrationModel_inkl_mask(config):
         reg_loss_weight = config.get('REG_LOSS_WEIGHT', 0.001)
         learning_rate = config.get('LEARNING_RATE', 0.001)
         COMPOSE_CONSISTENCY = config.get('COMPOSE_CONSISTENCY', False)
+        register_spatial = config.get('REGISTER_SPATIAL', False)
         image_loss = config.get('IMAGE_LOSS', 'mse').lower()
         image_comp_loss = config.get('IMAGE_COMP_LOSS', 'mse').lower()
         if image_loss == 'ssim':
@@ -346,14 +347,15 @@ def create_RegistrationModel_inkl_mask(config):
         pre_flows = TimeDistributed(unet, name='unet')(input_tensor)
         print('input after unet:', pre_flows.shape)
         flows = TimeDistributed(conv_layer_p2p, name='unet2flow_p2p')(pre_flows)
-        flows = keras.layers.Concatenate(axis=-1)([tf.zeros_like(flows)[...,0:1], flows[...,-2:]]) # doule check the order of C --> is it zyx?
+        if not register_spatial: flows = keras.layers.Concatenate(axis=-1)([tf.zeros_like(flows)[...,0:1], flows[...,-2:]])
+         # according to the TB C --> is zyx?
         print('flows_p2p:', flows.shape)
         # Each CMR input vol has CMR data from three timesteps stacked as channel: t1,t1+t2/2,t2
         # transform only one timestep, mostly the first one
-        transformed = TimeDistributed(st_lambda_layer, name='st_p2p')(keras.layers.Concatenate(axis=-1)([input_tensor_raw, flows]))
+        transformed = TimeDistributed(st_lambda_layer, name='st_p2p')(keras.layers.Concatenate(axis=-1)([input_tensor_raw[...,0:1], flows]))
         print('transformed_p2p:', transformed.shape)
         transformed_mask = TimeDistributed(st_mask_lambda_layer, name='st_p2p_msk')(
-            keras.layers.Concatenate(axis=-1)([input_mask_tensor, flows]))
+            keras.layers.Concatenate(axis=-1)([input_mask_tensor[...,0:1], flows]))
 
         if COMPOSE_CONSISTENCY:
             # two options, either a 2nd unet for p2ed graph flow, or we re-use the existing one, with the p2ed CMR stack
@@ -361,9 +363,9 @@ def create_RegistrationModel_inkl_mask(config):
             pre_flows = TimeDistributed(unet, name='unet_ed')(input_tensor_ed)
             # composed flowfield should move each phase to ED
             flows_p2ed = TimeDistributed(conv_layer_p2ed, name='unet2flow_ed2p')(pre_flows)
-            flows_p2ed = keras.layers.Concatenate(axis=-1)([tf.zeros_like(flows_p2ed)[..., 0:1],flows_p2ed[..., -2:]])
+            if not register_spatial: flows_p2ed = keras.layers.Concatenate(axis=-1)([tf.zeros_like(flows_p2ed)[..., 0:1],flows_p2ed[..., -2:]])
             comp_transformed = TimeDistributed(st_p2ed_lambda_layer, name='st_p2ed')(
-                keras.layers.Concatenate(axis=-1)([input_tensor_raw, flows_p2ed]))
+                keras.layers.Concatenate(axis=-1)([input_tensor_raw[...,0:1], flows_p2ed]))
             comp_transformed = keras.layers.Lambda(lambda x: x, name='comp_transformed')(comp_transformed)
             flows_p2ed = keras.layers.Lambda(lambda x: x, name='flowfield_p2ed')(flows_p2ed)
             print('comp transformed:', comp_transformed.shape)

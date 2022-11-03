@@ -218,9 +218,9 @@ def main(args=None):
     import glob
     import os
     import json
-    for exp_fold in list(sorted(glob.glob(os.path.join(args.exp, 'f*/')))):
+    if os.path.isdir(os.path.join(args.exp, 'model')):
 
-        cfg = os.path.join(exp_fold, 'config/config.json')
+        cfg = os.path.join(args.exp, 'config/config.json')
         print('config given: {}'.format(cfg))
         # load the experiment config
         with open(cfg, encoding='utf-8') as data_file:
@@ -231,20 +231,20 @@ def main(args=None):
         info('Loaded config for experiment: {}'.format(EXPERIMENT))
 
         # make relative paths absolute
-        config['MODEL_PATH'] = os.path.join(exp_fold, 'model/')
-        config['EXP_PATH'] = exp_fold
+        config['MODEL_PATH'] = os.path.join(args.exp, 'model/')
+        config['EXP_PATH'] = args.exp
 
-                # Load SAX volumes
-                # cluster to local data mapping
-        #if args.data:
+        # Load SAX volumes
+        # cluster to local data mapping
+        # if args.data:
         data_root = args.data
         config['DATA_PATH_SAX'] = os.path.join(data_root, 'sax')
         df_folds = os.path.join(data_root, 'df_kfold.csv')
         # this part is necessary if we try to predict on files that are not in the df folds file
         # meaning dta which we did not use in the cv (e.g. dmd control)
-        if os.path.isfile(df_folds) :
+        if os.path.isfile(df_folds):
             config['DF_FOLDS'] = df_folds
-        else :
+        else:
             config['DF_FOLDS'] = None
 
         df_meta = os.path.join(data_root, 'SAx_3D_dicomTags_phase.csv')
@@ -253,6 +253,42 @@ def main(args=None):
         else:
             config['DF_META'] = None
         pred_fold(config)
+    else: # predict a CV
+        for exp_fold in list(sorted(glob.glob(os.path.join(args.exp, 'f*/')))):
+
+            cfg = os.path.join(exp_fold, 'config/config.json')
+            print('config given: {}'.format(cfg))
+            # load the experiment config
+            with open(cfg, encoding='utf-8') as data_file:
+                config = json.loads(data_file.read())
+
+            EXPERIMENT = config.get('EXPERIMENT', 'UNDEFINED')
+            Console_and_file_logger(EXPERIMENT, logging.INFO)
+            info('Loaded config for experiment: {}'.format(EXPERIMENT))
+
+            # make relative paths absolute
+            config['MODEL_PATH'] = os.path.join(exp_fold, 'model/')
+            config['EXP_PATH'] = exp_fold
+
+                    # Load SAX volumes
+                    # cluster to local data mapping
+            #if args.data:
+            data_root = args.data
+            config['DATA_PATH_SAX'] = os.path.join(data_root, 'sax')
+            df_folds = os.path.join(data_root, 'df_kfold.csv')
+            # this part is necessary if we try to predict on files that are not in the df folds file
+            # meaning dta which we did not use in the cv (e.g. dmd control)
+            if os.path.isfile(df_folds) :
+                config['DF_FOLDS'] = df_folds
+            else :
+                config['DF_FOLDS'] = None
+
+            df_meta = os.path.join(data_root, 'SAx_3D_dicomTags_phase.csv')
+            if os.path.isfile(df_meta):
+                config['DF_META'] = df_meta
+            else:
+                config['DF_META'] = None
+            pred_fold(config)
 
 
 if __name__ == "__main__":
