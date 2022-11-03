@@ -202,7 +202,7 @@ def main(args=None):
         EXPERIMENT = config.get('EXPERIMENT', 'UNDEFINED')
         timestemp = str(datetime.datetime.now().strftime(
             "%Y-%m-%d_%H_%M"))  # ad a timestep to each project to make repeated experiments unique
-
+        if args.jobid != None: timestemp += "_{}".format(args.jobid)
         config['EXP_PATH'] = os.path.join(EXPERIMENTS_ROOT, EXPERIMENT, timestemp)
         config['MODEL_PATH'] = os.path.join(config['EXP_PATH'], 'model', )
         config['TENSORBOARD_PATH'] = os.path.join(config['EXP_PATH'], 'tensorboard_logs')
@@ -249,6 +249,7 @@ if __name__ == "__main__":
     parser.add_argument('-cfg', action='store', default=None)
     parser.add_argument('-data', action='store', default=None)
     parser.add_argument('-inmemory', action='store', default=None)
+    parser.add_argument('-jobid', action='store', default=None)
 
     #
     parser.add_argument('-sax', action='store', default='/mnt/ssd/data/gcn/02_imported_4D_unfiltered/sax/')
