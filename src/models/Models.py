@@ -324,11 +324,11 @@ def create_RegistrationModel_inkl_mask(config):
                 lambda x: st_mask_layer([x[..., 0:1], x[..., -3:]]), name='p2p_mask')
         else: # ignore the z-axis for the spatial transformer, only x/y movement
             st_lambda_layer = keras.layers.Lambda(
-                lambda x: st_layer([x[..., 0:1], tf.concat([tf.zeros_like(x[..., -1:]), x[..., -2:]], axis=-1)], name='p2p')) # tf.concat([tf.zeros_like(x[..., -1:]), x[..., -2:]], axis=-1)],
+                lambda x: st_layer([x[..., 0:1], tf.concat([tf.zeros_like(x[..., -1:]), x[..., -2:]], axis=-1)]), name='p2p') # tf.concat([tf.zeros_like(x[..., -1:]), x[..., -2:]], axis=-1)],
             st_p2ed_lambda_layer = keras.layers.Lambda(
-                lambda x: st_layer_p2ed([x[..., 0:1], tf.concat([tf.zeros_like(x[..., -1:]), x[..., -2:]], axis=-1)], name='p2ed'))
+                lambda x: st_layer_p2ed([x[..., 0:1], tf.concat([tf.zeros_like(x[..., -1:]), x[..., -2:]], axis=-1)]), name='p2ed')
             st_mask_lambda_layer = keras.layers.Lambda(
-                lambda x: st_mask_layer([x[..., 0:1], tf.concat([tf.zeros_like(x[..., -1:]), x[..., -2:]], axis=-1)], name='p2p_mask'))
+                lambda x: st_mask_layer([x[..., 0:1], tf.concat([tf.zeros_like(x[..., -1:]), x[..., -2:]], axis=-1)]), name='p2p_mask')
 
         if COMPOSE_CONSISTENCY:
             # extract the ed phase as volume
