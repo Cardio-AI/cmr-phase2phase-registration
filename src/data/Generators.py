@@ -1061,7 +1061,10 @@ class PhaseMaskWindowGenerator(DataGenerator):
                     '{}'.format(str(e), self.IMAGES[ID], self.LABELS[ID]))
 
         # repeat the ED vol, compose transform will register each time step to this phase
-        comp_transformed = np.repeat(y[:, 0:1, ...], 5, axis=1)
+        if self.REGISTER_BACKWARDS:
+            comp_transformed = np.repeat(y[:, 0:1, ...], 5, axis=1)
+        else:
+            comp_transformed = np.repeat(x[:, 0:1, ...,0:1], 5, axis=1)
         logging.debug('Batchsize: {} preprocessing took: {:0.3f} sec'.format(self.BATCHSIZE, time() - t0))
         zeros = np.zeros((*x.shape[:-1], 3), dtype=np.float32)
         if self.COMPOSE_CONSISTENCY:

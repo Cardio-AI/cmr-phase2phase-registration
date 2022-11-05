@@ -359,7 +359,7 @@ def create_RegistrationModel_inkl_mask(config):
         print('flows_p2p:', flows.shape)
         # Each CMR input vol has CMR data from three timesteps stacked as channel: t1,t1+t2/2,t2
         # transform only one timestep, mostly the first one
-        transformed = TimeDistributed(st_lambda_layer, name='st_p2p')(keras.layers.Concatenate(axis=-1)([input_tensor_raw[...,0:1], flows]))
+        transformed = TimeDistributed(st_lambda_layer, name='st_p2p')(keras.layers.Concatenate(axis=-1)([input_tensor_raw, flows]))
         print('transformed_p2p:', transformed.shape)
         transformed_mask = TimeDistributed(st_mask_lambda_layer, name='st_p2p_msk')(
             keras.layers.Concatenate(axis=-1)([input_mask_tensor[...,0:1], flows]))
@@ -371,7 +371,7 @@ def create_RegistrationModel_inkl_mask(config):
             # composed flowfield should move each phase to ED
             flows_p2ed = TimeDistributed(conv_layer_p2ed, name='unet2flow_ed2p')(pre_flows)
             comp_transformed = TimeDistributed(st_p2ed_lambda_layer, name='st_p2ed')(
-                keras.layers.Concatenate(axis=-1)([input_tensor_raw[...,0:1], flows_p2ed]))
+                keras.layers.Concatenate(axis=-1)([input_tensor_raw, flows_p2ed]))
             comp_transformed = keras.layers.Lambda(lambda x: x, name='comp_transformed')(comp_transformed)
             flows_p2ed = keras.layers.Lambda(lambda x: x, name='flowfield_p2ed')(flows_p2ed)
             print('comp transformed:', comp_transformed.shape)
