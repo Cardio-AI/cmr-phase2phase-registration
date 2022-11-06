@@ -170,9 +170,9 @@ def pred_fold(config, debug=True):
                     'fullmask_target.nii']
         if debug:
             save_all_3d_vols_new(volumes, vol_suffixes=suffixes,
-                                 EXP_PATH=pred_path, exp=p)
+                                 EXP_PATH=pred_path, exp=p, cfg=config)
 
-        save_gt_and_pred(gt=msk_t, pred=msk_m, exp_path=pred_path.replace('pred',''), patient=p)
+        save_gt_and_pred(gt=msk_t, pred=msk_m, exp_path=pred_path.replace('pred',''), patient=p, cfg=config)
         # end new version
     return True
 

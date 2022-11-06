@@ -1718,12 +1718,18 @@ def get_n_windows_between_phases_from_single4D(nda4d, idx, register_backwards=Tr
         # return [t_phases, t_middle, t_shift_to_left]
 
 
-def save_3d(nda, fname, isVector=False):
+def save_3d(nda, fname, isVector=False, cfg=None):
     # save one flowfield
+    nda = np.squeeze(nda)
     sitk_img = sitk.GetImageFromArray(nda, isVector=isVector)
+    if cfg is not None:
+        spacing = cfg.get('SPACING')
+        if nda.ndim==4:
+            spacing = (*spacing,1)
+        sitk_img.SetSpacing(spacing)
     sitk.WriteImage(sitk_img, fname)
 
-def save_gt_and_pred(gt, pred, exp_path, patient):
+def save_gt_and_pred(gt, pred, exp_path, patient, cfg=None):
     """
     Save the ground truth mask and the deformed mask for a given patient and phase
     Parameters
@@ -1750,8 +1756,8 @@ def save_gt_and_pred(gt, pred, exp_path, patient):
     for t, phase in enumerate(cardiac_phases):
         gt_file_name = os.path.join(gt_path, "{}_{}.nii".format(patient, phase))
         pred_file_name = os.path.join(pred_path, "{}_{}.nii".format(patient, phase))
-        save_3d(gt[..., t], gt_file_name)
-        save_3d(pred[..., t], pred_file_name)
+        save_3d(gt[..., t], gt_file_name,cfg=cfg)
+        save_3d(pred[..., t], pred_file_name, cfg=cfg)
 
 
 def save_all_3d_vols(inputs, outputs, moved, moved_mask, flow, inputs_mask, outputs_mask, inputs_lvmask, outputs_lvmask, inputs_full, outputs_full, EXP_PATH, exp='example_flows', save2dplus_t=False):
@@ -1803,7 +1809,7 @@ def save_all_3d_vols(inputs, outputs, moved, moved_mask, flow, inputs_mask, outp
     _ = [save_3d(inputs_full[..., t], firstfilename_full.replace('.nii', '_{}_.nii'.format(t))) for t in range(inputs_full.shape[-1])]
     _ = [save_3d(outputs_full[..., t], secondfilename_full.replace('.nii', '_{}_.nii'.format(t))) for t in range(outputs_full.shape[-1])]
 
-def save_all_3d_vols_new(volumes, vol_suffixes, EXP_PATH, exp='example_flows'):
+def save_all_3d_vols_new(volumes, vol_suffixes, EXP_PATH, exp='example_flows',cfg=None):
 
     """
     Parameters
@@ -1825,11 +1831,11 @@ def save_all_3d_vols_new(volumes, vol_suffixes, EXP_PATH, exp='example_flows'):
     info(experiment_)
     ensure_dir(experiment_)
     # iterate over volumes and sufixes save each tuple
-    list(map(lambda x : save_phases(x[0], experiment_, x[1]),list(zip(volumes, vol_suffixes))))
+    list(map(lambda x : save_phases(x[0], experiment_, x[1], cfg=cfg),list(zip(volumes, vol_suffixes))))
 
 
 
-def save_phases(nda, experiment_, suffix):
+def save_phases(nda, experiment_, suffix, cfg=None):
     """
     Save each 3D nda of a 4D nda with reversed axis order
     expects an nda with: t,z,y,x,c --> saves t times with nda axis of c,x,y,z
@@ -1847,7 +1853,7 @@ def save_phases(nda, experiment_, suffix):
     f_name = os.path.join(experiment_, suffix)
     # invert the axis
     nda = np.einsum('tzyxc->cxyzt', nda)
-    _ = [save_3d(nda[..., t], f_name.replace('.nii', '_{}_.nii'.format(t))) for t in range(nda.shape[-1])]
+    _ = [save_3d(nda[..., t], f_name.replace('.nii', '_{}_.nii'.format(t)), cfg=cfg) for t in range(nda.shape[-1])]
 
 
 def all_files_in_df(METADATA_FILE, x_train_sax, x_val_sax):
