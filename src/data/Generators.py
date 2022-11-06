@@ -1222,10 +1222,10 @@ class PhaseMaskWindowGenerator(DataGenerator):
         t1 = time()
 
         # Added mask smoothness
-        for t in range(model_m_inputs.shape[0]):
-            if model_m_inputs[t].sum() > 0:  # we only need to smooth time steps with a mask
-                if self.SPACING[0]<5: # smooth only if we have face isotrop voxels
-                    model_m_inputs[t] = scipy.ndimage.binary_closing(model_m_inputs[t], iterations=5)
+        if self.SPACING[0] < 5:  # smooth only if we have isotropy voxels, otherwise we used 8mm spacing for z
+            for t in range(model_m_inputs.shape[0]):
+                if model_m_inputs[t].sum() > 0:  # we only need to smooth time steps with a mask
+                        model_m_inputs[t] = scipy.ndimage.binary_closing(model_m_inputs[t], iterations=5)
 
         # --------------- SLICE PAIRS OF INPUT AND TARGET VOLUMES ACCORDING TO CARDIAC PHASE IDX -------------
         # get the volumes of each phase window

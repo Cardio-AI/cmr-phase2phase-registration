@@ -387,6 +387,8 @@ class Grad:
         self.vox_weight = vox_weight
 
     def _diffs(self, y):
+        # the diffs part is recently changed according to the code from morales#mit.edu
+        # https: // github.com / moralesq / DeepStrain / blob / main / models / networks.py
         vol_shape = y.get_shape().as_list()[1:-1]
         ndims = len(vol_shape)
 
@@ -395,18 +397,14 @@ class Grad:
             d = i + 1
             # permute dimensions to put the ith dimension first
             r = [d, *range(d), *range(d + 1, ndims + 2)]
-            yp = K.permute_dimensions(y, r)
-            dfi = yp[1:, ...] - yp[:-1, ...]
-
-            if self.vox_weight is not None:
-                w = K.permute_dimensions(self.vox_weight, r)
-                # TODO: Need to add square root, since for non-0/1 weights this is bad.
-                dfi = w[1:, ...] * dfi
+            y = K.permute_dimensions(y, r)
+            dfi = y[1:, ...] - y[:-1, ...]
 
             # permute back
             # note: this might not be necessary for this loss specifically,
             # since the results are just summed over anyway.
             r = [*range(1, d + 1), 0, *range(d + 1, ndims + 2)]
+            r = [d, *range(1, d), 0, *range(d + 1, ndims + 2)]
             df[i] = K.permute_dimensions(dfi, r)
 
         return df
