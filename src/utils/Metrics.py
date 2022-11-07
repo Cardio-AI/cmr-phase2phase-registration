@@ -377,7 +377,7 @@ class NormRegulariser:
     def __init__(self, name='NormRegLoss'):
         self.name = name
 
-    def norm_loss(selfself,_, y_pred):
+    def norm_loss(self,_, y_pred):
         # ideally this should penalize unnecessary deformation in black areas
         # replace Nan with zeros, otherwise use y_pred
         return tf.math.reduce_euclidean_norm(y_pred, axis=-1)

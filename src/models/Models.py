@@ -292,7 +292,7 @@ def create_RegistrationModel_inkl_mask(config):
         else:
             flow_reg_loss_fn = Grad('l2').loss
         if img_comp_flow_reg_loss == 'norm':
-            flow_comp_reg_loss_fn = NormRegulariser.norm_loss
+            flow_comp_reg_loss_fn = NormRegulariser().norm_loss
         else:
             flow_comp_reg_loss_fn = Grad('l2').loss
 
