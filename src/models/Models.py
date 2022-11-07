@@ -257,7 +257,7 @@ def create_RegistrationModel_inkl_mask(config):
     """
     import random
     from keras.losses import mse
-    from src.utils.Metrics import Grad, MSE_, SSIM
+    from src.utils.Metrics import Grad, MSE_, SSIM, NormRegulariser
     from src.utils.Metrics import dice_coef_loss
     if tf.distribute.has_strategy():
         strategy = tf.distribute.get_strategy()
@@ -277,6 +277,8 @@ def create_RegistrationModel_inkl_mask(config):
         register_spatial = config.get('REGISTER_SPATIAL', False)
         image_loss = config.get('IMAGE_LOSS', 'mse').lower()
         image_comp_loss = config.get('IMAGE_COMP_LOSS', 'mse').lower()
+        img_flow_reg_loss = config.get('IMG_REG_LOSS', 'grad').lower()
+        img_comp_flow_reg_loss = config.get('IMG_COMP_REG_LOSS', 'grad').lower()
         if image_loss == 'ssim':
             image_loss_fn = SSIM()
         else:
@@ -285,6 +287,14 @@ def create_RegistrationModel_inkl_mask(config):
             image_comp_loss_fn = SSIM()
         else:
             image_comp_loss_fn = MSE_().loss
+        if img_flow_reg_loss == 'norm':
+            flow_reg_loss_fn = NormRegulariser().norm_loss
+        else:
+            flow_reg_loss_fn = Grad('l2').loss
+        if img_comp_flow_reg_loss == 'norm':
+            flow_comp_reg_loss_fn = NormRegulariser.norm_loss
+        else:
+            flow_comp_reg_loss_fn = Grad('l2').loss
 
 
         config_temp = config.copy()
@@ -386,8 +396,8 @@ def create_RegistrationModel_inkl_mask(config):
         model = Model(name='simpleregister', inputs=[input_tensor_raw, input_mask_tensor],
                       outputs=outputs)
 
-        losses = [image_loss_fn, dice_coef_loss, Grad('l2').loss]
-        if COMPOSE_CONSISTENCY: losses = [image_comp_loss_fn] + losses + [Grad('l2').loss]
+        losses = [image_loss_fn, dice_coef_loss, flow_reg_loss_fn]
+        if COMPOSE_CONSISTENCY: losses = [image_comp_loss_fn] + losses + [flow_comp_reg_loss_fn]
         weights = [image_loss_weight, dice_loss_weight, reg_loss_weight]
         if COMPOSE_CONSISTENCY: weights = [image_loss_weight] + weights + [reg_loss_weight]
         model.compile(optimizer=keras.optimizers.Adam(learning_rate=learning_rate),

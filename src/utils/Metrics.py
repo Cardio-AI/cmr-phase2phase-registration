@@ -373,6 +373,18 @@ def ca_wrapper(y_true, y_pred):
     y_pred, _ = tf.unstack(y_pred,num=2, axis=1)
     return tf.keras.metrics.categorical_accuracy(y_true, y_pred)
 
+class NormRegulariser:
+    def __init__(self, name='NormRegLoss'):
+        self.name = name
+
+    def norm_loss(selfself,_, y_pred):
+        # ideally this should penalize unnecessary deformation in black areas
+        temp = tf.where(tf.math.is_nan(y_pred), tf.zeros_like(y_pred), y_pred)
+        norm = tf.norm(temp, ord='euclidean', axis=-1)
+        norm = tf.reduce_mean(norm)
+        return norm
+
+
 class Grad:
     """
     N-D gradient loss.
@@ -413,9 +425,6 @@ class Grad:
         """
         returns Tensor of size [bs]
         """
-        #y_pred = tf.where(tf.math.is_nan(y_pred), tf.zeros_like(y_pred), y_pred)
-        #norm = tf.norm(y_pred, axis=-1)
-        #return norm /
 
         if self.penalty == 'l1':
             dif = [tf.abs(f) for f in self._diffs(y_pred)]
@@ -430,10 +439,7 @@ class Grad:
 
         df = [tf.reduce_mean(K.batch_flatten(f), axis=-1) for f in dif]
         grad = tf.add_n(df) / len(df)
-        # ideally this should penalize unnecessary deformation in black areas
-        #temp = tf.where(tf.math.is_nan(y_pred), tf.zeros_like(y_pred), y_pred)
-        #norm = tf.norm(temp, ord='euclidean', axis=-1)
-        #norm = tf.reduce_mean(norm)
+
 
         if self.loss_mult is not None:
             grad *= self.loss_mult
