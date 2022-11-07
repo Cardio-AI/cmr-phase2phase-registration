@@ -359,7 +359,7 @@ def create_RegistrationModel_inkl_mask(config):
                 stack_lambda_layer = keras.layers.Lambda(
                     lambda x: keras.layers.Concatenate(axis=-1)([x[...,0:1], tf.repeat(x[:, 0:1, ..., -1:], x.shape[1], axis=1)]),
                     name='stack_ed')
-            else:
+            else: # register ED to all other phases, first ED2MS
                 stack_lambda_layer = keras.layers.Lambda(
                     lambda x: keras.layers.Concatenate(axis=-1)(
                         [tf.repeat(x[:, 0:1, ..., 0:1], x.shape[1], axis=1), x[..., -1:]]),
