@@ -151,7 +151,7 @@ def train_fold(config, in_memory=False):
         callbacks=cb,
         initial_epoch=initial_epoch,
         max_queue_size=config.get('QUEUE_SIZE',12),
-        verbose=1)
+        verbose=2)
 
 
     try:
