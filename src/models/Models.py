@@ -274,6 +274,7 @@ def create_RegistrationModel_inkl_mask(config):
         reg_loss_weight = config.get('REG_LOSS_WEIGHT', 0.001)
         learning_rate = config.get('LEARNING_RATE', 0.001)
         COMPOSE_CONSISTENCY = config.get('COMPOSE_CONSISTENCY', False)
+        register_backwards = config.get('REGISTER_BACKWARDS', True)
         register_spatial = config.get('REGISTER_SPATIAL', False)
         image_loss = config.get('IMAGE_LOSS', 'mse').lower()
         image_comp_loss = config.get('IMAGE_COMP_LOSS', 'mse').lower()
@@ -283,14 +284,17 @@ def create_RegistrationModel_inkl_mask(config):
             image_loss_fn = SSIM()
         else:
             image_loss_fn = MSE_().loss
+
         if image_comp_loss =='ssim':
             image_comp_loss_fn = SSIM()
         else:
             image_comp_loss_fn = MSE_().loss
+
         if img_flow_reg_loss == 'norm':
             flow_reg_loss_fn = NormRegulariser().norm_loss
         else:
             flow_reg_loss_fn = Grad('l2').loss
+
         if img_comp_flow_reg_loss == 'norm':
             flow_comp_reg_loss_fn = NormRegulariser().norm_loss
         else:
@@ -351,9 +355,15 @@ def create_RegistrationModel_inkl_mask(config):
             # else: Channel 0==Phase; Channel 1==Phase-1 (shift to the left)
             # Here we slice the ED 3D volume and choose the last channel, which represents the actual frame
             # in our stack lambda layers we use the first Channel for transformation
-            stack_lambda_layer = keras.layers.Lambda(
-                lambda x: keras.layers.Concatenate(axis=-1)([x[...,0:1], tf.repeat(x[:, 0:1, ..., -1:], x.shape[1], axis=1)]),
-                name='stack_ed')
+            if register_backwards:
+                stack_lambda_layer = keras.layers.Lambda(
+                    lambda x: keras.layers.Concatenate(axis=-1)([x[...,0:1], tf.repeat(x[:, 0:1, ..., -1:], x.shape[1], axis=1)]),
+                    name='stack_ed')
+            else:
+                stack_lambda_layer = keras.layers.Lambda(
+                    lambda x: keras.layers.Concatenate(axis=-1)(
+                        [tf.repeat(x[:, 0:1, ..., 0:1], x.shape[1], axis=1), x[..., -1:]]),
+                    name='stack_ed')
             input_tensor = input_tensor_raw
             input_tensor_ed = stack_lambda_layer(input_tensor_raw)
         else:
