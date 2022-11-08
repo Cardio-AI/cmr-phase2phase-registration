@@ -675,8 +675,8 @@ class WindowMotionCallback(Callback):
                         movings, vects = pred_
                     elif len(pred_) == 4:
                         _, movings, moving_m, vects = pred_
-                    elif len(pred_) == 5:
-                        _, movings, moving_m, vects, _ = pred_
+                    elif len(pred_) == 5: # compose
+                        moved_comp, movings, moving_m, vects, _ = pred_
                     else:
                         movings, moving_m, vects = pred_
                     # logging.info(predictions.shape)

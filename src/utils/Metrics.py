@@ -380,7 +380,7 @@ class NormRegulariser:
     def norm_loss(self,_, y_pred):
         # ideally this should penalize unnecessary deformation in black areas
         # replace Nan with zeros, otherwise use y_pred
-        return tf.math.reduce_euclidean_norm(y_pred, axis=-1)
+        return tf.reduce_mean(tf.math.reduce_euclidean_norm(y_pred, axis=-1))
         #temp = tf.where(tf.math.is_nan(y_pred), tf.zeros_like(y_pred), y_pred)
         #norm = tf.norm(temp, ord='euclidean', axis=-1)
         #return tf.reduce_mean(norm)
