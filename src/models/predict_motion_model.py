@@ -1,4 +1,4 @@
-
+from src_julian.data.MyMoralesAndCompositionsAHA3 import calculate_strain
 
 
 def pred_fold(config, debug=True):
@@ -289,6 +289,16 @@ def main(args=None):
             else:
                 config['DF_META'] = None
             pred_fold(config)
+        metadata = config.get('DATA_PATH_SAX').replace('sax','')
+        exp_path = config.get('EXP_PATH')
+        df_patients_p2p = calculate_strain(data_root=exp_path, metadata_path=metadata,
+                                           debug=False, df_style='time', p2p_style=True, isDMD=True)
+        df_patients_ed2p = calculate_strain(data_root=exp_path, metadata_path=metadata,
+                                            debug=False, df_style='time', p2p_style=False, isDMD=True)
+
+        x = 0
+        df_patients_p2p.to_csv(os.path.join(exp_path, 'df_DMD_time_p2p.csv'), index=False)
+        df_patients_ed2p.to_csv(os.path.join(exp_path, 'df_DMD_time_ed2p.csv'), index=False)
 
 
 if __name__ == "__main__":
