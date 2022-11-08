@@ -1,6 +1,6 @@
 import numpy as np
 
-from src_julian.data.MyMoralesAndCompositionsAHA3 import calculate_strain
+
 
 
 def train_fold(config, in_memory=False):
@@ -239,6 +239,7 @@ def main(args=None):
     calc_dice(gt_path, pred_path, exp_path)
     ### integration of the strain calculation
     try:
+        from src_julian.data.MyMoralesAndCompositionsAHA3 import calculate_strain
         metadata = cfg.get('DATA_PATH_SAX').replace('sax','')
         df_patients_p2p = calculate_strain(data_root=exp_path, metadata_path=metadata,
                                            debug=False, df_style='time', p2p_style=True, isDMD=True)
