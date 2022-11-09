@@ -100,6 +100,7 @@ def calculate_strain(data_root='', metadata_path='/mnt/ssd/julian/data/metadata/
     with open(cfg, encoding='utf-8') as data_file:
         config = json.loads(data_file.read())
     spacing_vol = list(reversed(config.get('SPACING')))
+    register_backwards = config.get('REGISTER_BACKWARDS')
     print(spacing_vol)
     df_patients = []  # df where we will store our results
     metadata_filename = 'DMDTarique_2.0.xlsx'
@@ -130,7 +131,7 @@ def calculate_strain(data_root='', metadata_path='/mnt/ssd/julian/data/metadata/
     pats = len(patient_folders)
     params = [N_TIMESTEPS, RVIP_method, Z_SPACING, com_method, df_style, ff_style,
                                                label_bloodpool, p2p_style, path_to_metadata_xls,
-                                               sheet_name_ahastrain, sheet_name_soalge, spacing_vol]
+                                               sheet_name_ahastrain, sheet_name_soalge, spacing_vol, register_backwards]
     params = [[elem] * pats for elem in params]
 
     for result in executor.map(calc_strain4singlepatient, patient_folders, *params):
@@ -141,7 +142,7 @@ def calculate_strain(data_root='', metadata_path='/mnt/ssd/julian/data/metadata/
 
 def calc_strain4singlepatient(path_to_patient_folder, N_TIMESTEPS, RVIP_method, Z_SPACING, com_method, df_style, ff_style, label_bloodpool,
                               p2p_style, path_to_metadata_xls, sheet_name_ahastrain,
-                              sheet_name_soalge, spacing):
+                              sheet_name_soalge, spacing, register_backwards):
     patient_name = os.path.basename(os.path.dirname(path_to_patient_folder))
     # patient_name = os.path.basename(path_to_patient_folder) #test21.10.21
     # iteration info
@@ -278,21 +279,24 @@ def calc_strain4singlepatient(path_to_patient_folder, N_TIMESTEPS, RVIP_method, 
                                     mask_lvmyo=mask_lvmyo_Moralesinput[:, :, :, base_slices],
                                     com_cube=com_cube_Moralesinput[:, 0, :],
                                     spacing=spacing,
-                                    method=ff_style)
+                                    method=ff_style,
+                                    reg_backwards=register_backwards)
     Radial_Sven_mc, \
     Circumferential_Sven_mc, \
     masks_rot_Sven_mc = myMorales(ff_comp=ff_Moralesinput[:, :, :, midcavity_slices],
                                   mask_lvmyo=mask_lvmyo_Moralesinput[:, :, :, midcavity_slices],
                                   com_cube=com_cube_Moralesinput[:, 1, :],
                                   spacing=spacing,
-                                  method=ff_style)
+                                  method=ff_style,
+                                  reg_backwards=register_backwards)
     Radial_Sven_apex, \
     Circumferential_Sven_apex, \
     masks_rot_Sven_apex = myMorales(ff_comp=ff_Moralesinput[:, :, :, apex_slices],
                                     mask_lvmyo=mask_lvmyo_Moralesinput[:, :, :, apex_slices],
                                     com_cube=com_cube_Moralesinput[:, 2, :],
                                     spacing=spacing,
-                                    method=ff_style)
+                                    method=ff_style,
+                                    reg_backwards=register_backwards)
     # stack the information together
     # create whole colume arrays with stacked information contained
     Radial_Sven = np.zeros((ff.nt, ff.nx, ff.ny, ff.nz))

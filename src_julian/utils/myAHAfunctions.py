@@ -438,7 +438,7 @@ def myBullsplot(data, cmap, norm, ax=None):
     bullseye_plot(ax, data, cmap=cmap, norm=norm, labels=labels, labelProps={'size':7, "weight":'bold'})
 
 
-def myMorales(ff_comp, mask_lvmyo, com_cube, spacing, method):
+def myMorales(ff_comp, mask_lvmyo, com_cube, spacing, method, reg_backwards):
     '''
     tbd
     '''
@@ -459,7 +459,10 @@ def myMorales(ff_comp, mask_lvmyo, com_cube, spacing, method):
         if method == 'p2p':
             masklvmyo = mask_lvmyo[t, ..., 0] # for p2p defined flowfields take the mask dynamically
         elif method == 'ed2p':
-            masklvmyo = mask_lvmyo[0, ..., 0] # for composed defined flowfields take the mask dynamically
+            if reg_backwards:
+                masklvmyo = mask_lvmyo[0, ..., 0] # for composed defined flowfields take the mask dynamically
+            else:
+                masklvmyo = mask_lvmyo[t, ..., 0]  # for composed and forward regisering we sample from a dynamic target
         com = com_cube[t]
         flow = ff_comp[t]
 

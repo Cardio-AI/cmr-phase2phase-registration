@@ -383,7 +383,7 @@ def create_RegistrationModel_inkl_mask(config):
         transformed = TimeDistributed(st_lambda_layer, name='st_p2p')(keras.layers.Concatenate(axis=-1)([input_tensor, flows]))
         print('transformed_p2p:', transformed.shape)
         transformed_mask = TimeDistributed(st_mask_lambda_layer, name='st_p2p_msk')(
-            keras.layers.Concatenate(axis=-1)([input_mask_tensor[...,0:1], flows]))
+            keras.layers.Concatenate(axis=-1)([input_mask_tensor, flows]))
 
         if COMPOSE_CONSISTENCY:
             # two options, either a 2nd unet for p2ed graph flow, or we re-use the existing one, with the p2ed CMR stack
