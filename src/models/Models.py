@@ -362,7 +362,8 @@ def create_RegistrationModel_inkl_mask(config):
             else: # register ED to all other phases, first ED2MS
                 stack_lambda_layer = keras.layers.Lambda(
                     lambda x: keras.layers.Concatenate(axis=-1)(
-                        [x[..., -1:], tf.repeat(x[:, 0:1, ..., 0:1], x.shape[1], axis=1)]),
+                        [tf.repeat(x[:, 0:1, ..., 0:1], x.shape[1], axis=1),
+                        x[..., -1:]]),
                     name='stack_ed')
             input_tensor = input_tensor_raw
             input_tensor_ed = stack_lambda_layer(input_tensor_raw)
@@ -379,7 +380,7 @@ def create_RegistrationModel_inkl_mask(config):
         print('flows_p2p:', flows.shape)
         # Each CMR input vol has CMR data from three timesteps stacked as channel: t1,t1+t2/2,t2
         # transform only one timestep, mostly the first one
-        transformed = TimeDistributed(st_lambda_layer, name='st_p2p')(keras.layers.Concatenate(axis=-1)([input_tensor_raw, flows]))
+        transformed = TimeDistributed(st_lambda_layer, name='st_p2p')(keras.layers.Concatenate(axis=-1)([input_tensor, flows]))
         print('transformed_p2p:', transformed.shape)
         transformed_mask = TimeDistributed(st_mask_lambda_layer, name='st_p2p_msk')(
             keras.layers.Concatenate(axis=-1)([input_mask_tensor[...,0:1], flows]))
@@ -387,9 +388,9 @@ def create_RegistrationModel_inkl_mask(config):
         if COMPOSE_CONSISTENCY:
             # two options, either a 2nd unet for p2ed graph flow, or we re-use the existing one, with the p2ed CMR stack
             #unet_ed = create_unet(config_temp, single_model=False)
-            pre_flows = TimeDistributed(unet, name='unet_ed')(input_tensor_ed)
+            pre_flows_p2ed = TimeDistributed(unet, name='unet_ed')(input_tensor_ed)
             # composed flowfield should move each phase to ED
-            flows_p2ed = TimeDistributed(conv_layer_p2ed, name='unet2flow_ed2p')(pre_flows)
+            flows_p2ed = TimeDistributed(conv_layer_p2ed, name='unet2flow_ed2p')(pre_flows_p2ed)
             comp_transformed = TimeDistributed(st_p2ed_lambda_layer, name='st_p2ed')(
                 keras.layers.Concatenate(axis=-1)([input_tensor_raw, flows_p2ed]))
             comp_transformed = keras.layers.Lambda(lambda x: x, name='comp_transformed')(comp_transformed)

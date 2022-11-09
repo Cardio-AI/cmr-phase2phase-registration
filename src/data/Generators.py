@@ -1062,9 +1062,9 @@ class PhaseMaskWindowGenerator(DataGenerator):
 
         # repeat the ED vol, compose transform will register each time step to this phase
         if self.REGISTER_BACKWARDS:
-            comp_transformed = np.repeat(y[:, 0:1, ...], 5, axis=1)
+            comp_transformed = np.repeat(y[:, 0:1, ...], 5, axis=1) # here we move each phase to the ED phase
         else:
-            comp_transformed = np.repeat(x[:, 0:1, ...,0:1], 5, axis=1)
+            comp_transformed = y # here we move the ed phase to each phases, starting with MS - same target as p2p
         logging.debug('Batchsize: {} preprocessing took: {:0.3f} sec'.format(self.BATCHSIZE, time() - t0))
         zeros = np.zeros((*x.shape[:-1], 3), dtype=np.float32)
         if self.COMPOSE_CONSISTENCY:
