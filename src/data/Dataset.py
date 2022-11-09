@@ -1713,9 +1713,9 @@ def get_n_windows_between_phases_from_single4D(nda4d, idx, register_backwards=Tr
         if not intermediate:
             windows = windows[0:1] + windows[-1:] # exclude intermediate timestep
 
-        return windows
-        # here: T=moving, T+1=fixed, seems to register worse, need to check compose
-        # return [t_phases, t_middle, t_shift_to_left]
+    return windows
+    # here: T=moving, T+1=fixed, seems to register worse, need to check compose
+    # return [t_phases, t_middle, t_shift_to_left]
 
 
 def save_3d(nda, fname, isVector=False, cfg=None):

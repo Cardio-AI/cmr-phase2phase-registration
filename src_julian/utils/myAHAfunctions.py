@@ -460,9 +460,9 @@ def myMorales(ff_comp, mask_lvmyo, com_cube, spacing, method, reg_backwards):
             masklvmyo = mask_lvmyo[t, ..., 0] # for p2p defined flowfields take the mask dynamically
         elif method == 'ed2p':
             if reg_backwards:
-                masklvmyo = mask_lvmyo[0, ..., 0] # for composed defined flowfields take the mask dynamically
+                masklvmyo = mask_lvmyo[0, ..., 0] # for composed and backwards take the ED mask fix
             else:
-                masklvmyo = mask_lvmyo[t, ..., 0]  # for composed and forward regisering we sample from a dynamic target
+                masklvmyo = mask_lvmyo[t, ..., 0]  # for composed and forward reg we sample from a dynamic target
         com = com_cube[t]
         flow = ff_comp[t]
 

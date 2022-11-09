@@ -1247,7 +1247,7 @@ class PhaseMaskWindowGenerator(DataGenerator):
         logging.debug('windowing slicing took: {:0.3f} s'.format(time() - t1))
         t1 = time()
 
-        # results in: 5,z,x,y,c with c==3
+        # results in: 5,z,x,y,c with c==3 or c==2
         # temporal order of these channels: [nda[idx_shift_to_left], nda[idx_middle], nda[idxs]]
         combined = np.stack(combined, axis=-1)
         combined_m = np.stack(combined_m, axis=-1)
