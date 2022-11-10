@@ -869,6 +869,7 @@ class PhaseWindowGenerator(DataGenerator):
 
         logging.debug('windowing slicing took: {:0.3f} s'.format(time() - t1))
         t1 = time()
+        combined = np.stack(combined, axis=-1)
 
 
         # --------------- Image Augmentation, this is done in 2D -------------
@@ -886,12 +887,11 @@ class PhaseWindowGenerator(DataGenerator):
             logging.debug('augmentation took: {:0.3f} s'.format(time() - t1))
             t1 = time()
         if self.IMG_CHANNELS == 1:
-            model_inputs = combined[self.INPUT_T_ELEM][..., np.newaxis]
-            model_targets = combined[-1][..., np.newaxis]
+            model_inputs = combined[...,0:1]
+            model_targets = combined[...,-1:]
 
         elif self.IMG_CHANNELS > 1:
-            model_inputs = np.stack(combined, axis=-1)
-            model_targets = combined[-1][..., np.newaxis]
+            model_targets = combined[...,-1:]
 
             # model_inputs = transform_to_binary_mask(model_inputs, self.MASK_VALUES)
             # model_targets = transform_to_binary_mask(model_targets, self.MASK_VALUES)
@@ -1061,7 +1061,7 @@ class PhaseMaskWindowGenerator(DataGenerator):
                     '{}'.format(str(e), self.IMAGES[ID], self.LABELS[ID]))
 
         # repeat the ED vol, compose transform will register each time step to this phase
-        if self.REGISTER_BACKWARDS:
+        if self.REGISTER_BACKWARDS: # here
             comp_transformed = np.repeat(y[:, 0:1, ...], 5, axis=1) # here we move each phase to the ED phase
         else:
             comp_transformed = y # here we move the ed phase to each phases, starting with MS - same target as p2p
@@ -1304,10 +1304,10 @@ class PhaseMaskWindowGenerator(DataGenerator):
             t1 = time()
 
         if self.IMG_CHANNELS == 1:
-            model_inputs = combined[..., self.INPUT_T_ELEM]
+            model_inputs = combined[..., 0:1]
             model_targets = combined[..., -1:]
-            model_m_inputs = combined_m[..., self.INPUT_T_ELEM]
-            model_m_targets = combined_m[-1:]
+            model_m_inputs = combined_m[..., 0:1]
+            model_m_targets = combined_m[...,-1:]
 
         elif self.IMG_CHANNELS in [2, 3]:
             model_inputs = combined

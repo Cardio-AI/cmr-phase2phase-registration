@@ -302,6 +302,7 @@ def create_RegistrationModel_inkl_mask(config):
 
 
         config_temp = config.copy()
+        config_temp['IMG_CHANNELS']+=1
 
         # input vol with timesteps, z, x, y, c -> =number of input timesteps
         input_tensor_raw = Input(shape=(T_SHAPE, *input_shape, config.get('IMG_CHANNELS', 1)))
@@ -344,7 +345,7 @@ def create_RegistrationModel_inkl_mask(config):
             st_mask_lambda_layer = keras.layers.Lambda(
                 lambda x: st_mask_layer([x[..., 0:1], tf.concat([tf.zeros_like(x[..., -1:]), x[..., -2:]], axis=-1)]), name='p2p_mask')
 
-        if COMPOSE_CONSISTENCY:
+
             # extract the ed phase as volume
             # repeat ED along the t-axis
             # add the ed phase as 4th channel to each phase
@@ -355,20 +356,33 @@ def create_RegistrationModel_inkl_mask(config):
             # else: Channel 0==Phase; Channel 1==Phase-1 (shift to the left)
             # Here we slice the ED 3D volume and choose the last channel, which represents the actual frame
             # in our stack lambda layers we use the first Channel for transformation
-            if register_backwards: # here the ED should be our target
-                stack_lambda_layer = keras.layers.Lambda(
-                    lambda x: keras.layers.Concatenate(axis=-1)([x[...,0:1], tf.repeat(x[:, 0:1, ..., -1:], x.shape[1], axis=1)]),
-                    name='stack_ed')
-            else: # register ED to all other phases, first ED2MS
-                stack_lambda_layer = keras.layers.Lambda(
-                    lambda x: keras.layers.Concatenate(axis=-1)(
-                        [tf.repeat(x[:, 0:1, ..., 0:1], x.shape[1], axis=1),
-                        x[..., -1:]]),
-                    name='stack_ed')
-            input_tensor = input_tensor_raw
-            input_tensor_ed = stack_lambda_layer(input_tensor_raw)
-        else:
-            input_tensor = input_tensor_raw
+        if register_backwards: # here the ED should be our target
+            # x is in this case x_t+1
+            stack_p2p_lambda_layer = keras.layers.Lambda(
+                lambda x: keras.layers.Concatenate(axis=-1)(
+                    [x, tf.roll(x, shift=1, axis=1)]),
+                name='stack_p2p')
+
+            stack_ed_lambda_layer = keras.layers.Lambda(
+                lambda x: keras.layers.Concatenate(axis=-1)([x,
+                                                             tf.repeat(x[:, 3:4, ...], x.shape[1], axis=1)]),
+                name='stack_ed')
+
+        else: # x is in this case x_t
+            stack_p2p_lambda_layer = keras.layers.Lambda(
+                lambda x: keras.layers.Concatenate(axis=-1)(
+                    [x, tf.roll(x, shift=-1, axis=1)]),
+                name='stack_p2p')
+
+            stack_ed_lambda_layer = keras.layers.Lambda(
+                lambda x: keras.layers.Concatenate(axis=-1)(
+                    [tf.repeat(x[:, 0:1, ...], x.shape[1], axis=1),
+                    tf.roll(x, shift=-1, axis=1)]),
+                name='stack_ed')
+        if COMPOSE_CONSISTENCY:
+            input_tensor_ed = stack_ed_lambda_layer(input_tensor_raw)
+
+        input_tensor = stack_p2p_lambda_layer(input_tensor_raw)
 
         # we need to build the u-net after the compose concat path to make sure that our u-net input channels match the input
         unet = create_unet(config_temp, single_model=False)

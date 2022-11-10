@@ -124,7 +124,6 @@ def pred_fold(config, debug=True):
         comp_moved2ed, cmr_moved, msk_moved, flows = pred
     elif len(pred)==5:
         comp_moved2ed, cmr_moved, msk_moved, flows, flows2ed = pred
-
     else:
         cmr_moved, msk_moved, flows = pred
 
