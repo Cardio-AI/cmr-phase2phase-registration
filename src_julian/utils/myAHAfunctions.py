@@ -129,7 +129,6 @@ def get_AHA_6_sector_mask(ant, inf, COM_glob, N_AHA, nx, ny, level):
         AHA_sector_masks[4][AHA_sector_masks[4] != 0] = 12
         AHA_sector_masks[5][AHA_sector_masks[5] != 0] = 7
 
-
     return np.sum(AHA_sector_masks, axis=0)
 
 def get_AHA_4_sector_mask(ant, inf, COM_glob, N_AHA, nx, ny):
@@ -690,6 +689,8 @@ def calculate_RVIP_cube(mask_whole, base_slices, midcavity_slices, apex_slices, 
         apex = inf[apex_slices[0]:apex_slices[-1] + 1]
         if all(i is None for i in apex):
             apex = midcavity[:len(apex)]
+            print('use midcav RVIP for apex')
+            print(midcavity)
         if all(i is None for i in base):
             base = midcavity[:len(base)]
         if all(i is None for i in apex):
