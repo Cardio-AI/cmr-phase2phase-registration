@@ -366,7 +366,7 @@ def create_RegistrationModel_inkl_mask(config):
 
             stack_ed_lambda_layer = keras.layers.Lambda(
                 lambda x: keras.layers.Concatenate(axis=-1)([x,
-                                                             tf.repeat(x[:, 3:4, ...], x.shape[1], axis=1)]),
+                                                             tf.repeat(x[:, 4:5, ...], x.shape[1], axis=1)]),
                 name='stack_ed')
 
         else: # x is in this case x_t
