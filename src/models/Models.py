@@ -280,6 +280,7 @@ def create_RegistrationModel_inkl_mask(config):
         image_comp_loss = config.get('IMAGE_COMP_LOSS', 'mse').lower()
         img_flow_reg_loss = config.get('IMG_REG_LOSS', 'grad').lower()
         img_comp_flow_reg_loss = config.get('IMG_COMP_REG_LOSS', 'grad').lower()
+
         if image_loss == 'ssim':
             image_loss_fn = SSIM()
         else:
@@ -422,8 +423,9 @@ def create_RegistrationModel_inkl_mask(config):
                       outputs=outputs)
 
         losses = [image_loss_fn, dice_coef_loss, flow_reg_loss_fn]
-        if COMPOSE_CONSISTENCY: losses = [image_comp_loss_fn] + losses + [flow_comp_reg_loss_fn]
         weights = [image_loss_weight, dice_loss_weight, reg_loss_weight]
+
+        if COMPOSE_CONSISTENCY: losses = [image_comp_loss_fn] + losses + [flow_comp_reg_loss_fn]
         if COMPOSE_CONSISTENCY: weights = [image_loss_weight] + weights + [reg_loss_weight]
         model.compile(optimizer=keras.optimizers.Adam(learning_rate=learning_rate),
                       loss=losses,

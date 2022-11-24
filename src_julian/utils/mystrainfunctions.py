@@ -485,7 +485,7 @@ def get_volumeborders(wholeheartvolumeborders):
     # calculate apex and base ranges on midcavity basis
     # the upper borders have to be increased by 1, so that arange includes the last entry
     apex_slices = np.arange(min_vol, midcavity_slices[0]+1, 1) # this makes sure to have at least 2 slices for apical
-    base_slices = np.arange(midcavity_slices[-1]+1, max_vol+1, 1)
+    base_slices = np.arange(midcavity_slices[-1], max_vol+1, 1)
 
     assert all([len(apex_slices)>=2, len(midcavity_slices)>=2, len(base_slices)>=2]), 'some areas are too small, calculation of the gradient for single slice areas will not work.'
 

@@ -712,7 +712,7 @@ class WindowMotionCallback(Callback):
                         most_basal, mid, most_apical =  masked_slices[-1], masked_slices[len(masked_slices)//2], masked_slices[0]
                         picks = (most_basal, mid, most_apical)
                         y_label = ['Basal', 'Mid', 'Apex']
-                        from tensorflow.keras.metrics import mse
+
                         mse_1 = np.mean((first_vol - second_vol) ** 2)
                         mse_2 = np.mean((moved - second_vol) ** 2)
                         col_titles = ['t1', 't2', 't1 moved', 'vect', 'magn', 't1-t2 \n {:6.4f}'.format(mse_1),

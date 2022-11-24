@@ -612,6 +612,7 @@ class PhaseWindowGenerator(DataGenerator):
         self.AUGMENT_TEMP = config.get('AUGMENT_TEMP', False)
         self.AUGMENT_TEMP_RANGE = config.get('AUGMENT_TEMP_RANGE', (-2, 2))
         self.RESAMPLE_T = config.get('RESAMPLE_T', False)
+        self.RESAMPLE_Z = config.get('RESAMPLE_Z', True)
         self.WINDOW_SIZE = config.get('WINDOW_SIZE', 1)
         self.IMG_CHANNELS = config.get('IMG_CHANNELS', 1)
         self.INPUT_T_ELEM = config.get('INPUT_T_ELEM', 0)
@@ -790,6 +791,10 @@ class PhaseWindowGenerator(DataGenerator):
 
         # --------------- SPATIAL RESAMPLING-------------
         if self.RESAMPLE:
+            target_spacing = list(reversed(self.SPACING))
+            input_z_spacing = model_inputs[0].GetSpacing()[-1]
+            if not self.RESAMPLE_Z: # keep z
+                target_spacing = target_spacing[:-1] + [input_z_spacing]
             if model_inputs[0].GetDimension() in [2, 3]:
 
                 # calculate the new size of each 3D volume (after resample with the given spacing)
@@ -798,15 +803,16 @@ class PhaseWindowGenerator(DataGenerator):
                 def calc_resampled_size(sitk_img, target_spacing):
                     if type(target_spacing) in [list, tuple]:
                         target_spacing = np.array(target_spacing)
+
                     old_size = np.array(sitk_img.GetSize())
                     old_spacing = np.array(sitk_img.GetSpacing())
                     logging.debug('old size: {}, old spacing: {}, target spacing: {}'.format(old_size, old_spacing,
                                                                                              target_spacing))
                     new_size = (old_size * old_spacing) / target_spacing
+                    #if not resample_z: new_size =
                     return list(np.around(new_size).astype(np.int))
 
                 # transform the spacing from numpy representation towards the sitk representation
-                target_spacing = list(reversed(self.SPACING))
                 new_size_inputs = list(map(lambda elem: calc_resampled_size(elem, target_spacing), model_inputs))
 
             else:
@@ -865,7 +871,10 @@ class PhaseWindowGenerator(DataGenerator):
             combined = get_n_windows_between_phases_from_single4D(model_inputs, idx,
                                                                   register_backwards=self.REGISTER_BACKWARDS)
         else:
-            combined = get_n_windows_from_single4D(model_inputs, idx, window_size=self.WINDOW_SIZE)
+            #combined = get_n_windows_from_single4D(model_inputs, idx, window_size=self.WINDOW_SIZE)
+            # for the mask all volume
+            combined = get_n_windows_between_phases_from_single4D(model_inputs, idx,
+                                                                  register_backwards=self.REGISTER_BACKWARDS)
 
         logging.debug('windowing slicing took: {:0.3f} s'.format(time() - t1))
         t1 = time()
@@ -945,6 +954,7 @@ class PhaseMaskWindowGenerator(DataGenerator):
         self.AUGMENT_TEMP = config.get('AUGMENT_TEMP', False)
         self.AUGMENT_TEMP_RANGE = config.get('AUGMENT_TEMP_RANGE', (-2, 2))
         self.RESAMPLE_T = config.get('RESAMPLE_T', False)
+        self.RESAMPLE_Z = config.get('RESAMPLE_Z', True)
         self.WINDOW_SIZE = config.get('WINDOW_SIZE', 1)
         self.IMG_CHANNELS = config.get('IMG_CHANNELS', 1)
         self.INPUT_T_ELEM = config.get('INPUT_T_ELEM', 0)
@@ -1138,6 +1148,11 @@ class PhaseMaskWindowGenerator(DataGenerator):
 
         # --------------- SPATIAL RESAMPLING-------------
         if self.RESAMPLE:
+            target_spacing = list(reversed(self.SPACING))
+            input_z_spacing = model_inputs[0].GetSpacing()[-1]
+            if not self.RESAMPLE_Z: # keep z
+                target_spacing = target_spacing[:-1] + [input_z_spacing]
+
             if model_inputs[0].GetDimension() in [2, 3]:
 
                 # calculate the new size of each 3D volume (after resample with the given spacing)
@@ -1154,7 +1169,6 @@ class PhaseMaskWindowGenerator(DataGenerator):
                     return list(np.around(new_size).astype(np.int))
 
                 # transform the spacing from numpy representation towards the sitk representation
-                target_spacing = list(reversed(self.SPACING))
                 new_size_inputs = list(map(lambda elem: calc_resampled_size(elem, target_spacing), model_inputs))
 
             else:
@@ -1242,7 +1256,10 @@ class PhaseMaskWindowGenerator(DataGenerator):
         else:  # Extract the motion at each phase, defined by the window size
             # combined --> t-w, t, t+w, We can use this window in different combinations as input and target
             combined = get_n_windows_from_single4D(model_inputs, idx, window_size=self.WINDOW_SIZE)
-            combined_m = get_n_windows_from_single4D(model_m_inputs, idx, window_size=self.WINDOW_SIZE)
+            combined_m = get_n_windows_between_phases_from_single4D(model_m_inputs, idx,
+                                                                    register_backwards=self.REGISTER_BACKWARDS,
+                                                                    intermediate=False)
+            #combined_m = get_n_windows_from_single4D(model_m_inputs, idx, window_size=self.WINDOW_SIZE)
 
         logging.debug('windowing slicing took: {:0.3f} s'.format(time() - t1))
         t1 = time()

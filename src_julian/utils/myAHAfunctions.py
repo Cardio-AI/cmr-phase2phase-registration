@@ -478,8 +478,8 @@ def myMorales(ff_comp, mask_lvmyo, com_cube, spacing, method, reg_backwards):
         # set values outside of input mask to zero
         # comment out following two lines to remain all entries for whole strain map
         # TODO
-        strain.Err[strain.mask_rot != lv_label] = 0.0
-        strain.Ecc[strain.mask_rot != lv_label] = 0.0
+        #strain.Err[strain.mask_rot != lv_label] = 0.0
+        #strain.Ecc[strain.mask_rot != lv_label] = 0.0
         #strain.Err = np.clip(a=strain.Err,a_min=np.quantile(a=strain.Err,q=0.001), a_max=np.quantile(a=strain.Err,q=0.999))
         #strain.Ecc = np.clip(a=strain.Ecc, a_min=np.quantile(a=strain.Ecc, q=0.001),
         #                     a_max=np.quantile(a=strain.Ecc, q=0.999))
@@ -689,8 +689,8 @@ def calculate_RVIP_cube(mask_whole, base_slices, midcavity_slices, apex_slices, 
         apex = inf[apex_slices[0]:apex_slices[-1] + 1]
         if all(i is None for i in apex):
             apex = midcavity[:len(apex)]
-            print('use midcav RVIP for apex')
-            print(midcavity)
+            #print('use midcav RVIP for apex')
+            #print(midcavity)
         if all(i is None for i in base):
             base = midcavity[:len(base)]
         if all(i is None for i in apex):

@@ -290,8 +290,9 @@ def main(args=None):
             pred_fold(config)
         try:
             from src_julian.data.MyMoralesAndCompositionsAHA3 import calculate_strain
-            metadata = config.get('DATA_PATH_SAX').replace('sax','')
-            exp_path = config.get('EXP_PATH')
+            from pathlib import Path
+            metadata = Path(config.get('DATA_PATH_SAX')).parent.absolute()
+            exp_path = Path(config.get('EXP_PATH')).parent.absolute()
             df_patients_p2p = calculate_strain(data_root=exp_path, metadata_path=metadata,
                                                debug=False, df_style='time', p2p_style=True, isDMD=True)
             df_patients_ed2p = calculate_strain(data_root=exp_path, metadata_path=metadata,

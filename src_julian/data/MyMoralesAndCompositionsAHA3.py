@@ -57,7 +57,7 @@ def plot_1x5_quiver_flowfield(ff, mask_lvmyo, z_abs, N=1, crop=None, style=None,
     plt.show()
 
 def calculate_strain(data_root='', metadata_path='/mnt/ssd/julian/data/metadata/', debug=False, df_style=None, p2p_style=True, isDMD=True):
-    patient_folders = sorted(glob.glob(os.path.join(data_root, '*/*/pred/*/'))) # usual for the DMD crosses
+    patient_folders = sorted(glob.glob(os.path.join(data_root, 'pred/*/'))) # usual for the DMD crosses
     if len(patient_folders)==0:
         patient_folders = sorted(glob.glob(os.path.join(data_root, 'pred/*/')))  # for the healthy folders
 
@@ -94,11 +94,20 @@ def calculate_strain(data_root='', metadata_path='/mnt/ssd/julian/data/metadata/
 
     ###initial inits###
     import json
-    cfg = os.path.join(data_root, 'f0', 'config/config.json')
-    print('config given: {}'.format(cfg))
-    # load the experiment config
-    with open(cfg, encoding='utf-8') as data_file:
-        config = json.loads(data_file.read())
+    try:
+        cfg = os.path.join(data_root, 'f0', 'config/config.json')
+        print('config given: {}'.format(cfg))
+        # load the experiment config
+        with open(cfg, encoding='utf-8') as data_file:
+            config = json.loads(data_file.read())
+    except Exception as e: # maybe data root is not
+        print(e)
+        print('data_root: {}'.format(data_root))
+        cfg = os.path.join(data_root, 'config/config.json')
+        print('config given: {}'.format(cfg))
+        # load the experiment config
+        with open(cfg, encoding='utf-8') as data_file:
+            config = json.loads(data_file.read())
     spacing_vol = list(reversed(config.get('SPACING')))
     register_backwards = config.get('REGISTER_BACKWARDS')
     print(spacing_vol)
@@ -106,10 +115,8 @@ def calculate_strain(data_root='', metadata_path='/mnt/ssd/julian/data/metadata/
     metadata_filename = 'DMDTarique_2.0.xlsx'
     RVIP_method = 'staticED'  # dynamically
     com_method = 'dynamically'  # dynamically
-    spacing = 1.2
     N_TIMESTEPS = 5
     Z_SPACING = spacing_vol[-1]
-    #spacing_vol = [spacing, spacing, Z_SPACING]
     label_bloodpool = 3
     label_lvmyo = 1
     executor = ThreadPoolExecutor(max_workers=12)
@@ -492,10 +499,17 @@ def calc_strain4singlepatient(path_to_patient_folder, N_TIMESTEPS, RVIP_method, 
     #                                     # minmin=-15, maxmax=15, type='Ecc')
     # get cvi Circle Peak Strain values for current patient
     # the arrays contain 16 values each; for every AHA segment
-    df_dmdahastrain = pd.read_excel(io=path_to_metadata_xls, sheet_name=sheet_name_ahastrain, index_col=0, header=0)
-    cvi_prs = get_parameter_series_from_xls(df=df_dmdahastrain, parametername='radial peak strain (%)',
+    cvi_given = False
+    try:
+        df_dmdahastrain = pd.read_excel(io=path_to_metadata_xls, sheet_name=sheet_name_ahastrain, index_col=0, header=0)
+        cvi_given = True
+        INFO('metadata loaded, cvi_given={}'.format(cvi_given))
+    except Exception as e:
+        print(e)
+        cvi_given = False
+    if cvi_given:cvi_prs = get_parameter_series_from_xls(df=df_dmdahastrain, parametername='radial peak strain (%)',
                                             patientname=patient_name)
-    cvi_pcs = get_parameter_series_from_xls(df=df_dmdahastrain, parametername='circumferential peak strain (%)',
+    if cvi_given: cvi_pcs = get_parameter_series_from_xls(df=df_dmdahastrain, parametername='circumferential peak strain (%)',
                                             patientname=patient_name)
     # BULLSPLOTS
     # CIRCLE
@@ -521,10 +535,11 @@ def calc_strain4singlepatient(path_to_patient_folder, N_TIMESTEPS, RVIP_method, 
     # write data to dataframe
     if df_style == 'time':
         # get soa and lge data for current patient from metadata xls
-        df_cleandmd = pd.read_excel(io=path_to_metadata_xls, sheet_name=sheet_name_soalge, engine='openpyxl')
-        soa = np.repeat(extract_segments(df_cleandmd[df_cleandmd['pat'] == patient_name]['soa'].values[0]),
+        if cvi_given:
+            df_cleandmd = pd.read_excel(io=path_to_metadata_xls, sheet_name=sheet_name_soalge, engine='openpyxl')
+            soa = np.repeat(extract_segments(df_cleandmd[df_cleandmd['pat'] == patient_name]['soa'].values[0]),
                         repeats=5, axis=0)
-        lge = np.repeat(extract_segments(df_cleandmd[df_cleandmd['pat'] == patient_name]['lgepos'].values[0]),
+            lge = np.repeat(extract_segments(df_cleandmd[df_cleandmd['pat'] == patient_name]['lgepos'].values[0]),
                         repeats=5, axis=0)
 
         # NANMEAN!!!
@@ -552,13 +567,14 @@ def calc_strain4singlepatient(path_to_patient_folder, N_TIMESTEPS, RVIP_method, 
         df_patient['phase'] = phaseno
         df_patient['our_rs'] = rs_AHA_overtime
         df_patient['our_cs'] = cs_AHA_overtime
-        df_patient['soa'] = soa
-        df_patient['lge'] = lge
+        if cvi_given: df_patient['soa'] = soa
+        if cvi_given: df_patient['lge'] = lge
     if df_style == 'peaks':
         # get soa and lge data for current patient from metadata xls
-        df_cleandmd = pd.read_excel(io=path_to_metadata_xls, sheet_name=sheet_name_soalge, engine='openpyxl')
-        soa = extract_segments(df_cleandmd[df_cleandmd['pat'] == patient_name]['soa'].values[0])
-        lge = extract_segments(df_cleandmd[df_cleandmd['pat'] == patient_name]['lgepos'].values[0])
+        if cvi_given:
+            df_cleandmd = pd.read_excel(io=path_to_metadata_xls, sheet_name=sheet_name_soalge, engine='openpyxl')
+            soa = extract_segments(df_cleandmd[df_cleandmd['pat'] == patient_name]['soa'].values[0])
+            lge = extract_segments(df_cleandmd[df_cleandmd['pat'] == patient_name]['lgepos'].values[0])
 
         # get Peak Err/Ecc values for all AHA segments
         # first, mean over all zslices
@@ -584,12 +600,12 @@ def calc_strain4singlepatient(path_to_patient_folder, N_TIMESTEPS, RVIP_method, 
         df_patient = pd.DataFrame(columns=['pat', 'aha', 'cvi_prs', 'cvi_pcs', 'our_prs', 'our_pcs', 'soa', 'lge'])
         df_patient['pat'] = patientid
         df_patient['aha'] = ahano
-        df_patient['cvi_prs'] = cvi_prs
-        df_patient['cvi_pcs'] = cvi_pcs
+        if cvi_given: df_patient['cvi_prs'] = cvi_prs
+        if cvi_given: df_patient['cvi_pcs'] = cvi_pcs
         df_patient['our_prs'] = our_prs
         df_patient['our_pcs'] = our_pcs
-        df_patient['soa'] = soa
-        df_patient['lge'] = lge
+        if cvi_given: df_patient['soa'] = soa
+        if cvi_given: df_patient['lge'] = lge
     # append the patient df to the whole list of patients df
     return df_patient
 
