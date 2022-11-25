@@ -636,15 +636,16 @@ if __name__ == "__main__":
     # usually these parameters should encapsulate all experiment parameters
     parser.add_argument('-exp', action='store', default=None)
     parser.add_argument('-metadata', action='store', default=None)
+    
     parser.add_argument('-debug', action='store', default=None)
 
     results = parser.parse_args()
     print('given parameters: {}'.format(results))
 
     df_patients_p2p = calculate_strain(data_root=results.exp, metadata_path=results.metadata,
-                                   debug=results.debug=='debug', df_style='time', p2p_style=True, isDMD=True)
+                                   debug=results.debug=='debug', df_style='time', p2p_style=True, isDMD=False)
     df_patients_ed2p = calculate_strain(data_root=results.exp, metadata_path=results.metadata,
-                                   debug=results.debug=='debug', df_style='time', p2p_style=False, isDMD=True)
+                                   debug=results.debug=='debug', df_style='time', p2p_style=False, isDMD=False)
 
     x=0
     df_patients_p2p.to_csv(os.path.join(results.exp, 'df_DMD_time_p2p.csv'), index=False)
