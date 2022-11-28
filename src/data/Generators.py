@@ -1255,7 +1255,10 @@ class PhaseMaskWindowGenerator(DataGenerator):
                                                                     intermediate=False)
         else:  # Extract the motion at each phase, defined by the window size
             # combined --> t-w, t, t+w, We can use this window in different combinations as input and target
-            combined = get_n_windows_from_single4D(model_inputs, idx, window_size=self.WINDOW_SIZE)
+            combined = get_n_windows_from_single4D(model_inputs, idx, window_size=self.WINDOW_SIZE,
+                                                   register_backwards=self.REGISTER_BACKWARDS,
+                                                   intermediate=False
+                                                   )
             combined_m = get_n_windows_between_phases_from_single4D(model_m_inputs, idx,
                                                                     register_backwards=self.REGISTER_BACKWARDS,
                                                                     intermediate=False)

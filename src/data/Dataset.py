@@ -1552,7 +1552,7 @@ def get_phases_as_onehot_acdc_cfg(file_path, temporal_sampling_factor, length, w
     return onehot
 
 
-def get_n_windows_from_single4D(nda4d, idx, window_size=1):
+def get_n_windows_from_single4D(nda4d, idx, window_size=1,register_backwards=True, intermediate=True):
     """
     Split a 4D volume in two lists of 3D volumes
     With list1[n] - list2[n] two 3D ndas which shows the start and endpoint of a timepoint n
@@ -1613,7 +1613,19 @@ def get_n_windows_from_single4D(nda4d, idx, window_size=1):
     t_upper = np.squeeze(np.take(nda4d, indices=idxs_upper[..., np.newaxis], axis=0))
     logging.debug('first vols shape: {}'.format(t_lower.shape))
     logging.debug('gather nd took: {:0.3f} s'.format(time() - t1))
-    return [t_lower, t, t_upper]
+
+    # INVERTED REGISTRATION TEST
+    # original: # T=fixed, T+1=moving
+    if register_backwards:
+        windows = [t_upper, t, t_lower]
+    else:
+        windows = [t_lower, t, t_upper]
+
+    if not intermediate:
+        windows = windows[0:1] + windows[-1:]  # exclude intermediate timestep
+
+
+    return windows
 
 def get_n_windows_between_phases_from_single4D(nda4d, idx, register_backwards=True, intermediate=True):
     """
