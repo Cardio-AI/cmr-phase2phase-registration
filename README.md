@@ -5,7 +5,8 @@ Extract the cardiac motion from dynamic CMR images.
 
 Code version for the JCMR submission with "Exp1":
 
-Checkout commit 
+Checkout commit:
+- [commit](https://github.com/Cardio-AI/cmr-phase2phase-registration/commit/15a15c8bd9abf2319027357397597b4931db3765)
 - date: 03.11.2022
 - comit message: "added slurm jobid int exp file names"
 - SHA: 15a15c8bd9abf2319027357397597b4931db3765
