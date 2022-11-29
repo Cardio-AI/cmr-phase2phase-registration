@@ -113,8 +113,8 @@ def calculate_strain(data_root='', metadata_path='/mnt/ssd/julian/data/metadata/
     print(spacing_vol)
     df_patients = []  # df where we will store our results
     metadata_filename = 'DMDTarique_2.0.xlsx'
-    RVIP_method = 'staticED'  # dynamically
-    com_method = 'dynamically'  # dynamically
+    RVIP_method = 'staticED'   # staticED (standard), dynamically
+    com_method = 'dynamically'  # dynamically (standard), staticED
     N_TIMESTEPS = 5
     Z_SPACING = spacing_vol[-1]
     label_bloodpool = 3
@@ -636,16 +636,22 @@ if __name__ == "__main__":
     # usually these parameters should encapsulate all experiment parameters
     parser.add_argument('-exp', action='store', default=None)
     parser.add_argument('-metadata', action='store', default=None)
-
+    parser.add_argument('-iscontrol', choices=['True','False','true','false'],action='store', default='false')
     parser.add_argument('-debug', action='store', default=None)
 
     results = parser.parse_args()
     print('given parameters: {}'.format(results))
+    is_dmd = True
+    if results.iscontrol.lower() == 'true':
+        is_dmd = False
+        print('*'*30)
+        print('Inference on DMD control patients')
+        print('*' * 30)
 
     df_patients_p2p = calculate_strain(data_root=results.exp, metadata_path=results.metadata,
-                                   debug=results.debug=='debug', df_style='time', p2p_style=True, isDMD=False)
+                                   debug=results.debug=='debug', df_style='time', p2p_style=True, isDMD=is_dmd)
     df_patients_ed2p = calculate_strain(data_root=results.exp, metadata_path=results.metadata,
-                                   debug=results.debug=='debug', df_style='time', p2p_style=False, isDMD=False)
+                                   debug=results.debug=='debug', df_style='time', p2p_style=False, isDMD=is_dmd)
 
     x=0
     df_patients_p2p.to_csv(os.path.join(results.exp, 'df_DMD_time_p2p.csv'), index=False)

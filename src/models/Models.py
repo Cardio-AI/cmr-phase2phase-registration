@@ -330,24 +330,27 @@ def create_RegistrationModel_inkl_mask(config):
                                                       name='deformable_p2ed')
         st_mask_layer = nrn_layers.SpatialTransformer(interp_method=interp_method, indexing=indexing, ident=True,
                                                       name='deformable_mask')
-        add_zero_spatial_lambda1 = keras.layers.Lambda(lambda x: tf.concat([tf.zeros_like(x[..., -1:]), x[..., -2:]], axis=-1))
-        add_zero_spatial_lambda2 = keras.layers.Lambda(
-            lambda x: tf.concat([tf.zeros_like(x[..., -1:]), x[..., -2:]], axis=-1))
+
+        st_lambda_layer = keras.layers.Lambda(
+            lambda x: st_layer([x[..., 0:1], x[..., -3:]]),
+            name='p2p')  # tf.concat([tf.zeros_like(x[..., -1:]), x[..., -2:]], axis=-1)],
+        st_p2ed_lambda_layer = keras.layers.Lambda(
+            lambda x: st_layer_p2ed([x[..., 0:1], x[..., -3:]]), name='p2ed')
+        st_mask_lambda_layer = keras.layers.Lambda(
+            lambda x: st_mask_layer([x[..., 0:1], x[..., -3:]]), name='p2p_mask')
+
         # lambda layers for spatial transformer indexing of the cmr vol and the flowfield
-        if register_spatial:
-            st_lambda_layer = keras.layers.Lambda(
-                lambda x: st_layer([x[..., 0:1], x[..., -3:]]), name='p2p') # tf.concat([tf.zeros_like(x[..., -1:]), x[..., -2:]], axis=-1)],
-            st_p2ed_lambda_layer = keras.layers.Lambda(
-                lambda x: st_layer_p2ed([x[..., 0:1], x[..., -3:]]), name='p2ed')
-            st_mask_lambda_layer = keras.layers.Lambda(
-                lambda x: st_mask_layer([x[..., 0:1], x[..., -3:]]), name='p2p_mask')
+        if register_spatial: # keep the flow as it is
+            add_zero_spatial_lambda_p2p = keras.layers.Lambda(
+                lambda x: x)
+            add_zero_spatial_lambda_p2ed = keras.layers.Lambda(
+                lambda x: x)
         else: # ignore the z-axis for the spatial transformer, only x/y movement
-            st_lambda_layer = keras.layers.Lambda(
-                lambda x: st_layer([x[..., 0:1], tf.concat([tf.zeros_like(x[..., -1:]), x[..., -2:]], axis=-1)]), name='p2p') # tf.concat([tf.zeros_like(x[..., -1:]), x[..., -2:]], axis=-1)],
-            st_p2ed_lambda_layer = keras.layers.Lambda(
-                lambda x: st_layer_p2ed([x[..., 0:1], tf.concat([tf.zeros_like(x[..., -1:]), x[..., -2:]], axis=-1)]), name='p2ed')
-            st_mask_lambda_layer = keras.layers.Lambda(
-                lambda x: st_mask_layer([x[..., 0:1], tf.concat([tf.zeros_like(x[..., -1:]), x[..., -2:]], axis=-1)]), name='p2p_mask')
+            # zero out the z motion
+            add_zero_spatial_lambda_p2p = keras.layers.Lambda(
+                lambda x: tf.concat([tf.zeros_like(x[..., -1:]), x[..., -2:]], axis=-1))
+            add_zero_spatial_lambda_p2ed = keras.layers.Lambda(
+                lambda x: tf.concat([tf.zeros_like(x[..., -1:]), x[..., -2:]], axis=-1))
 
 
             # extract the ed phase as volume
@@ -392,8 +395,6 @@ def create_RegistrationModel_inkl_mask(config):
                      tf.math.squared_difference(tf.repeat(x[:, 0:1, ...], x.shape[1], axis=1),tf.roll(x, shift=-1, axis=1))
                      ]),
                 name='stack_ed')
-        if COMPOSE_CONSISTENCY:
-            input_tensor_ed = stack_ed_lambda_layer(input_tensor_raw)
 
         input_tensor = stack_p2p_lambda_layer(input_tensor_raw)
 
@@ -403,7 +404,8 @@ def create_RegistrationModel_inkl_mask(config):
         pre_flows = TimeDistributed(unet, name='unet')(input_tensor)
         print('input after unet:', pre_flows.shape)
         flows = TimeDistributed(conv_layer_p2p, name='unet2flow_p2p')(pre_flows)
-         # according to the TB C --> is zyx?
+        flows = add_zero_spatial_lambda_p2p(flows)
+         # according to the Tensorboard order of the Channel C --> is zyx.
         print('flows_p2p:', flows.shape)
         # Each CMR input vol has CMR data from three timesteps stacked as channel: t1,t1+t2/2,t2
         # transform only one timestep, mostly the first one
@@ -413,19 +415,20 @@ def create_RegistrationModel_inkl_mask(config):
             keras.layers.Concatenate(axis=-1)([input_mask_tensor, flows]))
 
         if COMPOSE_CONSISTENCY:
+            input_tensor_ed = stack_ed_lambda_layer(input_tensor_raw)
             # two options, either a 2nd unet for p2ed graph flow, or we re-use the existing one, with the p2ed CMR stack
-            #unet_ed = create_unet(config_temp, single_model=False)
+            unet_ed = create_unet(config_temp, single_model=False)
             pre_flows_p2ed = TimeDistributed(unet, name='unet_ed')(input_tensor_ed)
             # composed flowfield should move each phase to ED
             flows_p2ed = TimeDistributed(conv_layer_p2ed, name='unet2flow_ed2p')(pre_flows_p2ed)
+            flows_p2ed = add_zero_spatial_lambda_p2ed(flows_p2ed)
             comp_transformed = TimeDistributed(st_p2ed_lambda_layer, name='st_p2ed')(
                 keras.layers.Concatenate(axis=-1)([input_tensor_raw, flows_p2ed]))
             comp_transformed = keras.layers.Lambda(lambda x: x, name='comp_transformed')(comp_transformed)
-            flows_p2ed = add_zero_spatial_lambda1(flows_p2ed)
+
             flows_p2ed = keras.layers.Lambda(lambda x: x, name='flowfield_p2ed')(flows_p2ed)
             print('comp transformed:', comp_transformed.shape)
 
-        flows = add_zero_spatial_lambda1(flows)
         flow = keras.layers.Lambda(lambda x: x, name='flowfield_p2p')(flows)
         transformed_mask = keras.layers.Lambda(lambda x: x, name='transformed_mask')(transformed_mask)
         transformed = keras.layers.Lambda(lambda x: x, name='transformed')(transformed)
