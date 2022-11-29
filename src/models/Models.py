@@ -418,7 +418,7 @@ def create_RegistrationModel_inkl_mask(config):
             input_tensor_ed = stack_ed_lambda_layer(input_tensor_raw)
             # two options, either a 2nd unet for p2ed graph flow, or we re-use the existing one, with the p2ed CMR stack
             unet_ed = create_unet(config_temp, single_model=False)
-            pre_flows_p2ed = TimeDistributed(unet, name='unet_ed')(input_tensor_ed)
+            pre_flows_p2ed = TimeDistributed(unet_ed, name='unet_ed')(input_tensor_ed)
             # composed flowfield should move each phase to ED
             flows_p2ed = TimeDistributed(conv_layer_p2ed, name='unet2flow_ed2p')(pre_flows_p2ed)
             flows_p2ed = add_zero_spatial_lambda_p2ed(flows_p2ed)
