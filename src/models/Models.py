@@ -328,7 +328,7 @@ def create_RegistrationModel_inkl_mask(config):
                                                  name='deformable_p2p')
         st_layer_p2ed = nrn_layers.SpatialTransformer(interp_method=interp_method, indexing=indexing, ident=True,
                                                       name='deformable_p2ed')
-        st_mask_layer = nrn_layers.SpatialTransformer(interp_method=interp_method, indexing=indexing, ident=True,
+        st_mask_layer = nrn_layers.SpatialTransformer(interp_method='nearest', indexing=indexing, ident=True,
                                                       name='deformable_mask')
 
         st_lambda_layer = keras.layers.Lambda(
@@ -342,15 +342,15 @@ def create_RegistrationModel_inkl_mask(config):
         # lambda layers for spatial transformer indexing of the cmr vol and the flowfield
         if register_spatial: # keep the flow as it is
             add_zero_spatial_lambda_p2p = keras.layers.Lambda(
-                lambda x: x)
+                lambda x: x, name='keep_spatial_p2p')
             add_zero_spatial_lambda_p2ed = keras.layers.Lambda(
-                lambda x: x)
+                lambda x: x, name='keep_spatial_p2ed')
         else: # ignore the z-axis for the spatial transformer, only x/y movement
             # zero out the z motion
             add_zero_spatial_lambda_p2p = keras.layers.Lambda(
-                lambda x: tf.concat([tf.zeros_like(x[..., -1:]), x[..., -2:]], axis=-1))
+                lambda x: tf.concat([tf.zeros_like(x[..., -1:]), x[..., -2:]], axis=-1), name='del_spatial_p2p')
             add_zero_spatial_lambda_p2ed = keras.layers.Lambda(
-                lambda x: tf.concat([tf.zeros_like(x[..., -1:]), x[..., -2:]], axis=-1))
+                lambda x: tf.concat([tf.zeros_like(x[..., -1:]), x[..., -2:]], axis=-1), name='del_spatial_p2ed')
 
 
             # extract the ed phase as volume
