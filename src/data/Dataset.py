@@ -1577,19 +1577,11 @@ def get_n_windows_from_single4D(nda4d, idx, window_size=1,register_backwards=Tru
     idxs_lower = idx - window_size
     idxs_upper = idx + window_size
 
-    #idxs_lower_pre = idxs_lower-1
-    #idxs_lower_post = idxs_lower + 1
-
     debug('idx: {}'.format(idx))
     # fake ring functionality with mod
     idxs_lower = np.mod(idxs_lower, y_len) # this is faster in the generator, than the tf functions
     idxs_upper = np.mod(idxs_upper, y_len)
 
-    #idxs_lower_pre = np.mod(idxs_lower_pre, y_len)
-    #idxs_lower_post = np.mod(idxs_lower_post, y_len)
-
-    #idxs_lower = tf.math.mod(idxs_lower, y_len)
-    #idxs_upper = tf.math.mod(idxs_upper, y_len)
     debug('idx lower: {}'.format(idxs_lower))
     debug('idx upper: {}'.format(idxs_upper))
     logging.debug('mod took: {:0.3f} s'.format(time() - t1))
@@ -1616,13 +1608,13 @@ def get_n_windows_from_single4D(nda4d, idx, window_size=1,register_backwards=Tru
 
     # INVERTED REGISTRATION TEST
     # original: # T=fixed, T+1=moving
+    # we could also have always t as target, and register
+    # backwards: t_upper, t
+    # forwards: t_lower, t
     if register_backwards:
-        windows = [t_upper, t, t_lower]
+        windows = [t, t_lower] # similar to x_t+1, x_t --> here: the frames before the phase
     else:
-        windows = [t_lower, t, t_upper]
-
-    if not intermediate:
-        windows = windows[0:1] + windows[-1:]  # exclude intermediate timestep
+        windows = [t_lower, t]
 
 
     return windows
