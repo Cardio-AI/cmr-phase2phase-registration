@@ -303,7 +303,7 @@ def create_RegistrationModel_inkl_mask(config):
 
 
         config_temp = config.copy()
-        config_temp['IMG_CHANNELS']+=2
+        config_temp['IMG_CHANNELS']+=1
 
         # input vol with timesteps, z, x, y, c -> =number of input timesteps
         input_tensor_raw = Input(shape=(T_SHAPE, *input_shape, config.get('IMG_CHANNELS', 1)))
@@ -369,14 +369,16 @@ def create_RegistrationModel_inkl_mask(config):
                 lambda x: keras.layers.Concatenate(axis=-1)(
                     [x,
                      tf.roll(x, shift=1, axis=1),
-                     tf.math.squared_difference(x,tf.roll(x, shift=1, axis=1))]),
+                     #tf.math.squared_difference(x,tf.roll(x, shift=1, axis=1))
+                     ]),
                 name='stack_p2p')
 
             stack_ed_lambda_layer = keras.layers.Lambda(
                 lambda x: keras.layers.Concatenate(axis=-1)(
                     [x,
                      tf.repeat(x[:, 4:5, ...], x.shape[1], axis=1),
-                     tf.math.squared_difference(x,tf.repeat(x[:, 4:5, ...], x.shape[1], axis=1))]),
+                     #tf.math.squared_difference(x,tf.repeat(x[:, 4:5, ...], x.shape[1], axis=1))
+                     ]),
                 name='stack_ed')
 
         else: # x is in this case x_t
@@ -384,7 +386,7 @@ def create_RegistrationModel_inkl_mask(config):
                 lambda x: keras.layers.Concatenate(axis=-1)(
                     [x,
                      tf.roll(x, shift=-1, axis=1),
-                     tf.math.squared_difference(x,tf.roll(x, shift=-1, axis=1))
+                     #tf.math.squared_difference(x,tf.roll(x, shift=-1, axis=1))
                      ]),
                 name='stack_p2p')
 
@@ -392,7 +394,7 @@ def create_RegistrationModel_inkl_mask(config):
                 lambda x: keras.layers.Concatenate(axis=-1)(
                     [tf.repeat(x[:, 0:1, ...], x.shape[1], axis=1),
                     tf.roll(x, shift=-1, axis=1),
-                     tf.math.squared_difference(tf.repeat(x[:, 0:1, ...], x.shape[1], axis=1),tf.roll(x, shift=-1, axis=1))
+                     #tf.math.squared_difference(tf.repeat(x[:, 0:1, ...], x.shape[1], axis=1),tf.roll(x, shift=-1, axis=1))
                      ]),
                 name='stack_ed')
 
@@ -423,7 +425,7 @@ def create_RegistrationModel_inkl_mask(config):
             flows_p2ed = TimeDistributed(conv_layer_p2ed, name='unet2flow_ed2p')(pre_flows_p2ed)
             flows_p2ed = add_zero_spatial_lambda_p2ed(flows_p2ed)
             comp_transformed = TimeDistributed(st_p2ed_lambda_layer, name='st_p2ed')(
-                keras.layers.Concatenate(axis=-1)([input_tensor_raw, flows_p2ed]))
+                keras.layers.Concatenate(axis=-1)([input_tensor_ed, flows_p2ed]))
             comp_transformed = keras.layers.Lambda(lambda x: x, name='comp_transformed')(comp_transformed)
 
             flows_p2ed = keras.layers.Lambda(lambda x: x, name='flowfield_p2ed')(flows_p2ed)
