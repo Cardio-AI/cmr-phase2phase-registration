@@ -328,7 +328,7 @@ def create_RegistrationModel_inkl_mask(config):
                                                  name='deformable_p2p')
         st_layer_p2ed = nrn_layers.SpatialTransformer(interp_method=interp_method, indexing=indexing, ident=True,
                                                       name='deformable_p2ed')
-        st_mask_layer = nrn_layers.SpatialTransformer(interp_method='nearest', indexing=indexing, ident=True,
+        st_mask_layer = nrn_layers.SpatialTransformer(interp_method=interp_method, indexing=indexing, ident=True,
                                                       name='deformable_mask')
 
         st_lambda_layer = keras.layers.Lambda(

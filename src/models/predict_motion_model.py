@@ -77,7 +77,7 @@ def pred_fold(config, debug=True):
     model.load_weights(os.path.join(config['MODEL_PATH'], 'model.h5'))
     logging.info('loaded model weights as h5 file')
 
-    # quick fix
+    # quick fix to make sure we are in the exp root
     pred_path = os.path.join(config.get('EXP_PATH'), 'pred')
     pred_path = pred_path.replace('f0/','').replace('f1/','').replace('f2/','').replace('f3/','')
 
