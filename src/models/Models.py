@@ -294,12 +294,12 @@ def create_RegistrationModel_inkl_mask(config):
         if img_flow_reg_loss == 'norm':
             flow_reg_loss_fn = NormRegulariser().norm_loss
         else:
-            flow_reg_loss_fn = Grad('l2').loss
+            flow_reg_loss_fn = Grad('l2',loss_mult=tuple(config.get('SPACING',(1,1,1)))).loss
 
         if img_comp_flow_reg_loss == 'norm':
             flow_comp_reg_loss_fn = NormRegulariser().norm_loss
         else:
-            flow_comp_reg_loss_fn = Grad('l2').loss
+            flow_comp_reg_loss_fn = Grad('l2',loss_mult=tuple(config.get('SPACING',(1,1,1)))).loss
 
 
         config_temp = config.copy()
