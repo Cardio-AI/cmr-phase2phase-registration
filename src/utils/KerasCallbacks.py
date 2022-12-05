@@ -238,8 +238,6 @@ class LRTensorBoard(TensorBoard):
         logs.update({'lr': K.eval(self.model.optimizer.lr)})
         super().on_epoch_end(epoch, logs)
 
-from tensorflow.keras.callbacks import LearningRateScheduler
-
 
 class PolynomialDecay:
     def __init__(self, maxEpochs=100, initAlpha=0.01, power=0.25):
@@ -697,7 +695,6 @@ class WindowMotionCallback(Callback):
                             idx_moving_msk = 1
                             idy_target_msk = 2
                         else: # target_cmr, target_msk, zeros
-
                             idx_moving_cmr = 0
                             idy_p2ed_target_cmr = 0 # reuse compose
                             idy_target_cmr = 0
@@ -706,11 +703,19 @@ class WindowMotionCallback(Callback):
                         first_vol, second_vol = x[idx_moving_cmr][elem_in_b][p], y[idy_target_cmr][elem_in_b][p]
                         first_m, second_m = x[idx_moving_msk][elem_in_b][p], y[idy_target_msk][elem_in_b][p]
                         second_p2ed_vol = y[idy_p2ed_target_cmr][elem_in_b][p]
+                        moved, moved_m, vect = movings[elem_in_b][p], moving_m[elem_in_b][p], vects[elem_in_b][p]
+
                         if first_vol.shape[-1] in [2,3]:
                             first_vol = first_vol[..., self.take_t_elem][..., np.newaxis]
                         if first_m.shape[-1] in [2,3]:
-                            first_m = first_m[..., self.take_t_elem]
-                        moved, moved_m, vect = movings[elem_in_b][p], moving_m[elem_in_b][p], vects[elem_in_b][p]
+                            first_m = first_m[..., self.take_t_elem][..., np.newaxis]
+                        if second_m.shape[-1] in [2,3]:
+                            second_m_p2p = second_m[..., self.take_t_elem][..., np.newaxis]
+                            second_m_p2ed = second_m[..., self.take_t_elem+1][..., np.newaxis]
+                        if moved_m.shape[-1] in [2,3]:
+                            moved_m_p2p = moved_m[..., self.take_t_elem][..., np.newaxis]
+                            moved_m_p2ed = moved_m[..., self.take_t_elem+1][..., np.newaxis]
+
                         if compose:
                             moved_p2ed = moving_comp[elem_in_b][p]
                             vect_p2ed = vects_p2ed[elem_in_b][p]
@@ -723,10 +728,10 @@ class WindowMotionCallback(Callback):
 
                         mse_1 = np.mean((first_vol - second_vol) ** 2)
                         mse_2 = np.mean((moved - second_vol) ** 2)
-                        col_titles = ['t1', 't2', 't1 moved', 'vect', 'magn', 't1-t2 \n {:6.4f}'.format(mse_1),
+                        col_titles = ['moving(t1)', 'fixed(t2)', 't1 moved', 'vect', 'magn', 't1-t2 \n {:6.4f}'.format(mse_1),
                                       'moved-t2 \n {:6.4f}'.format(mse_2)]
-                        fig = plot_displacement(col_titles, first_m, first_vol, moved, moved_m, picks,
-                                               second_m, second_vol, vect, y_label)
+                        fig = plot_displacement(col_titles, first_m, first_vol, moved, moved_m_p2p, picks,
+                                               second_m_p2p, second_vol, vect, y_label)
                         # fig.tight_layout()
                         tensorflow.summary.image(name='plot/{}/batch_{}/p2p/{}_{}/summary'.format(key, elem_in_b, p, phases[p]),
                                                  data=self.make_image(fig),
@@ -735,10 +740,10 @@ class WindowMotionCallback(Callback):
                         if compose:
                             mse_1 = np.mean((first_vol - second_p2ed_vol) ** 2)
                             mse_2 = np.mean((moved_p2ed - second_p2ed_vol) ** 2)
-                            col_titles = ['t1', 't2', 't1 moved', 'vect', 'magn', 't1-t2 \n {:6.4f}'.format(mse_1),
+                            col_titles = ['moving(t1)', 'fixed(t2)', 't1 moved', 'vect', 'magn', 't1-t2 \n {:6.4f}'.format(mse_1),
                                           'moved-t2 \n {:6.4f}'.format(mse_2)]
-                            fig_p2ed = plot_displacement(col_titles, np.zeros_like(first_m), first_vol, moved_p2ed, np.zeros_like(moved_m), picks,
-                                                    np.zeros_like(second_m), second_p2ed_vol, vect_p2ed, y_label)
+                            fig_p2ed = plot_displacement(col_titles, first_m, first_vol, moved_p2ed, moved_m_p2ed, picks,
+                                                    second_m_p2ed, second_p2ed_vol, vect_p2ed, y_label)
                             tensorflow.summary.image(
                                 name='plot/{}/batch_{}/p2ed/{}_{}/summary'.format(key, elem_in_b, p, phases[p]),
                                 data=self.make_image(fig_p2ed),

@@ -283,11 +283,13 @@ def create_RegistrationModel_inkl_mask(config):
 
         if image_loss == 'ssim':
             image_loss_fn = SSIM()
+            print('ssim')
         else:
             image_loss_fn = MSE_().loss
 
         if image_comp_loss =='ssim':
             image_comp_loss_fn = SSIM()
+            print('ssim')
         else:
             image_comp_loss_fn = MSE_().loss
 
@@ -427,19 +429,22 @@ def create_RegistrationModel_inkl_mask(config):
             # composed flowfield should move each phase to ED
             flows_p2ed = TimeDistributed(conv_layer_p2ed, name='unet2flow_ed2p')(pre_flows_p2ed)
             flows_p2ed = add_zero_spatial_lambda_p2ed(flows_p2ed)
-            comp_transformed = TimeDistributed(st_p2ed_lambda_layer, name='st_p2ed')(
+            transformed_p2ed = TimeDistributed(st_p2ed_lambda_layer, name='st_p2ed')(
                 keras.layers.Concatenate(axis=-1, name='cmr_flow_p2ed')([input_tensor_raw, flows_p2ed]))
-            comp_transformed = keras.layers.Lambda(lambda x: x, name='transformed_p2ed')(comp_transformed)
+            transformed_mask_p2ed = TimeDistributed(st_p2ed_lambda_layer, name='st_p2ed_mask')(
+                keras.layers.Concatenate(axis=-1, name='mask_flow_p2ed')([input_mask_tensor, flows_p2ed]))
+            transformed_p2ed = keras.layers.Lambda(lambda x: x, name='transformed_p2ed')(transformed_p2ed)
+            transformed_masks = keras.layers.Concatenate(axis=-1, name='p2p_p2ed_mask')([transformed_mask, transformed_mask_p2ed])
 
             flows_p2ed = keras.layers.Lambda(lambda x: x, name='flowfield_p2ed')(flows_p2ed)
-            print('comp transformed:', comp_transformed.shape)
+            print('comp transformed:', transformed_p2ed.shape)
 
         flow = keras.layers.Lambda(lambda x: x, name='flowfield_p2p')(flows)
-        transformed_mask = keras.layers.Lambda(lambda x: x, name='transformed_mask')(transformed_mask)
+        transformed_masks = keras.layers.Lambda(lambda x: x, name='transformed_mask')(transformed_masks)
         transformed = keras.layers.Lambda(lambda x: x, name='transformed_p2p')(transformed)
 
-        outputs = [transformed, transformed_mask, flow]
-        if COMPOSE_CONSISTENCY: outputs = [comp_transformed] + outputs + [flows_p2ed]
+        outputs = [transformed, transformed_masks, flow]
+        if COMPOSE_CONSISTENCY: outputs = [transformed_p2ed] + outputs + [flows_p2ed]
 
         model = Model(name='simpleregister', inputs=[input_tensor_raw, input_mask_tensor],
                       outputs=outputs)

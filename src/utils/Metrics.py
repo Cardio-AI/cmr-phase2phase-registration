@@ -352,13 +352,24 @@ class SSIM:
                 return dims
 
             shape_ytrue = get_shape(y_true)
-            t_shape = (shape_ytrue[0],shape_ytrue[-3],shape_ytrue[-2],shape_ytrue[1]*shape_ytrue[2])
-            #from skimage.metrics import structural_similarity as ssim_fn
-            #ssim = ssim_fn(im1=y_true, im2=y_pred, multichannel=True)
-            img1 = tf.reshape(tensor=y_true, shape=t_shape)
-            img2 = tf.reshape(tensor=y_pred, shape=t_shape)
-            ssim = tf.image.ssim(img1, img2, max_val=1.0, filter_size=11,
-                          filter_sigma=1.5, k1=0.01, k2=0.03)
+            # combine t, z and c (the latter if it is greater than 1)
+            # SSIM is defined for 2D images, here we stack the temporal, spatial and channels slices
+            t_shape = (shape_ytrue[0], shape_ytrue[-3], shape_ytrue[-2], shape_ytrue[1] * shape_ytrue[2])
+            ssim = 0.
+            if shape_ytrue[-1]>1:
+                ssim = []
+                for c in range(shape_ytrue[-1]):
+                    img1 = tf.reshape(tensor=y_true[...,c][...,tf.newaxis], shape=t_shape)
+                    img2 = tf.reshape(tensor=y_pred[...,c][...,tf.newaxis], shape=t_shape)
+                    ssim.append(tf.image.ssim(img1, img2, max_val=1.0, filter_size=11,
+                                         filter_sigma=1.5, k1=0.01, k2=0.03))
+                ssim = tf.concat(ssim, axis=-1)
+            else:
+                img1 = tf.reshape(tensor=y_true, shape=t_shape)
+                img2 = tf.reshape(tensor=y_pred, shape=t_shape)
+                ssim = tf.image.ssim(img1, img2, max_val=1.0, filter_size=11,
+                                     filter_sigma=1.5, k1=0.01, k2=0.03)
+
             return 1- ssim
 
 

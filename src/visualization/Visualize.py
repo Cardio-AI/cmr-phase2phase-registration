@@ -430,6 +430,7 @@ def plot_displacement(col_titles, first_m, first_vol, moved, moved_m, picks, sec
     # Define the plot grid size
     nrows = 3
     ncols = 7
+    moved_m = (moved_m>0.5).astype(np.float)
     fig, axes = plt.subplots(nrows, ncols, figsize=(14, 7))
     vmax = 1
     for i, z in enumerate(picks):

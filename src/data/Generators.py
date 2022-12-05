@@ -1072,13 +1072,16 @@ class PhaseMaskWindowGenerator(DataGenerator):
 
         # repeat the ED vol, compose transform will register each time step to this phase
         if self.REGISTER_BACKWARDS: # here
-            y_comp = np.repeat(x[:, 4:5, ...], 5, axis=1) # here we move each phase to the ED phase
+            y_p2ed = np.repeat(x[:, 4:5, ...], 5, axis=1) # here we move each phase to the ED phase
+            y2_p2ed_m = np.repeat(x2[:, 4:5, ...], 5, axis=1)
         else:
-            y_comp = np.roll(x, shift=-1, axis=1) # here we move the ed phase to each phases, starting with MS - same target as p2p
+            y_p2ed = np.roll(x, shift=-1, axis=1) # here we move the ed phase to each phases, starting with MS - same target as p2p
+            y2_p2ed_m = np.roll(x2, shift=-1, axis=1)
         logging.debug('Batchsize: {} preprocessing took: {:0.3f} sec'.format(self.BATCHSIZE, time() - t0))
         zeros = np.zeros((*x.shape[:-1], 3), dtype=np.float32)
         if self.COMPOSE_CONSISTENCY:
-            return tuple([[x, x2], [y_comp, y, y2, zeros, zeros]])
+            y2 = np.concatenate([y2, y2_p2ed_m], axis=-1)
+            return tuple([[x, x2], [y_p2ed, y, y2, zeros, zeros]])
         else:
             return tuple([[x, x2], [y, y2, zeros]])
 
@@ -1236,12 +1239,14 @@ class PhaseMaskWindowGenerator(DataGenerator):
         t1 = time()
 
         # Added mask smoothness
-
+        import scipy
+        import scipy.ndimage
         if self.RESAMPLE_Z:  # smooth only if we have fake isotropy voxels, otherwise we use the original slices
             for t in range(model_m_inputs.shape[0]):
                 if model_m_inputs[t].sum() > 0:  # we only need to smooth time steps with a mask
-                        model_m_inputs[t] = scipy.ndimage.binary_closing(model_m_inputs[t], iterations=5)
-
+                        model_m_inputs[t]  = scipy.ndimage.binary_closing(model_m_inputs[t], iterations=5)
+                        #model_m_inputs[t] = scipy.ndimage.gaussian_filter(model_m_inputs[t] , sigma=1, mode='nearest')
+                        #model_m_inputs[t] = (model_m_inputs[t] >0.1).astype(np.float32)
         # --------------- SLICE PAIRS OF INPUT AND TARGET VOLUMES ACCORDING TO CARDIAC PHASE IDX -------------
         # get the volumes of each phase window
         # register from phase to phase (p2p), here combined:
