@@ -669,14 +669,15 @@ class WindowMotionCallback(Callback):
                 # each x,y has the shape of: x == 2,b,shape, y == 4,b,shape
                 # x and y are lists of input batches, as our inputs have a different shape
                 for key, x, y in zip(self.keys, self.xs, self.ys):
-
+                    compose = False
                     pred_ = self.model.predict(x)
                     if len(pred_) == 2:
                         movings, vects = pred_
                     elif len(pred_) == 4:
                         _, movings, moving_m, vects = pred_
                     elif len(pred_) == 5: # compose
-                        moved_comp, movings, moving_m, vects, _ = pred_
+                        compose = True
+                        moving_comp, movings, moving_m, vects, vects_p2ed = pred_
                     else:
                         movings, moving_m, vects = pred_
                     # logging.info(predictions.shape)
@@ -691,21 +692,28 @@ class WindowMotionCallback(Callback):
                         # Slice the volumes
                         if len(y) in [4,5]: # comp_cmr, target_cmr, target_msk, zeros
                             idx_moving_cmr = 0
+                            idy_p2ed_target_cmr = 0
                             idy_target_cmr = 1
                             idx_moving_msk = 1
                             idy_target_msk = 2
                         else: # target_cmr, target_msk, zeros
+
                             idx_moving_cmr = 0
+                            idy_p2ed_target_cmr = 0 # reuse compose
                             idy_target_cmr = 0
                             idx_moving_msk = 1
                             idy_target_msk = 1
                         first_vol, second_vol = x[idx_moving_cmr][elem_in_b][p], y[idy_target_cmr][elem_in_b][p]
                         first_m, second_m = x[idx_moving_msk][elem_in_b][p], y[idy_target_msk][elem_in_b][p]
+                        second_p2ed_vol = y[idy_p2ed_target_cmr][elem_in_b][p]
                         if first_vol.shape[-1] in [2,3]:
                             first_vol = first_vol[..., self.take_t_elem][..., np.newaxis]
                         if first_m.shape[-1] in [2,3]:
                             first_m = first_m[..., self.take_t_elem]
                         moved, moved_m, vect = movings[elem_in_b][p], moving_m[elem_in_b][p], vects[elem_in_b][p]
+                        if compose:
+                            moved_p2ed = moving_comp[elem_in_b][p]
+                            vect_p2ed = vects_p2ed[elem_in_b][p]
                         spatial_slices = first_vol.shape[0]
                         # pick one upper, middle and lower slice as example
                         masked_slices = np.where((second_m.sum(axis=(1, 2)) > 0.5))[0]
@@ -720,9 +728,21 @@ class WindowMotionCallback(Callback):
                         fig = plot_displacement(col_titles, first_m, first_vol, moved, moved_m, picks,
                                                second_m, second_vol, vect, y_label)
                         # fig.tight_layout()
-                        tensorflow.summary.image(name='plot/{}/batch_{}/{}_{}/summary'.format(key, elem_in_b, p, phases[p]),
+                        tensorflow.summary.image(name='plot/{}/batch_{}/p2p/{}_{}/summary'.format(key, elem_in_b, p, phases[p]),
                                                  data=self.make_image(fig),
                                                  step=epoch)
+                        ###### compose plot ######
+                        if compose:
+                            mse_1 = np.mean((first_vol - second_p2ed_vol) ** 2)
+                            mse_2 = np.mean((moved_p2ed - second_p2ed_vol) ** 2)
+                            col_titles = ['t1', 't2', 't1 moved', 'vect', 'magn', 't1-t2 \n {:6.4f}'.format(mse_1),
+                                          'moved-t2 \n {:6.4f}'.format(mse_2)]
+                            fig_p2ed = plot_displacement(col_titles, np.zeros_like(first_m), first_vol, moved_p2ed, np.zeros_like(moved_m), picks,
+                                                    np.zeros_like(second_m), second_p2ed_vol, vect_p2ed, y_label)
+                            tensorflow.summary.image(
+                                name='plot/{}/batch_{}/p2ed/{}_{}/summary'.format(key, elem_in_b, p, phases[p]),
+                                data=self.make_image(fig_p2ed),
+                                step=epoch)
 
 
 class PhaseRegressionCallback(Callback):

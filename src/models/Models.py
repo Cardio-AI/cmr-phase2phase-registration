@@ -303,12 +303,10 @@ def create_RegistrationModel_inkl_mask(config):
 
 
         config_temp = config.copy()
-        config_temp['IMG_CHANNELS']+=1
 
         # input vol with timesteps, z, x, y, c -> =number of input timesteps
-        input_tensor_raw = Input(shape=(T_SHAPE, *input_shape, config.get('IMG_CHANNELS', 1)))
-        input_mask_tensor = Input(shape=(T_SHAPE, *input_shape, config.get('IMG_CHANNELS', 1)))
-        input_tensor_empty = Input(shape=(T_SHAPE, *input_shape, 3))  # empty vector field
+        input_tensor_raw = Input(shape=(T_SHAPE, *input_shape, config.get('IMG_CHANNELS', 1)), name='cmr')
+        input_mask_tensor = Input(shape=(T_SHAPE, *input_shape, config.get('IMG_CHANNELS', 1)), name='mask')
         # define standard values according to the convention over configuration paradigm
 
         ndims = len(input_shape)
@@ -324,28 +322,31 @@ def create_RegistrationModel_inkl_mask(config):
         conv_layer_p2ed = Conv(3, kernel_size=3, padding='same',
                                kernel_initializer=tensorflow.keras.initializers.RandomNormal(mean=0.0, stddev=1e-10),
                                name='unet2flow_p2ed')
-        st_layer = nrn_layers.SpatialTransformer(interp_method=interp_method, indexing=indexing, ident=True,
+        st_layer_p2p = nrn_layers.SpatialTransformer(interp_method=interp_method, indexing=indexing, ident=True,
                                                  name='deformable_p2p')
         st_layer_p2ed = nrn_layers.SpatialTransformer(interp_method=interp_method, indexing=indexing, ident=True,
                                                       name='deformable_p2ed')
         st_mask_layer = nrn_layers.SpatialTransformer(interp_method=interp_method, indexing=indexing, ident=True,
                                                       name='deformable_mask')
 
+        # combine moving image and deformable
+        # if we call the st layer directly, we would have slicing layers in the model plot
         st_lambda_layer = keras.layers.Lambda(
-            lambda x: st_layer([x[..., 0:1], x[..., -3:]]),
-            name='p2p')  # tf.concat([tf.zeros_like(x[..., -1:]), x[..., -2:]], axis=-1)],
+            lambda x: st_layer_p2p([x[..., 0:1], x[..., -3:]]), name='p2p')
         st_p2ed_lambda_layer = keras.layers.Lambda(
             lambda x: st_layer_p2ed([x[..., 0:1], x[..., -3:]]), name='p2ed')
         st_mask_lambda_layer = keras.layers.Lambda(
             lambda x: st_mask_layer([x[..., 0:1], x[..., -3:]]), name='p2p_mask')
 
-        # lambda layers for spatial transformer indexing of the cmr vol and the flowfield
+        # lambda layers for spatial transformer indexing of the cmr vol and the deformable
+        # deformable follows ij indexing --> z,y,x
         if register_spatial: # keep the flow as it is
             add_zero_spatial_lambda_p2p = keras.layers.Lambda(
                 lambda x: x, name='keep_spatial_p2p')
             add_zero_spatial_lambda_p2ed = keras.layers.Lambda(
                 lambda x: x, name='keep_spatial_p2ed')
         else: # ignore the z-axis for the spatial transformer, only x/y movement
+            # concat zero, y, x deformable
             # zero out the z motion
             add_zero_spatial_lambda_p2p = keras.layers.Lambda(
                 lambda x: tf.concat([tf.zeros_like(x[..., -1:]), x[..., -2:]], axis=-1), name='del_spatial_p2p')
@@ -367,17 +368,17 @@ def create_RegistrationModel_inkl_mask(config):
             # x is in this case x_t+1
             stack_p2p_lambda_layer = keras.layers.Lambda(
                 lambda x: keras.layers.Concatenate(axis=-1)(
-                    [x,
-                     tf.roll(x, shift=1, axis=1),
+                    [x, # MS,ES,PF,MD,ED
+                     tf.roll(x, shift=1, axis=1), # ED,MS,ES,PF,MD
                      #tf.math.squared_difference(x,tf.roll(x, shift=1, axis=1))
                      ]),
                 name='stack_p2p')
 
             stack_ed_lambda_layer = keras.layers.Lambda(
                 lambda x: keras.layers.Concatenate(axis=-1)(
-                    [x,
-                     tf.repeat(x[:, 4:5, ...], x.shape[1], axis=1),
-                     #tf.math.squared_difference(x,tf.repeat(x[:, 4:5, ...], x.shape[1], axis=1))
+                    [x, # MS,ES,PF,MD,ED
+                     tf.repeat(x[:, 4:5, ...], repeats=5, axis=1),
+                     #tf.math.squared_difference(x,tf.repeat(x[:, 4:5, ...], repeats=5, axis=1))
                      ]),
                 name='stack_ed')
 
@@ -392,15 +393,16 @@ def create_RegistrationModel_inkl_mask(config):
 
             stack_ed_lambda_layer = keras.layers.Lambda(
                 lambda x: keras.layers.Concatenate(axis=-1)(
-                    [tf.repeat(x[:, 0:1, ...], x.shape[1], axis=1),
+                    [tf.repeat(x[:, 0:1, ...], repeats=5, axis=1),
                     tf.roll(x, shift=-1, axis=1),
-                     #tf.math.squared_difference(tf.repeat(x[:, 0:1, ...], x.shape[1], axis=1),tf.roll(x, shift=-1, axis=1))
+                     #tf.math.squared_difference(tf.repeat(x[:, 0:1, ...], repeats=5, axis=1),tf.roll(x, shift=-1, axis=1))
                      ]),
                 name='stack_ed')
 
         input_tensor = stack_p2p_lambda_layer(input_tensor_raw)
 
         # we need to build the u-net after the compose concat path to make sure that our u-net input channels match the input
+        config_temp['IMG_CHANNELS'] = input_tensor.shape[-1]
         unet = create_unet(config_temp, single_model=False)
         print('input before unet:', input_tensor.shape)
         pre_flows = TimeDistributed(unet, name='unet')(input_tensor)
@@ -411,29 +413,30 @@ def create_RegistrationModel_inkl_mask(config):
         print('flows_p2p:', flows.shape)
         # Each CMR input vol has CMR data from three timesteps stacked as channel: t1,t1+t2/2,t2
         # transform only one timestep, mostly the first one
-        transformed = TimeDistributed(st_lambda_layer, name='st_p2p')(keras.layers.Concatenate(axis=-1)([input_tensor, flows]))
+        transformed = TimeDistributed(st_lambda_layer, name='st_p2p')(keras.layers.Concatenate(axis=-1, name='cmr_flow_p2p')([input_tensor_raw, flows]))
         print('transformed_p2p:', transformed.shape)
         transformed_mask = TimeDistributed(st_mask_lambda_layer, name='st_p2p_msk')(
-            keras.layers.Concatenate(axis=-1)([input_mask_tensor, flows]))
+            keras.layers.Concatenate(axis=-1, name='msk_flow_p2p')([input_mask_tensor, flows]))
 
         if COMPOSE_CONSISTENCY:
             input_tensor_ed = stack_ed_lambda_layer(input_tensor_raw)
             # two options, either a 2nd unet for p2ed graph flow, or we re-use the existing one, with the p2ed CMR stack
+            config_temp['IMG_CHANNELS'] = input_tensor_ed.shape[-1]
             unet_ed = create_unet(config_temp, single_model=False)
             pre_flows_p2ed = TimeDistributed(unet_ed, name='unet_ed')(input_tensor_ed)
             # composed flowfield should move each phase to ED
             flows_p2ed = TimeDistributed(conv_layer_p2ed, name='unet2flow_ed2p')(pre_flows_p2ed)
             flows_p2ed = add_zero_spatial_lambda_p2ed(flows_p2ed)
             comp_transformed = TimeDistributed(st_p2ed_lambda_layer, name='st_p2ed')(
-                keras.layers.Concatenate(axis=-1)([input_tensor_ed, flows_p2ed]))
-            comp_transformed = keras.layers.Lambda(lambda x: x, name='comp_transformed')(comp_transformed)
+                keras.layers.Concatenate(axis=-1, name='cmr_flow_p2ed')([input_tensor_raw, flows_p2ed]))
+            comp_transformed = keras.layers.Lambda(lambda x: x, name='transformed_p2ed')(comp_transformed)
 
             flows_p2ed = keras.layers.Lambda(lambda x: x, name='flowfield_p2ed')(flows_p2ed)
             print('comp transformed:', comp_transformed.shape)
 
         flow = keras.layers.Lambda(lambda x: x, name='flowfield_p2p')(flows)
         transformed_mask = keras.layers.Lambda(lambda x: x, name='transformed_mask')(transformed_mask)
-        transformed = keras.layers.Lambda(lambda x: x, name='transformed')(transformed)
+        transformed = keras.layers.Lambda(lambda x: x, name='transformed_p2p')(transformed)
 
         outputs = [transformed, transformed_mask, flow]
         if COMPOSE_CONSISTENCY: outputs = [comp_transformed] + outputs + [flows_p2ed]
@@ -441,11 +444,16 @@ def create_RegistrationModel_inkl_mask(config):
         model = Model(name='simpleregister', inputs=[input_tensor_raw, input_mask_tensor],
                       outputs=outputs)
 
-        losses = [image_loss_fn, dice_coef_loss, flow_reg_loss_fn]
-        weights = [image_loss_weight, dice_loss_weight, reg_loss_weight]
+        losses = {'transformed_p2p':image_loss_fn, 'transformed_mask':dice_coef_loss, 'flowfield_p2p':flow_reg_loss_fn}
+        weights = {'transformed_p2p':image_loss_weight, 'transformed_mask':dice_loss_weight, 'flowfield_p2p':reg_loss_weight}
 
-        if COMPOSE_CONSISTENCY: losses = [image_comp_loss_fn] + losses + [flow_comp_reg_loss_fn]
-        if COMPOSE_CONSISTENCY: weights = [image_loss_weight] + weights + [reg_loss_weight]
+        if COMPOSE_CONSISTENCY:
+            losses['transformed_p2ed'] = image_comp_loss_fn
+            losses['flowfield_p2ed'] = flow_comp_reg_loss_fn
+            weights['transformed_p2ed'] = image_loss_weight
+            weights['flowfield_p2ed'] = reg_loss_weight
+        print('losses: {}'.format(losses))
+        print('weights: {}'.format(weights))
         model.compile(optimizer=keras.optimizers.Adam(learning_rate=learning_rate),
                       loss=losses,
                       loss_weights=weights)

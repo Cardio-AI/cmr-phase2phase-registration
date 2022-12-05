@@ -1072,13 +1072,13 @@ class PhaseMaskWindowGenerator(DataGenerator):
 
         # repeat the ED vol, compose transform will register each time step to this phase
         if self.REGISTER_BACKWARDS: # here
-            comp_transformed = np.repeat(y[:, 0:1, ...], 5, axis=1) # here we move each phase to the ED phase
+            y_comp = np.repeat(x[:, 4:5, ...], 5, axis=1) # here we move each phase to the ED phase
         else:
-            comp_transformed = y # here we move the ed phase to each phases, starting with MS - same target as p2p
+            y_comp = np.roll(x, shift=-1, axis=1) # here we move the ed phase to each phases, starting with MS - same target as p2p
         logging.debug('Batchsize: {} preprocessing took: {:0.3f} sec'.format(self.BATCHSIZE, time() - t0))
         zeros = np.zeros((*x.shape[:-1], 3), dtype=np.float32)
         if self.COMPOSE_CONSISTENCY:
-            return tuple([[x, x2], [comp_transformed, y, y2, zeros, zeros]])
+            return tuple([[x, x2], [y_comp, y, y2, zeros, zeros]])
         else:
             return tuple([[x, x2], [y, y2, zeros]])
 
@@ -1236,7 +1236,8 @@ class PhaseMaskWindowGenerator(DataGenerator):
         t1 = time()
 
         # Added mask smoothness
-        if self.RESAMPLE_Z:  # smooth only if we have fake isotropy voxels, otherwise we used 8mm spacing for z
+
+        if self.RESAMPLE_Z:  # smooth only if we have fake isotropy voxels, otherwise we use the original slices
             for t in range(model_m_inputs.shape[0]):
                 if model_m_inputs[t].sum() > 0:  # we only need to smooth time steps with a mask
                         model_m_inputs[t] = scipy.ndimage.binary_closing(model_m_inputs[t], iterations=5)
