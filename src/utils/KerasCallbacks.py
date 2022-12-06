@@ -688,7 +688,7 @@ class WindowMotionCallback(Callback):
                     for p in range(len(phases)):
 
                         # Slice the volumes
-                        if len(y) in [4,5]: # comp_cmr, target_cmr, target_msk, zeros
+                        if len(y) in [4,5]: # p2ed_cmr, p2p_cmr, p2p/p2ed_msk, flow_p2p, flow_p2ed
                             idx_moving_cmr = 0
                             idy_p2ed_target_cmr = 0
                             idy_target_cmr = 1
@@ -721,7 +721,7 @@ class WindowMotionCallback(Callback):
                             vect_p2ed = vects_p2ed[elem_in_b][p]
                         spatial_slices = first_vol.shape[0]
                         # pick one upper, middle and lower slice as example
-                        masked_slices = np.where((second_m.sum(axis=(1, 2)) > 0.5))[0]
+                        masked_slices = np.where((second_m_p2p.sum(axis=(1, 2)) > 0.5))[0]
                         most_basal, mid, most_apical =  masked_slices[-1], masked_slices[len(masked_slices)//2], masked_slices[0]
                         picks = (most_basal, mid, most_apical)
                         y_label = ['Basal', 'Mid', 'Apex']
@@ -738,6 +738,10 @@ class WindowMotionCallback(Callback):
                                                  step=epoch)
                         ###### compose plot ######
                         if compose:
+                            masked_slices = np.where((second_m_p2ed.sum(axis=(1, 2)) > 0.5))[0]
+                            most_basal, mid, most_apical = masked_slices[-1], masked_slices[len(masked_slices) // 2], \
+                                                           masked_slices[0]
+                            picks = (most_basal, mid, most_apical)
                             mse_1 = np.mean((first_vol - second_p2ed_vol) ** 2)
                             mse_2 = np.mean((moved_p2ed - second_p2ed_vol) ** 2)
                             col_titles = ['moving(t1)', 'fixed(t2)', 't1 moved', 'vect', 'magn', 't1-t2 \n {:6.4f}'.format(mse_1),
