@@ -131,6 +131,8 @@ def pred_fold(config, debug=True):
     # also necessary for the compose
     flows_masked = flows.copy()
     msk_t = np.squeeze(msk_target>0.1)
+    if msk_t.shape[-1] > 1:
+        msk_t = msk_t[..., 0]
     for dim in range(flows.shape[-1]):
         flows_masked[..., dim][~msk_t] = 0
 
@@ -152,6 +154,9 @@ def pred_fold(config, debug=True):
         cmr_m = cmr_moved[i]
         msk_mov = msk_moving[i][...,0:1]
         msk_t = msk_target[i] # target mask of each pair-wise p2p
+        if msk_t.shape[-1]==2:
+            msk_t_p2ed = msk_t[...,-1]
+            msk_t = msk_t[..., 0]
 
         msk_m = msk_moved[i]
         flow = flows[i]
