@@ -280,6 +280,7 @@ def create_RegistrationModel_inkl_mask(config):
         image_comp_loss = config.get('IMAGE_COMP_LOSS', 'mse').lower()
         img_flow_reg_loss = config.get('IMG_REG_LOSS', 'grad').lower()
         img_comp_flow_reg_loss = config.get('IMG_COMP_REG_LOSS', 'grad').lower()
+        dedicated_unet = config.get('DEDICATED_UNET', True)
 
         if image_loss == 'ssim':
             image_loss_fn = SSIM()
@@ -424,7 +425,11 @@ def create_RegistrationModel_inkl_mask(config):
             input_tensor_ed = stack_ed_lambda_layer(input_tensor_raw)
             # two options, either a 2nd unet for p2ed graph flow, or we re-use the existing one, with the p2ed CMR stack
             config_temp['IMG_CHANNELS'] = input_tensor_ed.shape[-1]
-            unet_ed = create_unet(config_temp, single_model=False)
+            if dedicated_unet:
+                unet_ed = create_unet(config_temp, single_model=False)
+            else:
+                unet_ed = unet
+                print('shared unet')
             pre_flows_p2ed = TimeDistributed(unet_ed, name='unet_ed')(input_tensor_ed)
             # composed flowfield should move each phase to ED
             flows_p2ed = TimeDistributed(conv_layer_p2ed, name='unet2flow_ed2p')(pre_flows_p2ed)

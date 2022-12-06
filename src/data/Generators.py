@@ -1242,11 +1242,22 @@ class PhaseMaskWindowGenerator(DataGenerator):
         import scipy
         import scipy.ndimage
         if self.RESAMPLE_Z:  # smooth only if we have fake isotropy voxels, otherwise we use the original slices
-            for t in range(model_m_inputs.shape[0]):
+            '''for t in range(model_m_inputs.shape[0]):
                 if model_m_inputs[t].sum() > 0:  # we only need to smooth time steps with a mask
                         model_m_inputs[t]  = scipy.ndimage.binary_closing(model_m_inputs[t], iterations=5)
                         #model_m_inputs[t] = scipy.ndimage.gaussian_filter(model_m_inputs[t] , sigma=1, mode='nearest')
                         #model_m_inputs[t] = (model_m_inputs[t] >0.1).astype(np.float32)
+                        #model_m_inputs[t] = scipy.ndimage.binary_dilation(model_m_inputs[t], iterations=1)
+            '''
+            # this 'smoothed' mask is a little greater than the version above, and covers more of the myocardium
+            for t in range(model_m_inputs.shape[0]):
+                if model_m_inputs[t].sum() > 0:  # we only need to smooth time steps with a mask
+                    smooth = scipy.ndimage.binary_closing(model_m_inputs[t], iterations=5)
+                    smooth = (smooth > 0.2).astype(np.float32)
+                    for z in range(smooth.shape[0]):
+                        smooth[z] = scipy.ndimage.gaussian_filter(smooth[z], sigma=0.8, mode='nearest')
+                    model_m_inputs[t] = (smooth > 0.2).astype(np.float32)
+        #show_2D_or_3D(model_inputs[5, ...], model_m_inputs[5, ...])'''
         # --------------- SLICE PAIRS OF INPUT AND TARGET VOLUMES ACCORDING TO CARDIAC PHASE IDX -------------
         # get the volumes of each phase window
         # register from phase to phase (p2p), here combined:
