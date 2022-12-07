@@ -155,8 +155,8 @@ def pred_fold(config, debug=True):
         msk_mov = msk_moving[i][...,0:1]
         msk_t = msk_target[i] # target mask of each pair-wise p2p
         if msk_t.shape[-1]==2:
-            msk_t_p2ed = msk_t[...,-1]
-            msk_t = msk_t[..., 0]
+            msk_t_p2ed = msk_t[...,-1:]
+            msk_t = msk_t[..., 0:1]
 
         msk_m = msk_moved[i]
         flow = flows[i]
