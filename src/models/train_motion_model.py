@@ -102,7 +102,8 @@ def train_fold(config, in_memory=False):
             # returns the indices in the following order: 'ED#', 'MS#', 'ES#', 'PF#', 'MD#'
             # reduce by one, as the indexes start at 0, the excel-sheet at 1
             ind = DF_METADATA[DF_METADATA.patient.str.contains(patient_str)][['ED#', 'MS#', 'ES#', 'PF#', 'MD#']]
-            indices = ind.values[0].astype(int) - 1
+            # for the original dmd ind we need this one
+            indices = ind.values[0].astype(int)# - 1
 
         except Exception as e:
             logging.info(patient_str)
