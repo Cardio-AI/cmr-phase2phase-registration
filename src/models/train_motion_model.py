@@ -1,3 +1,5 @@
+import logging
+
 import numpy as np
 
 
@@ -231,22 +233,30 @@ def main(args=None):
         config_ = config.copy()
         config_['FOLD'] = f
         cfg = train_fold(config_)
+        logging.info('start pred_fold with exp path: {}'.format(cfg.get('EXP_PATH', '')))
         pred_fold(cfg)
         exp_path = cfg.get('EXP_PATH')
 
     gt_path = os.path.join(exp_path, 'gt_m')
     pred_path = os.path.join(exp_path, 'pred_m')
-    calc_dice(gt_path, pred_path, exp_path)
+    try:
+        logging.info('start dice calculation with: {}{}{}'.format(gt_path,pred_path,exp_path))
+        calc_dice(gt_path, pred_path, exp_path)
+    except Exception as e:
+        print('Dice calculation failed with: {}'.format(e))
     ### integration of the strain calculation
     try:
         from src_julian.data.MyMoralesAndCompositionsAHA3 import calculate_strain
         metadata = cfg.get('DATA_PATH_SAX').replace('sax','')
+        logging.info('start P2P strain calculation with metadata: {}'.format(metadata))
         df_patients_p2p = calculate_strain(data_root=exp_path, metadata_path=metadata,
                                            debug=False, df_style='time', p2p_style=True, isDMD=True)
+        logging.info('start P2ED strain calculation with metadata: {}'.format(metadata))
         df_patients_ed2p = calculate_strain(data_root=exp_path, metadata_path=metadata,
                                             debug=False, df_style='time', p2p_style=False, isDMD=True)
 
         x = 0
+        logging.info('Writing Strain to: {}'.format(exp_path))
         df_patients_p2p.to_csv(os.path.join(exp_path, 'df_DMD_time_p2p.csv'), index=False)
         df_patients_ed2p.to_csv(os.path.join(exp_path, 'df_DMD_time_ed2p.csv'), index=False)
     except Exception as e:
