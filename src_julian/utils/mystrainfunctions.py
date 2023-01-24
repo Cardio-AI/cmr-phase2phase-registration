@@ -481,13 +481,23 @@ def get_volumeborders(wholeheartvolumeborders):
 
     # we have to extend the z_end value by 1 so that the last index will be included in the Z_SLICES array
     midcavity_slices = np.arange(int(z_start_midcavity), int(z_end_midcavity)+1, 1)
+    if len(midcavity_slices)<2:
+        midcavity_slices = np.arange(int(z_start_midcavity)-1, int(z_end_midcavity) + 1, 1)
 
     # calculate apex and base ranges on midcavity basis
     # the upper borders have to be increased by 1, so that arange includes the last entry
     apex_slices = np.arange(min_vol, midcavity_slices[0]+1, 1) # this makes sure to have at least 2 slices for apical
-    base_slices = np.arange(midcavity_slices[-1], max_vol+1, 1)
+    if len(apex_slices) < 2:
+        apex_slices = np.arange(min_vol, midcavity_slices[0] + 2, 1)
 
-    assert all([len(apex_slices)>=2, len(midcavity_slices)>=2, len(base_slices)>=2]), 'some areas are too small, calculation of the gradient for single slice areas will not work.'
+    base_slices = np.arange(midcavity_slices[-1], max_vol+1, 1)
+    if len(base_slices) < 2:
+        base_slices = np.arange(midcavity_slices[-1]-1, max_vol + 1, 1)
+
+    if not all([len(apex_slices)>=2, len(midcavity_slices)>=2, len(base_slices)>=2]):
+        print(min_vol, max_vol)
+
+    #assert all([len(apex_slices)>=2, len(midcavity_slices)>=2, len(base_slices)>=2]), 'some areas are too small, calculation of the gradient for single slice areas will not work.'
 
     return base_slices, midcavity_slices, apex_slices
 

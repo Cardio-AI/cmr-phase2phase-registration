@@ -1276,9 +1276,15 @@ class PhaseMaskWindowGenerator(DataGenerator):
                                                    register_backwards=self.REGISTER_BACKWARDS,
                                                    intermediate=False
                                                    )
-            combined_m = get_n_windows_between_phases_from_single4D(model_m_inputs, idx,
+            combined_m = get_n_windows_from_single4D(model_m_inputs, idx, window_size=self.WINDOW_SIZE,
+                                                   register_backwards=self.REGISTER_BACKWARDS,
+                                                   intermediate=False
+                                                   )
+
+            # Use this for masks with only 5 time-steps labelled. But than you need to turn the mask weight to 0
+            """combined_m = get_n_windows_between_phases_from_single4D(model_m_inputs, idx,
                                                                     register_backwards=self.REGISTER_BACKWARDS,
-                                                                    intermediate=False)
+                                                                    intermediate=False)"""
             #combined_m = get_n_windows_from_single4D(model_m_inputs, idx, window_size=self.WINDOW_SIZE)
 
         logging.debug('windowing slicing took: {:0.3f} s'.format(time() - t1))
@@ -1289,7 +1295,9 @@ class PhaseMaskWindowGenerator(DataGenerator):
         combined = np.stack(combined, axis=-1)
         combined_m = np.stack(combined_m, axis=-1)
 
-
+        # check if the mask for one time step is zero
+        if not all(np.any(combined_m, axis=(1,2,3,4))):
+            print('please check the masks!')
 
         logging.debug('stacking took: {:0.3f} s'.format(time() - t1))
         t1 = time()

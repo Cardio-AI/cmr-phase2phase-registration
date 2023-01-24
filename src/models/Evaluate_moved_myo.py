@@ -29,11 +29,11 @@ def calc_dice(gt_path, pred_path, export_path):
     results_df.to_csv(results_file, index=False)
     g = sns.violinplot(x='phase', y='dice', data=results_df[['patient', 'phase', 'dice']])
     g.set(ylim=(0,1))
-    plt.savefig(export_path + '/dice.png')
+    plt.savefig(os.path.join(export_path,'dice.png'))
     plt.clf()
     g = sns.violinplot(x='phase', y='hd', data=results_df[['patient', 'phase', 'hd']])
     g.set(ylim=(0, 25))
-    plt.savefig(export_path + '/hd.png')
+    plt.savefig(os.path.join(export_path, 'hd.png'))
     print('Evaluation done: \n{}'.format(export_path))
 
 

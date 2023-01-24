@@ -58,7 +58,7 @@ def pred_fold(config, debug=True):
 
     DATA_PATH_SAX = config.get('DATA_PATH_SAX')
     DF_FOLDS = config.get('DF_FOLDS')
-    DF_META = config.get('DF_META', '/mnt/ssd/data/gcn/02_imported_4D_unfiltered/SAx_3D_dicomTags_phase')
+    DF_META = config.get('DF_META', None)
     EPOCHS = config.get('EPOCHS', 100)
 
     Console_and_file_logger(path=EXPERIMENT, log_lvl=logging.INFO)
@@ -149,6 +149,8 @@ def pred_fold(config, debug=True):
     # iterate over the patients and
     for i in range(len(x_val_sax)):
         filename = x_val_sax[i]
+
+
         cmr_mov = cmr_moving[i][...,0:1]
         cmr_t = cmr_target[i]
         cmr_m = cmr_moved[i]
@@ -163,6 +165,9 @@ def pred_fold(config, debug=True):
         flow_comp_m = flows_composed_masked[i]
         flow_masked = flows_masked[i]
         fullmsk_t = fullmsk_target[i]
+
+        if not all(np.any(msk_t, axis=(1,2,3))):
+            print('please check the predicted masks, some timesteps of the target mask seem to be empty!')
 
         # save all files of this patient
         p = os.path.basename(filename).split('_volume')[0].lower()
