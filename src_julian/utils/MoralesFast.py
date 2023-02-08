@@ -103,11 +103,11 @@ def roll(x, rx, ry):
 
 def roll_to_center(x, cx, cy):
     nx, ny = x.shape[:2]
-    return roll(x, int(nx // 2 - cx), int(ny // 2 - cy))
-    '''try:
+    #return roll(x, int(nx // 2 - cx), int(ny // 2 - cy))
+    try:
         return roll(x, int(nx // 2 - cx), int(ny // 2 - cy))
-    except Exception as e: # kieep it unrolled
-        return x'''
+    except Exception as e: # dont roll
+        return x
 
 
 def polar_grid(nx=128, ny=128):

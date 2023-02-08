@@ -416,6 +416,8 @@ def calc_strain4singlepatient(path_to_patient_folder, N_TIMESTEPS, RVIP_method, 
         (16 * 5, 1))
     cs_AHA_overtime = np.concatenate((cs_overtime_base, cs_overtime_mc, cs_overtime_apex), axis=0).reshape(
         (16 * 5, 1))
+    rs_AHA_overtime = np.nan_to_num(rs_AHA_overtime)
+    cs_AHA_overtime = np.nan_to_num(cs_AHA_overtime)
     if (np.isnan(rs_AHA_overtime).any() or np.isnan(cs_AHA_overtime).any()):
         raise NotImplementedError('Some AHA segments have NaN values, please check!')
     INFO('Err min: {:3.1f}%'.format(100 * rs_AHA_overtime.min()))

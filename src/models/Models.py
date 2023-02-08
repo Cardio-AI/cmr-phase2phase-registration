@@ -20,6 +20,7 @@ from src.models.Unets import create_unet
 from src.utils import Metrics as own_metr
 
 from src.models.ModelUtils import get_optimizer
+from src.utils.Metrics import MSE
 
 sys.path.append('src/ext/neuron')
 sys.path.append('src/ext/pynd-lib')
@@ -286,13 +287,13 @@ def create_RegistrationModel_inkl_mask(config):
             image_loss_fn = SSIM()
             print('ssim')
         else:
-            image_loss_fn = MSE_().loss
+            image_loss_fn = MSE()
 
         if image_comp_loss =='ssim':
             image_comp_loss_fn = SSIM()
             print('ssim')
         else:
-            image_comp_loss_fn = MSE_().loss
+            image_comp_loss_fn = MSE()
 
         if img_flow_reg_loss == 'norm':
             flow_reg_loss_fn = NormRegulariser().norm_loss
