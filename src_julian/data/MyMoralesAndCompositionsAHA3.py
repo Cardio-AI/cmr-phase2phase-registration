@@ -205,7 +205,7 @@ def calc_strain4singlepatient(path_to_patient_folder, N_TIMESTEPS, RVIP_method, 
     # level ranges
     # 2021.10.06: lvmyo more accurate when not-sparse
     base_slices, midcavity_slices, apex_slices = get_volumeborders(wholeheartvolumeborders_lvmyo)  # by lvmyo-range
-    # base_slices, midcavity_slices, apex_slices = get_volumeborders(wholeheartvolumeborders_rviprange)  # by rvip-range
+    #base_slices, midcavity_slices, apex_slices = get_volumeborders(wholeheartvolumeborders_rviprange)  # by rvip-range
     # plot composed flowfields against each other if wanted
     # plot_three_ComposedFlowfields_against_each_other(ff, ff_whole_Sven, ff_whole_itk,
     #                                                  wholeheartvolumeborders_lvmyo, mask_lvmyo)
