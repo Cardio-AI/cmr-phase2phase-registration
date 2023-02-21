@@ -45,7 +45,7 @@ def get_callbacks(config=None, batch_generator=None, validation_generator=None, 
                         save_freq='epoch'))
 
     callbacks.append(
-        tensorflow.keras.callbacks.ReduceLROnPlateau(monitor=config.get('MONITOR_FUNCTION', 'transformed_loss'),
+        tensorflow.keras.callbacks.ReduceLROnPlateau(monitor=config.get('MONITOR_FUNCTION', 'loss'),
                                                      factor=config.get('DECAY_FACTOR', 0.5),
                                                      patience=config.get('REDUCE_LR_ON_PLATEAU_PATIENCE', 5),
                                                      verbose=1,
@@ -81,7 +81,7 @@ def get_callbacks(config=None, batch_generator=None, validation_generator=None, 
                                         feed_inputs_4_display=feed_inputs_4_tensorboard(config, batch_generator,
                                                                                         validation_generator),
                                         ))
-        if config.get('SAVE_LEARNING_P2P_TF'):
+        if config.get('SAVE_LEARNING_P2P_TF', False):
             callbacks.append(
                 WindowMotionCallback(log_dir=config['TENSORBOARD_PATH'],
                                      image_freq=config.get('SAVE_LEARNING_PROGRESS_FREQUENCY', 2),
@@ -721,8 +721,11 @@ class WindowMotionCallback(Callback):
                             vect_p2ed = vects_p2ed[elem_in_b][p]
                         spatial_slices = first_vol.shape[0]
                         # pick one upper, middle and lower slice as example
-                        masked_slices = np.where((second_m_p2p.sum(axis=(1, 2)) > 0.5))[0]
-                        most_basal, mid, most_apical =  masked_slices[-1], masked_slices[len(masked_slices)//2], masked_slices[0]
+                        try:
+                            masked_slices = np.where((first_m.sum(axis=(1, 2)) > 0.5))[0]
+                            most_basal, mid, most_apical =  masked_slices[-1], masked_slices[len(masked_slices)//2], masked_slices[0]
+                        except Exception as e:
+                            most_basal, mid, most_apical = 0, spatial_slices//2, spatial_slices-1
                         picks = (most_basal, mid, most_apical)
                         y_label = ['Basal', 'Mid', 'Apex']
 
@@ -738,9 +741,12 @@ class WindowMotionCallback(Callback):
                                                  step=epoch)
                         ###### compose plot ######
                         if compose:
-                            masked_slices = np.where((second_m_p2ed.sum(axis=(1, 2)) > 0.5))[0]
-                            most_basal, mid, most_apical = masked_slices[-1], masked_slices[len(masked_slices) // 2], \
-                                                           masked_slices[0]
+                            try:
+                                masked_slices = np.where((first_m.sum(axis=(1, 2)) > 0.5))[0]
+                                most_basal, mid, most_apical = masked_slices[-1], masked_slices[len(masked_slices) // 2], \
+                                                               masked_slices[0]
+                            except Exception as e:
+                                most_basal, mid, most_apical = 0, spatial_slices//2, spatial_slices - 1
                             picks = (most_basal, mid, most_apical)
                             mse_1 = np.mean((first_vol - second_p2ed_vol) ** 2)
                             mse_2 = np.mean((moved_p2ed - second_p2ed_vol) ** 2)

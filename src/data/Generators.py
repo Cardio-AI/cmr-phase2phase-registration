@@ -1201,8 +1201,8 @@ class PhaseMaskWindowGenerator(DataGenerator):
 
         # --------------- CONTINUE WITH ND-ARRAYS --------------
         # transform to nda for further processing
-        model_inputs = np.stack(list(map(lambda x: sitk.GetArrayViewFromImage(x), model_inputs)), axis=0)
-        model_m_inputs = np.stack(list(map(lambda x: sitk.GetArrayViewFromImage(x), model_m_inputs)), axis=0)
+        model_inputs = np.stack(list(map(lambda x: sitk.GetArrayFromImage(x), model_inputs)), axis=0)
+        model_m_inputs = np.stack(list(map(lambda x: sitk.GetArrayFromImage(x), model_m_inputs)), axis=0)
         spatial_sampling_factor = new_size_inputs[0][-1] / old_size
         # Create a sparse mask from the interpolated/resampled mask,
         # by this we drop the interpolated spatial slices and replace them with zero padded slices
