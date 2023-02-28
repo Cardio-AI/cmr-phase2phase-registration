@@ -196,6 +196,8 @@ def calc_strain4singlepatient(path_to_patient_folder, N_TIMESTEPS, RVIP_method, 
     lvmyo_idxs = np.argwhere(
         np.all(volume(mask_lvmyo, '4Dt', 1).get_segmentationarray(resolution='slicewise')[..., 0],
                axis=0)).flatten()
+    if len(lvmyo_idxs) == 0:
+        print(patient_name)
     # IDXs FROM RVIP DETECTION IN WHOLE MASKS
     # get lowest and highest index of z where all timesteps have RVIP identified
     #rvip_range = calculate_wholeheartvolumeborders_by_RVIP(mask_whole)

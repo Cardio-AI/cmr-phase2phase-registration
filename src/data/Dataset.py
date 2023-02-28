@@ -1754,14 +1754,14 @@ def save_gt_and_pred(gt, pred, exp_path, patient, cfg=None):
     ensure_dir(gt_path)
     ensure_dir(pred_path)
 
-    gt = np.einsum('tzyxc->cxyzt', gt)
-    pred = np.einsum('tzyxc->cxyzt', pred)
+    #gt = np.einsum('tzyxc->cxyzt', gt)
+    #pred = np.einsum('tzyxc->cxyzt', pred)
 
     for t, phase in enumerate(cardiac_phases):
         gt_file_name = os.path.join(gt_path, "{}_{}.nii".format(patient, phase))
         pred_file_name = os.path.join(pred_path, "{}_{}.nii".format(patient, phase))
-        save_3d(gt[..., t], gt_file_name,cfg=cfg)
-        save_3d(pred[..., t], pred_file_name, cfg=cfg)
+        save_3d(gt[t,...], gt_file_name,cfg=cfg)
+        save_3d(pred[t,...], pred_file_name, cfg=cfg)
 
 
 def save_all_3d_vols(inputs, outputs, moved, moved_mask, flow, inputs_mask, outputs_mask, inputs_lvmask, outputs_lvmask, inputs_full, outputs_full, EXP_PATH, exp='example_flows', save2dplus_t=False):
