@@ -1276,16 +1276,18 @@ class PhaseMaskWindowGenerator(DataGenerator):
                                                    register_backwards=self.REGISTER_BACKWARDS,
                                                    intermediate=False
                                                    )
-            combined_m = get_n_windows_from_single4D(model_m_inputs, idx, window_size=self.WINDOW_SIZE,
-                                                   register_backwards=self.REGISTER_BACKWARDS,
-                                                   intermediate=False
-                                                   )
-
-            # Use this for masks with only 5 time-steps labelled. But than you need to turn the mask weight to 0
-            """combined_m = get_n_windows_between_phases_from_single4D(model_m_inputs, idx,
-                                                                    register_backwards=self.REGISTER_BACKWARDS,
-                                                                    intermediate=False)"""
-            #combined_m = get_n_windows_from_single4D(model_m_inputs, idx, window_size=self.WINDOW_SIZE)
+            if all(np.any(model_m_inputs, axis=(1, 2, 3))):
+                # all time steps have a mask (this is very likely a predicted mask)
+                combined_m = get_n_windows_from_single4D(model_m_inputs, idx, window_size=self.WINDOW_SIZE,
+                                                         register_backwards=self.REGISTER_BACKWARDS,
+                                                         intermediate=False
+                                                         )
+            else:
+                # not all time steps have a mask, this is very likely GT contours, extract only the labelled time steps
+                # Use this for masks with only 5 time-steps labelled. But than you need to turn the mask weight to 0
+                combined_m = get_n_windows_between_phases_from_single4D(model_m_inputs, idx,
+                                                                        register_backwards=self.REGISTER_BACKWARDS,
+                                                                        intermediate=False)
 
         logging.debug('windowing slicing took: {:0.3f} s'.format(time() - t1))
         t1 = time()
