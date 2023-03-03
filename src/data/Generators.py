@@ -1277,14 +1277,16 @@ class PhaseMaskWindowGenerator(DataGenerator):
                                                    intermediate=False
                                                    )
             if all(np.any(model_m_inputs, axis=(1, 2, 3))):
-                # all time steps have a mask (this is very likely a predicted mask)
+                # all time steps / frames in this 4D sequence have a mask (this is very likely a predicted mask)
+                # use the masks defined by the window
                 combined_m = get_n_windows_from_single4D(model_m_inputs, idx, window_size=self.WINDOW_SIZE,
                                                          register_backwards=self.REGISTER_BACKWARDS,
                                                          intermediate=False
                                                          )
             else:
-                # not all time steps have a mask, this is very likely GT contours, extract only the labelled time steps
-                # Use this for masks with only 5 time-steps labelled. But than you need to turn the mask weight to 0
+                # not all time steps have a mask, this is very likely a GT, with contours only at the 5 labelled phases,
+                # use the labelled masks defined by the phases in the phase df
+                # Use this for masks with only 5 time-steps labelled. moving and target mask will be the same
                 combined_m = get_n_windows_between_phases_from_single4D(model_m_inputs, idx,
                                                                         register_backwards=self.REGISTER_BACKWARDS,
                                                                         intermediate=False)
