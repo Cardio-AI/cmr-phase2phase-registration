@@ -580,7 +580,7 @@ class WindowMotionCallback(Callback):
         """
         This callback gets a dict with key: x,y entries
         When the on_epoch_end callback is invoked this callback predicts the current output for all xs
-        Afterwards it writes the image, gt and prediction into a summary file to make the learning visually in the Tensorboard
+        Afterwards it writes the image, gt and prediction into a summary file to visualize the learning progress in the Tensorboard
         :param log_dir: String, path - folder for the tensorboard summary file Imagewriter will create a subdir "images" for the imagesummary file
         :param image_freq: int - run this callback every n epoch to save disk space and increase speed
         :param feed_inputs_4_display: dict {'train':(x_tensor,y_tensor), 'val' : (x_tensor. y_tensor)}
@@ -665,7 +665,7 @@ class WindowMotionCallback(Callback):
             with self.writer.as_default():
                 # iterate over 2 keys --> train, val
                 # each x,y has the shape of: x == 2,b,shape, y == 4,b,shape
-                # x and y are lists of input batches, as our inputs have a different shape
+                # x and y are lists of input batches, because our inputs have different shapes
                 for key, x, y in zip(self.keys, self.xs, self.ys):
                     compose = False
                     pred_ = self.model.predict(x)

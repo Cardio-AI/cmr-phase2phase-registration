@@ -153,7 +153,7 @@ def train_fold(config, in_memory=False):
         epochs=EPOCHS,
         callbacks=cb,
         initial_epoch=initial_epoch,
-        max_queue_size=config.get('QUEUE_SIZE',12),
+        max_queue_size=config.get('QUEUE_SIZE',6),
         verbose=2)
 
 
@@ -233,7 +233,7 @@ def main(args=None):
         print('starting fold: {}'.format(f))
         config_ = config.copy()
         config_['FOLD'] = f
-        cfg = train_fold(config_)
+        cfg = train_fold(config_, in_memory=args.inmemory.lower()=='true')
         logging.info('start pred_fold with exp path: {}'.format(cfg.get('EXP_PATH', '')))
         pred_fold(cfg)
         exp_path = cfg.get('EXP_PATH')

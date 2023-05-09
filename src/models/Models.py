@@ -350,8 +350,9 @@ def create_RegistrationModel_inkl_mask(config):
             add_zero_spatial_lambda_p2ed = keras.layers.Lambda(
                 lambda x: x, name='keep_spatial_p2ed')
         else: # ignore the z-axis for the spatial transformer, only x/y movement
-            # concat zero, y, x deformable
             # zero out the z motion
+            # concat zero with the  y and x deformable
+
             add_zero_spatial_lambda_p2p = keras.layers.Lambda(
                 lambda x: tf.concat([tf.zeros_like(x[..., -1:]), x[..., -2:]], axis=-1), name='del_spatial_p2p')
             add_zero_spatial_lambda_p2ed = keras.layers.Lambda(
@@ -362,14 +363,14 @@ def create_RegistrationModel_inkl_mask(config):
             # repeat ED along the t-axis
             # add the ed phase as 4th channel to each phase
             # replace t shifted by the ed phase as second input for the compose flow
-            # x[:, 0:1, ..., -1:] --> the shape is B, Phases, Z, X, Y, C
+            # x[:, 0:1, ..., -1:] --> the shape is: Batchsize, Phases, Z, X, Y, C
             # The order of the volumes in our channel depends on the parameter "register_backwards",
-            # if register_backwards: Channel 0 ==Phase-1 (shift to the left); Channel 1==Phase
-            # else: Channel 0==Phase; Channel 1==Phase-1 (shift to the left)
+            # if register_backwards: Channel0 == Phase-1 (shift to the left); Channel1 == Phase
+            # else: Channel0 == Phase; Channel1 == Phase-1 (shift to the left)
             # Here we slice the ED 3D volume and choose the last channel, which represents the actual frame
             # in our stack lambda layers we use the first Channel for transformation
         if register_backwards: # here the ED should be our target
-            # x is in this case x_t+1
+            # x is in this case x_t+1 e.g.: x_0 = MS
             stack_p2p_lambda_layer = keras.layers.Lambda(
                 lambda x: keras.layers.Concatenate(axis=-1)(
                     [x, # MS,ES,PF,MD,ED
@@ -381,24 +382,24 @@ def create_RegistrationModel_inkl_mask(config):
             stack_ed_lambda_layer = keras.layers.Lambda(
                 lambda x: keras.layers.Concatenate(axis=-1)(
                     [x, # MS,ES,PF,MD,ED
-                     tf.repeat(x[:, 4:5, ...], repeats=5, axis=1),
+                     tf.repeat(x[:, 4:5, ...], repeats=5, axis=1), # ED, ED, ED, ED, ED
                      #tf.math.squared_difference(x,tf.repeat(x[:, 4:5, ...], repeats=5, axis=1))
                      ]),
                 name='stack_ed')
 
-        else: # x is in this case x_t
+        else: # register forwards, x is in this case x_t, e.g.: x_0 = ED
             stack_p2p_lambda_layer = keras.layers.Lambda(
                 lambda x: keras.layers.Concatenate(axis=-1)(
-                    [x,
-                     tf.roll(x, shift=-1, axis=1),
+                    [x, # ED,MS,ES,PF,MD
+                     tf.roll(x, shift=-1, axis=1), # MS,ES,PF,MD,ED
                      #tf.math.squared_difference(x,tf.roll(x, shift=-1, axis=1))
                      ]),
                 name='stack_p2p')
 
             stack_ed_lambda_layer = keras.layers.Lambda(
                 lambda x: keras.layers.Concatenate(axis=-1)(
-                    [tf.repeat(x[:, 0:1, ...], repeats=5, axis=1),
-                    tf.roll(x, shift=-1, axis=1),
+                    [tf.repeat(x[:, 0:1, ...], repeats=5, axis=1), # ED, ED, ED, ED, ED
+                    tf.roll(x, shift=-1, axis=1), # MS,ES,PF,MD,ED
                      #tf.math.squared_difference(tf.repeat(x[:, 0:1, ...], repeats=5, axis=1),tf.roll(x, shift=-1, axis=1))
                      ]),
                 name='stack_ed')
