@@ -1088,6 +1088,7 @@ class PhaseMaskWindowGenerator(DataGenerator):
     def __pre_load_one_image__(self, i, ID):
 
         # --------------- HIST MATCHING REFERENCE VOL--------------
+        t0 = time()
         ref = None
         apply_hist_matching = False
         if self.HIST_MATCHING and random.random() <= self.AUGMENT_PROB:
@@ -1096,7 +1097,7 @@ class PhaseMaskWindowGenerator(DataGenerator):
             # use a random image, given to this generator, as histogram template for histogram matching augmentation
             ref = sitk.GetArrayFromImage(sitk.ReadImage((choice(self.IMAGES))))
             ref = ref[choice(list(range(ref.shape[0] - 1))), choice(list(range(ref.shape[1] - 1))[ignore_z:-ignore_z])]
-        t0 = time()
+
         t1 = time()
 
         x = self.IMAGES[ID]
@@ -1106,7 +1107,7 @@ class PhaseMaskWindowGenerator(DataGenerator):
         model_inputs = load_masked_img(sitk_img_f=x, mask=False,
                                        masking_values=self.MASKING_VALUES, replace=self.REPLACE_WILDCARD, maskAll=False)
         model_m_inputs = load_msk(f_name=x.replace(self.REPLACE_WILDCARD[0], self.REPLACE_WILDCARD[1]),
-                                  valid_labels=[2])
+                                  valid_labels=self.MASKING_VALUES)
         logging.debug('load and masking took: {:0.3f} s'.format(time() - t1))
         t1 = time()
 
