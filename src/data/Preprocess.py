@@ -79,7 +79,7 @@ def load_msk(f_name, valid_labels=None):
     if valid_labels is None:
         valid_labels = [0, 1, 2, 3]
     msk_sitk = sitk.ReadImage(f_name)
-    if len(valid_labels) ==0:
+    if len(valid_labels) ==1:
         msk_sitk = sitk.ReadImage(f_name)
         msk_nda = sitk.GetArrayFromImage(msk_sitk)
         msk_binary = np.squeeze(transform_to_binary_mask(msk_nda, mask_values=valid_labels))

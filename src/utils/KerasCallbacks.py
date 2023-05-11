@@ -742,7 +742,7 @@ class WindowMotionCallback(Callback):
                         ###### compose plot ######
                         if compose:
                             try:
-                                masked_slices = np.where((first_m.sum(axis=(1, 2)) > 0.5))[0]
+                                masked_slices = np.where((second_m.sum(axis=(1, 2)) > 0.5))[0]
                                 most_basal, mid, most_apical = masked_slices[-1], masked_slices[len(masked_slices) // 2], \
                                                                masked_slices[0]
                             except Exception as e:
