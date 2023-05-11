@@ -156,14 +156,14 @@ def calc_strain4singlepatient(path_to_patient_folder, N_TIMESTEPS, RVIP_method, 
     INFO('now processing: ' + patient_name)
     # CMR of patient
     # targetcmr doesnt need to be rolled
-    vol_cube = stack_nii_volume(path_to_patient_folder, 'cmr_target_', N_TIMESTEPS)  # refactored
+    vol_cube = stack_nii_volume(path_to_patient_folder, 'cmr_moving_', N_TIMESTEPS)  # refactored
     # LV MYO MASKS
     # targetmask doesnt need to be rolled
     # previously "mask" files were used here
-    mask_lvmyo = stack_nii_masks(path_to_patient_folder, 'myo_target_', N_TIMESTEPS)  # refactored
+    mask_lvmyo = stack_nii_masks(path_to_patient_folder, 'myo_moving_', N_TIMESTEPS)  # refactored
     # WHOLE MASKS
     # lvtargetmask doesnt need to be rolled
-    mask_whole = stack_nii_masks(path_to_patient_folder, 'fullmask_target_', N_TIMESTEPS)  # refactored
+    mask_whole = stack_nii_masks(path_to_patient_folder, 'fullmask_moving_', N_TIMESTEPS)  # refactored
     # FULL FLOWFIELD PHASE-PHASE
     # dont roll the flow!
     # originally from Svens output, ff is of shape cxyzt with c=zyx
@@ -404,14 +404,33 @@ def calc_strain4singlepatient(path_to_patient_folder, N_TIMESTEPS, RVIP_method, 
                                       masks_rot=masks_rot_lvmyo[:, apex_slices],
                                       Z_SLICES=apex_slices,
                                       N_AHA=N_AHA_apex)
+
+    # test with outlier clipping
+    # first, assign the values, than clip, than nanmean
+    rs_overtime_base = AHAcube_base[..., 0]
+    cs_overtime_base = AHAcube_base[..., 1]
+    rs_overtime_mc = AHAcube_midcavity[..., 0]
+    cs_overtime_mc = AHAcube_midcavity[..., 1]
+    rs_overtime_apex = AHAcube_apex[..., 0]
+    cs_overtime_apex = AHAcube_apex[..., 1]
+
+    # clip by lower and upper quantile threshold along axis 2 (one threshold per segment)
+    q = 0.95
+    rs_overtime_base = np.clip(a=rs_overtime_base, a_min=-1*np.quantile(a=-1*rs_overtime_base, q=q), a_max=np.quantile(a=rs_overtime_base, q=q))
+    cs_overtime_base = np.clip(a=cs_overtime_base, a_min=-1*np.quantile(a=-1*cs_overtime_base, q=q), a_max=np.quantile(a=cs_overtime_base, q=q))
+    rs_overtime_mc = np.clip(a=rs_overtime_mc, a_min=-1*np.quantile(a=-1*rs_overtime_mc, q=q), a_max=np.quantile(a=rs_overtime_mc, q=q))
+    cs_overtime_mc = np.clip(a=cs_overtime_mc, a_min=-1*np.quantile(a=-1*cs_overtime_mc, q=q), a_max=np.quantile(a=cs_overtime_mc, q=q))
+    rs_overtime_apex = np.clip(a=rs_overtime_apex, a_min=-1*np.quantile(a=-1*rs_overtime_apex, q=q), a_max=np.quantile(a=rs_overtime_apex, q=q))
+    cs_overtime_apex = np.clip(a=cs_overtime_apex, a_min=-1*np.quantile(a=-1*cs_overtime_apex, q=q), a_max=np.quantile(a=cs_overtime_apex, q=q))
+
     # runtime outputs
     # output min max mean strain for patient; Err and Ecc
-    rs_overtime_base = np.nanmean(AHAcube_base, axis=2)[..., 0]
-    cs_overtime_base = np.nanmean(AHAcube_base, axis=2)[..., 1]
-    rs_overtime_mc = np.nanmean(AHAcube_midcavity, axis=2)[..., 0]
-    cs_overtime_mc = np.nanmean(AHAcube_midcavity, axis=2)[..., 1]
-    rs_overtime_apex = np.nanmean(AHAcube_apex, axis=2)[..., 0]
-    cs_overtime_apex = np.nanmean(AHAcube_apex, axis=2)[..., 1]
+    rs_overtime_base = np.nanmean(rs_overtime_base, axis=2)
+    cs_overtime_base = np.nanmean(cs_overtime_base, axis=2)
+    rs_overtime_mc = np.nanmean(rs_overtime_mc, axis=2)
+    cs_overtime_mc = np.nanmean(cs_overtime_mc, axis=2)
+    rs_overtime_apex = np.nanmean(rs_overtime_apex, axis=2)
+    cs_overtime_apex = np.nanmean(cs_overtime_apex, axis=2)
     # 80,1 = 5 timesteps * 16 segments as column
 
     rs_AHA_overtime = np.concatenate((rs_overtime_base, rs_overtime_mc, rs_overtime_apex), axis=0).reshape(

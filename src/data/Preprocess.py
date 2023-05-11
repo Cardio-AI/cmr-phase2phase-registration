@@ -50,7 +50,7 @@ def load_masked_img(sitk_img_f, mask=False, masking_values = [1,2,3], replace=('
                     
         # mask by different labels, sum up all masked channels
         temp = np.zeros(img_nda.shape)
-        if maskAll: # mask all timesteps
+        if maskAll: # mask all time steps
             for c in masking_values:
                 # mask by different labels, sum up all masked channels
                 temp += img_nda * msk_nda[..., c].astype(np.bool)
@@ -79,18 +79,21 @@ def load_msk(f_name, valid_labels=None):
     if valid_labels is None:
         valid_labels = [0, 1, 2, 3]
     msk_sitk = sitk.ReadImage(f_name)
-    msk_nda = sitk.GetArrayFromImage(msk_sitk)
-    msk_binary = np.squeeze(transform_to_binary_mask(msk_nda, mask_values=valid_labels))
+    if len(valid_labels) ==0:
+        msk_sitk = sitk.ReadImage(f_name)
+        msk_nda = sitk.GetArrayFromImage(msk_sitk)
+        msk_binary = np.squeeze(transform_to_binary_mask(msk_nda, mask_values=valid_labels))
 
-    msk_b_sitk = sitk.GetImageFromArray(msk_binary.astype(np.float32))
+        msk_b_sitk = sitk.GetImageFromArray(msk_binary.astype(np.float32))
 
-    # copy metadata
-    for tag in msk_sitk.GetMetaDataKeys():
-        value = get_metadata_maybe(msk_sitk, tag)
-        msk_b_sitk.SetMetaData(tag, value)
-    msk_b_sitk.SetSpacing(msk_sitk.GetSpacing())
-    msk_b_sitk.SetOrigin(msk_sitk.GetOrigin())
-    return msk_b_sitk
+        # copy metadata
+        for tag in msk_sitk.GetMetaDataKeys():
+            value = get_metadata_maybe(msk_sitk, tag)
+            msk_b_sitk.SetMetaData(tag, value)
+        msk_b_sitk.SetSpacing(msk_sitk.GetSpacing())
+        msk_b_sitk.SetOrigin(msk_sitk.GetOrigin())
+        msk_sitk = msk_b_sitk
+    return msk_sitk
 
 def resample_t_of_4d(sitk_img, t_spacing=20, interpolation=sitk.sitkLinear, ismask=False):
     '''

@@ -309,7 +309,8 @@ def create_RegistrationModel_inkl_mask(config):
         config_temp = config.copy()
 
         # input vol with timesteps, z, x, y, c -> =number of input timesteps
-        input_tensor_raw = Input(shape=(T_SHAPE, *input_shape, config.get('IMG_CHANNELS', 1)), name='cmr')
+        stacked_cmr = 3
+        input_tensor_raw = Input(shape=(T_SHAPE, *input_shape, stacked_cmr), name='cmr')
         input_mask_tensor = Input(shape=(T_SHAPE, *input_shape, config.get('IMG_CHANNELS', 1)), name='mask')
         # define standard values according to the convention over configuration paradigm
 
@@ -336,11 +337,11 @@ def create_RegistrationModel_inkl_mask(config):
         # combine moving image and deformable
         # if we call the st layer directly, we would have slicing layers in the model plot
         st_lambda_layer = keras.layers.Lambda(
-            lambda x: st_layer_p2p([x[..., 0:1], x[..., -3:]]), name='p2p')
+            lambda x: st_layer_p2p([x[..., :1], x[..., -3:]]), name='p2p')
         st_p2ed_lambda_layer = keras.layers.Lambda(
-            lambda x: st_layer_p2ed([x[..., 0:1], x[..., -3:]]), name='p2ed')
+            lambda x: st_layer_p2ed([x[..., :1], x[..., -3:]]), name='p2ed')
         st_mask_lambda_layer = keras.layers.Lambda(
-            lambda x: st_mask_layer([x[..., 0:1], x[..., -3:]]), name='p2p_mask')
+            lambda x: st_mask_layer([x[..., :1], x[..., -3:]]), name='p2p_mask')
 
         # lambda layers for spatial transformer indexing of the cmr vol and the deformable
         # deformable follows ij indexing --> z,y,x
@@ -371,23 +372,21 @@ def create_RegistrationModel_inkl_mask(config):
             # in our stack lambda layers we use the first Channel for transformation
         if register_backwards: # here the ED should be our target
             # x is in this case x_t+1 e.g.: x_0 = MS
-            stack_p2p_lambda_layer = keras.layers.Lambda(
-                lambda x: keras.layers.Concatenate(axis=-1)(
-                    [x, # MS,ES,PF,MD,ED
-                     tf.roll(x, shift=1, axis=1), # ED,MS,ES,PF,MD
-                     #tf.math.squared_difference(x,tf.roll(x, shift=1, axis=1))
-                     ]),
-                name='stack_p2p')
+            # x = cmr = x_k
+            # x2 = mask = x_k
+            stack_p2p_lambda_layer = keras.layers.Lambda(lambda x: x[...,:2],name='stack_p2p')
 
             stack_ed_lambda_layer = keras.layers.Lambda(
                 lambda x: keras.layers.Concatenate(axis=-1)(
-                    [x, # MS,ES,PF,MD,ED
-                     tf.repeat(x[:, 4:5, ...], repeats=5, axis=1), # ED, ED, ED, ED, ED
-                     #tf.math.squared_difference(x,tf.repeat(x[:, 4:5, ...], repeats=5, axis=1))
+                    [x [...,:1], # MS,ES,PF,MD,ED
+                     x[...,-1:], # ED, ED, ED, ED, ED
                      ]),
                 name='stack_ed')
 
+
+
         else: # register forwards, x is in this case x_t, e.g.: x_0 = ED
+            raise NotImplementedError('need to check this flow')
             stack_p2p_lambda_layer = keras.layers.Lambda(
                 lambda x: keras.layers.Concatenate(axis=-1)(
                     [x, # ED,MS,ES,PF,MD
@@ -425,9 +424,9 @@ def create_RegistrationModel_inkl_mask(config):
 
         if COMPOSE_CONSISTENCY:
             input_tensor_ed = stack_ed_lambda_layer(input_tensor_raw)
-            # two options, either a 2nd unet for p2ed graph flow, or we re-use the existing one, with the p2ed CMR stack
-            config_temp['IMG_CHANNELS'] = input_tensor_ed.shape[-1]
+            # two options, either a 2nd unet for k2ed graph flow, or we re-use the existing one
             if dedicated_unet:
+                config_temp['IMG_CHANNELS'] = input_tensor_ed.shape[-1]
                 unet_ed = create_unet(config_temp, single_model=False)
             else:
                 unet_ed = unet

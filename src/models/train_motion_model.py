@@ -28,7 +28,7 @@ def train_fold(config, in_memory=False):
     from src.utils.Utils_io import Console_and_file_logger, init_config, ensure_dir
     from src.utils.KerasCallbacks import get_callbacks
     from src.data.Dataset import get_trainings_files
-    from src.data.Generators import PhaseWindowGenerator
+    #from src.data.Generators import PhaseWindowGenerator
     from src.models.Models import create_RegistrationModel
     from src.data.Generators import PhaseMaskWindowGenerator
     from src.models.Models import create_RegistrationModel_inkl_mask

@@ -407,7 +407,7 @@ class DataGenerator(BaseGenerator):
 
         return img_nda[..., np.newaxis], mask_nda, i, ID, time() - t0
 
-
+'''
 class MotionDataGenerator(DataGenerator):
     """
     yields n input volumes and n output volumes
@@ -590,8 +590,8 @@ class MotionDataGenerator(DataGenerator):
         self.__plot_state_if_debug__(model_inputs[0], model_outputs[0], t1, 'clipped cropped and pad')
 
         return model_inputs[..., np.newaxis], model_outputs[..., np.newaxis], i, ID, time() - t0
-
-
+'''
+'''
 class PhaseWindowGenerator(DataGenerator):
     """
     yields n input volumes and n output volumes
@@ -932,7 +932,7 @@ class PhaseWindowGenerator(DataGenerator):
         assert not np.any(np.isnan(model_targets))
 
         return model_inputs, model_targets, i, ID, time() - t0
-
+'''
 
 class PhaseMaskWindowGenerator(DataGenerator):
     """
@@ -1051,11 +1051,11 @@ class PhaseMaskWindowGenerator(DataGenerator):
         for i, future in enumerate(as_completed(futures)):
             # use the indexes to order the batch
             # otherwise slower images will always be at the end of the batch
-
-            x_, x2_, y_, y2_, i, ID, needed_time = future.result()
+            # for backwards, shifted is earlier in time (shift = k-1 or k-w)
+            x_k, s_k, x_k_shifted, s_k_shifted, i, ID, needed_time = future.result()
             # print(x_.shape, x2_.shape, y_.shape,y2_.shape)
-            x[i,], y[i,] = x_, y_
-            x2[i,], y2[i,] = x2_, y2_
+            x[i,], y[i,] = x_k, x_k_shifted
+            x2[i,], y2[i,] = s_k, s_k_shifted
             logging.debug('img finished after {:0.3f} sec.'.format(needed_time))
             try:
                 pass
@@ -1070,17 +1070,24 @@ class PhaseMaskWindowGenerator(DataGenerator):
                     'mask:\n'
                     '{}'.format(str(e), self.IMAGES[ID], self.LABELS[ID]))
 
+        # x = x_k
+        # x2 = s_k
+        # y = x_shifted
+        # y2 = s_shifted
         # repeat the ED vol, compose transform will register each time step to this phase
         if self.REGISTER_BACKWARDS: # here
             y_p2ed = np.repeat(x[:, 4:5, ...], 5, axis=1) # here we move each phase to the ED phase
             y2_p2ed_m = np.repeat(x2[:, 4:5, ...], 5, axis=1)
         else:
+            raise NotImplementedError('need to validate if forward works as expected')
             y_p2ed = np.roll(x, shift=-1, axis=1) # here we move the ed phase to each phases, starting with MS - same target as p2p
             y2_p2ed_m = np.roll(x2, shift=-1, axis=1)
         logging.debug('Batchsize: {} preprocessing took: {:0.3f} sec'.format(self.BATCHSIZE, time() - t0))
         zeros = np.zeros((*x.shape[:-1], 3), dtype=np.float32)
         if self.COMPOSE_CONSISTENCY:
             y2 = np.concatenate([y2, y2_p2ed_m], axis=-1)
+            x = np.concatenate([x,y, y_p2ed], axis=-1)
+
             return tuple([[x, x2], [y_p2ed, y, y2, zeros, zeros]])
         else:
             return tuple([[x, x2], [y, y2, zeros]])
@@ -1104,10 +1111,10 @@ class PhaseMaskWindowGenerator(DataGenerator):
 
         # use the load_masked_img wrapper to enable masking of the images, currently not necessary, but nice to have
         # Note replace mask = False with mask=sel.MASKING_IMAGE
-        model_inputs = load_masked_img(sitk_img_f=x, mask=False,
+        model_inputs = load_masked_img(sitk_img_f=x, mask=self.MASKING_IMAGE,
                                        masking_values=self.MASKING_VALUES, replace=self.REPLACE_WILDCARD, maskAll=False)
         model_m_inputs = load_msk(f_name=x.replace(self.REPLACE_WILDCARD[0], self.REPLACE_WILDCARD[1]),
-                                  valid_labels=self.MASKING_VALUES)
+                                  valid_labels=self.MASK_VALUES)
         logging.debug('load and masking took: {:0.3f} s'.format(time() - t1))
         t1 = time()
 
@@ -1209,7 +1216,7 @@ class PhaseMaskWindowGenerator(DataGenerator):
         # by this we drop the interpolated spatial slices and replace them with zero padded slices
         # during training we might want to use only valid masks,
         # during prediction we use the resampled one to avoid cropping the displacement field along z
-        if self.ISTRAINING:
+        if self.ISTRAINING and self.RESAMPLE_Z:
             masks_given = np.array(np.arange(0, old_size))
             scaled = masks_given * spatial_sampling_factor
             scaled = np.around(scaled).astype(int)
@@ -1225,7 +1232,7 @@ class PhaseMaskWindowGenerator(DataGenerator):
             logging.debug('hist matching took: {:0.3f} s'.format(time() - t1))
             t1 = time()
 
-        # crop before smoothing, this improves the speed of the following steps
+        # align and crop before smoothing, this improves the speed of the following steps
         # and reduces the memory footprint
         model_inputs, model_m_inputs = align_inplane_with_ip(model_inputs=model_inputs,
                                                              msk_file_name=model_m_inputs,
@@ -1260,10 +1267,7 @@ class PhaseMaskWindowGenerator(DataGenerator):
                     model_m_inputs[t] = (smooth > 0.2).astype(np.float32)
         #show_2D_or_3D(model_inputs[5, ...], model_m_inputs[5, ...])'''
         # --------------- SLICE PAIRS OF INPUT AND TARGET VOLUMES ACCORDING TO CARDIAC PHASE IDX -------------
-        # get the volumes of each phase window
-        # register from phase to phase (p2p), here combined:
-        # [nda[idx_shift_to_left], nda[idx_middle], nda[idxs]] each with 5,z,x,y
-        # in other words: [vol[t+1], vol[t+0.5], vol[t]]
+        # register backwards returns: [x_k-1, x_k]
         if self.BETWEEN_PHASES:
             combined = get_n_windows_between_phases_from_single4D(model_inputs, idx,
                                                                   register_backwards=self.REGISTER_BACKWARDS,
@@ -1271,12 +1275,14 @@ class PhaseMaskWindowGenerator(DataGenerator):
             combined_m = get_n_windows_between_phases_from_single4D(model_m_inputs, idx,
                                                                     register_backwards=self.REGISTER_BACKWARDS,
                                                                     intermediate=False)
-        else:  # Extract the motion at each phase, defined by the window size
-            # combined --> t-w, t, t+w, We can use this window in different combinations as input and target
+        else:  # Extract the motion before a keyframe, defined by a window size w
+            # we expect the same temporal forward ordering as for k2k
+            # [x_k-w, x_k]
             combined = get_n_windows_from_single4D(model_inputs, idx, window_size=self.WINDOW_SIZE,
                                                    register_backwards=self.REGISTER_BACKWARDS,
                                                    intermediate=False
                                                    )
+            assert  all(np.any(model_m_inputs, axis=(1, 2, 3))), 'window mode will only work with anatomical constraint if we have a mask for every timestep'
             if all(np.any(model_m_inputs, axis=(1, 2, 3))):
                 # all time steps / frames in this 4D sequence have a mask (this is very likely a predicted mask)
                 # use the masks defined by the window
@@ -1285,6 +1291,7 @@ class PhaseMaskWindowGenerator(DataGenerator):
                                                          intermediate=False
                                                          )
             else:
+
                 # not all time steps have a mask, this is very likely a GT, with contours only at the 5 labelled phases,
                 # use the labelled masks defined by the phases in the phase df
                 # Use this for masks with only 5 time-steps labelled. moving and target mask will be the same
@@ -1296,7 +1303,7 @@ class PhaseMaskWindowGenerator(DataGenerator):
         t1 = time()
 
         # results in: 5,z,x,y,c with c==3 or c==2
-        # temporal order of these channels: [nda[idx_shift_to_left], nda[idx_middle], nda[idxs]]
+        # # [x_k-w, x_k]
         combined = np.stack(combined, axis=-1)
         combined_m = np.stack(combined_m, axis=-1)
 
@@ -1309,9 +1316,9 @@ class PhaseMaskWindowGenerator(DataGenerator):
 
         # A masked, non-isotrop cmr will have steps after it is resampled to isotrop resolution
         # remove these steps with the smoothed myo mask
-        if self.MASKING_IMAGE:
-            combined[..., 0][~(combined_m[..., 0] > 0.1)] = 0
-            combined[..., -1][~(combined_m[..., -1] > 0.1)] = 0
+        #if self.MASKING_IMAGE:
+        #    combined[..., 0][~(combined_m[..., 0] > 0.1)] = 0
+        #    combined[..., -1][~(combined_m[..., -1] > 0.1)] = 0
 
         if not self.yield_masks:  # clip and normalisation is faster on cropped nda
             combined = clip_quantile(combined, .9999)
@@ -1353,22 +1360,32 @@ class PhaseMaskWindowGenerator(DataGenerator):
             logging.debug('augmentation took: {:0.3f} s'.format(time() - t1))
             t1 = time()
 
-        if self.IMG_CHANNELS == 1:
-            model_inputs = combined[..., 0:1]
-            model_targets = combined[..., -1:]
-            model_m_inputs = combined_m[..., 0:1]
-            model_m_targets = combined_m[...,-1:]
+        # combined = [x_shifted, x_k]
+        # for k2k: [x_k-1, x_k]
+        # for window: [x_k-w, x_k]
+        # register backwards: move x_k to fit x_shifted
+        # x_k = moving, x_shifted = fixed
+        # register backwards == pull vectors which sample from the target/fixed/x_shifted grid
+        # this means vectors are from x_shifted/target/fixed (earlier in time) towards x_k/moving
 
-        elif self.IMG_CHANNELS in [2, 3]:
-            model_inputs = combined
-            model_targets = combined[..., -1:]
-            model_m_inputs = combined_m
-            model_m_targets = combined_m[..., -1:]
+        # model_inputs, model_m_inputs, model_targets, model_m_targets
+        # shifted refers here to back in time (for backward registering)
+        if self.IMG_CHANNELS==1:
+            x_k = combined[..., -1:]
+            x_k_shifted = combined[..., :1]
+            s_k = combined_m[..., -1:]
+            s_k_shifted = combined_m[...,:1]
+        else:
+            x_k = np.broadcast_to(combined[..., -1:], shape=self.X_SHAPE.shape[1:])
+            x_k_shifted = combined[..., :1]
+            s_k = transform_to_binary_mask(combined_m[..., -1], self.MASK_VALUES)#[..., -1:] # all labels mask
+            s_k_shifted = combined_m[...,:1]
 
-        assert not np.any(np.isnan(model_inputs))
-        assert not np.any(np.isnan(model_targets))
 
-        return model_inputs, model_m_inputs, model_targets, model_m_targets, i, ID, time() - t0
+        assert not np.any(np.isnan(x_k))
+        assert not np.any(np.isnan(x_k_shifted))
+
+        return x_k, s_k, x_k_shifted, s_k_shifted, i, ID, time() - t0
 
 
 import linecache

@@ -1573,16 +1573,16 @@ def get_n_windows_from_single4D(nda4d, idx, window_size=1,register_backwards=Tru
     debug('idx shape: {}'.format(idx.shape))
     y_len = nda4d.shape[0]
 
-    # define the motion window --> [t-window,t+window] one of [1,2,3] depending on the temporal resolution/temporal resampling
-    idxs_lower = idx - window_size
+    # define the motion window --> [x_k-window,x_k+window] one of [1,2,3] depending on the temporal resolution/temporal resampling
+    idxs_minus_window = idx - window_size
     #idxs_upper = idx + window_size
 
     debug('idx: {}'.format(idx))
     # fake ring functionality with mod
-    idxs_lower = np.mod(idxs_lower, y_len) # this is faster in the generator, than the tf functions
+    idxs_minus_window = np.mod(idxs_minus_window, y_len) # this is faster in the generator, than the tf functions
     #idxs_upper = np.mod(idxs_upper, y_len)
 
-    debug('idx lower: {}'.format(idxs_lower))
+    debug('idx lower: {}'.format(idxs_minus_window))
     #debug('idx upper: {}'.format(idxs_upper))
     logging.debug('mod took: {:0.3f} s'.format(time() - t1))
     t1 = time()
@@ -1594,27 +1594,24 @@ def get_n_windows_from_single4D(nda4d, idx, window_size=1,register_backwards=Tru
     # with: (batch,phase,z,x,y,1)
     # we need to fill the dimensions from behind by [...,tf.newaxis]
     # and define the number of leading batch dimensions
-    #t_lower = tf.gather_nd(nda4d, idxs_lower[..., tf.newaxis], batch_dims=0)
+    #x_k_minus_w = tf.gather_nd(nda4d, idxs_minus_window[..., tf.newaxis], batch_dims=0)
     #t_upper = tf.gather_nd(nda4d, idxs_upper[..., tf.newaxis], batch_dims=0)
     #t_lower_pre = np.squeeze(np.take(nda4d, indices=idxs_lower_pre[..., np.newaxis], axis=0))
     #t_lower_post = np.squeeze(np.take(nda4d, indices=idxs_lower_post[..., np.newaxis], axis=0))
 
 
-    t= np.squeeze(np.take(nda4d, indices=idx[..., np.newaxis], axis=0))
-    t_lower = np.squeeze(np.take(nda4d, indices=idxs_lower[..., np.newaxis], axis=0))
+    x_k= np.squeeze(np.take(nda4d, indices=idx[..., np.newaxis], axis=0))
+    x_k_minus_w = np.squeeze(np.take(nda4d, indices=idxs_minus_window[..., np.newaxis], axis=0))
     #t_upper = np.squeeze(np.take(nda4d, indices=idxs_upper[..., np.newaxis], axis=0))
-    logging.debug('first vols shape: {}'.format(t_lower.shape))
+    logging.debug('first vols shape: {}'.format(x_k_minus_w.shape))
     logging.debug('gather nd took: {:0.3f} s'.format(time() - t1))
 
     # INVERTED REGISTRATION TEST
-    # original: # T=fixed, T+1=moving
-    # we could also have always t as target, and register
-    # backwards: t_upper, t
-    # forwards: t_lower, t
+    # fixed = x_k-w, moving = x_k
     if register_backwards:
-        windows = [t, t_lower] # similar to x_t+1, x_t --> here: the frames before the phase
+        windows = [x_k_minus_w, x_k]
     else:
-        windows = [t_lower, t]
+        windows = [x_k, x_k_minus_w]
 
 
     return windows

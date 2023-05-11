@@ -1,4 +1,4 @@
-
+from src.data.Preprocess import from_channel_to_flat
 
 
 def pred_fold(config, debug=True):
@@ -21,7 +21,7 @@ def pred_fold(config, debug=True):
     from src.utils.Utils_io import Console_and_file_logger, init_config, ensure_dir
     from src.utils.KerasCallbacks import get_callbacks
     from src.data.Dataset import get_trainings_files
-    from src.data.Generators import PhaseWindowGenerator
+    #from src.data.Generators import PhaseWindowGenerator
     from src.models.Models import create_RegistrationModel
     import numpy as np
 
@@ -100,15 +100,19 @@ def pred_fold(config, debug=True):
     pred_mask_config['IMG_INTERPOLATION'] = sitk.sitkNearestNeighbor
     pred_mask_config['MSK_INTERPOLATION'] = sitk.sitkNearestNeighbor
     pred_mask_config['MASKING_IMAGE'] = False
-    pred_mask_config['IMG_CHANNELS'] = 1
+    pred_mask_config['MASK_VALUES'] = [1,2,3]
+    pred_mask_config['IMG_CHANNELS'] = 3
     pred_mask_config['TARGET_CHANNELS'] = 1
     compose_given = config.get('COMPOSE_CONSISTENCY', False)
-    masks_all_labels_generator = PhaseWindowGenerator(x_train_sax_masks, x_train_sax_masks, config=pred_mask_config,
-                                                  yield_masks=True)
+    #masks_all_labels_generator = PhaseWindowGenerator(x_train_sax_masks, x_train_sax_masks, config=pred_mask_config,
+    #                                              yield_masks=True)
+    masks_all_labels_generator = PhaseMaskWindowGenerator(x_val_sax, x_val_sax, config=pred_mask_config)
     # new version
     x, y = zip(*[masks_all_labels_generator.__getitem__(i) for i in range(len(masks_all_labels_generator))])
-    fullmsk_target, _  = zip(*y)
+    _, msk_moving = zip(*x)
+    fullmsk_target = msk_moving
     fullmsk_target = np.concatenate(fullmsk_target, axis=0)
+    #fullmsk_target = from_channel_to_flat(fullmsk_target)
     # here we get a list of batches, each with a batchsize of 1
     x, y = zip(*[pred_generator.__getitem__(i) for i in range(len(pred_generator))])
     cmr_moving, msk_moving = zip(*x)
@@ -130,7 +134,8 @@ def pred_fold(config, debug=True):
     # mask the flow field with the target mask
     # also necessary for the compose
     flows_masked = flows.copy()
-    msk_t = np.squeeze(msk_target>0.1)
+    msk_t = np.squeeze(msk_moving>0.1)
+    #msk_t = np.squeeze(msk_target>0.1)
     if msk_t.shape[-1] > 1:
         msk_t = msk_t[..., 0]
     for dim in range(flows.shape[-1]):
@@ -165,6 +170,7 @@ def pred_fold(config, debug=True):
         flow_comp_m = flows_composed_masked[i]
         flow_masked = flows_masked[i]
         fullmsk_t = fullmsk_target[i]
+        fullmsk_t = from_channel_to_flat(fullmsk_t)[...,None]
 
         if not all(np.any(msk_t, axis=(1,2,3))):
             print('please check the predicted masks, some timesteps of the target mask seem to be empty!')
@@ -176,7 +182,7 @@ def pred_fold(config, debug=True):
         suffixes = ['cmr_moving.nii', 'cmr_target.nii', 'cmr_moved.nii',
                     'myo_moving.nii', 'myo_target.nii', 'myo_moved.nii',
                     'flow.nii', 'flow_composed.nii', 'flow_masked.nii',
-                    'fullmask_target.nii']
+                    'fullmask_moving.nii']
         if debug:
             save_all_3d_vols_new(volumes, vol_suffixes=suffixes,
                                  EXP_PATH=pred_path, exp=p, cfg=config)
