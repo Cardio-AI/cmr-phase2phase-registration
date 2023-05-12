@@ -1,4 +1,5 @@
 from src.data.Preprocess import from_channel_to_flat
+from src.models.Evaluate_moved_myo import calc_dice
 
 
 def pred_fold(config, debug=True):
@@ -158,13 +159,13 @@ def pred_fold(config, debug=True):
         cmr_mov = cmr_moving[i][...,0:1]
         cmr_t = cmr_target[i]
         cmr_m = cmr_moved[i]
-        msk_mov = msk_moving[i][...,1:2]
+        msk_mov = msk_moving[i][...,0:1]
         msk_t = msk_target[i][...,1:2] # target mask of each pair-wise p2p
         if msk_t.shape[-1]==2:
-            msk_t_p2ed = msk_t[...,-1:]
-            msk_t = msk_t[..., 0:1]
+            msk_t_p2ed = msk_t[...,:1]
+            msk_t = msk_t[..., -1:]
 
-        msk_m = msk_moved[i]
+        msk_m = msk_moved[i][...,1:2]
         flow = flows[i]
         flow_comp_m = flows_composed_masked[i]
         flow_masked = flows_masked[i]
@@ -303,6 +304,15 @@ def main(args=None):
             else:
                 config['DF_META'] = None
             pred_fold(config)
+
+        gt_path = os.path.join(args.exp, 'gt_m')
+        pred_path = os.path.join(args.exp, 'pred_m')
+        try:
+            logging.info('start dice calculation with: {}{}{}'.format(gt_path, pred_path, args.exp))
+            calc_dice(gt_path, pred_path, args.exp)
+        except Exception as e:
+            print('Dice calculation failed with: {}'.format(e))
+
         try:
             from src_julian.data.MyMoralesAndCompositionsAHA3 import calculate_strain
             from pathlib import Path

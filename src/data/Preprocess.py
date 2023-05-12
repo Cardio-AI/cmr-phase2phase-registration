@@ -671,7 +671,7 @@ def align_inplane_with_ip(model_inputs, msk_file_name, roll2septum=True, roll2lv
 
     # Move to center of lv bloodpool
     if roll2lvbood:
-        if len(np.unique(mask3d)) == 3: # mask with all three labels
+        if len(np.unique(mask3d)) in [3,4]: # mask with all three labels, maybe also the background
             center = nd.center_of_mass(mask3d==3)
         else: # here we dont really know what labels are shown, we take every true value
             center = nd.center_of_mass(mask3d >=1)
