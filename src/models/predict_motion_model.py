@@ -158,8 +158,8 @@ def pred_fold(config, debug=True):
         cmr_mov = cmr_moving[i][...,0:1]
         cmr_t = cmr_target[i]
         cmr_m = cmr_moved[i]
-        msk_mov = msk_moving[i][...,0:1]
-        msk_t = msk_target[i] # target mask of each pair-wise p2p
+        msk_mov = msk_moving[i][...,1:2]
+        msk_t = msk_target[i][...,1:2] # target mask of each pair-wise p2p
         if msk_t.shape[-1]==2:
             msk_t_p2ed = msk_t[...,-1:]
             msk_t = msk_t[..., 0:1]

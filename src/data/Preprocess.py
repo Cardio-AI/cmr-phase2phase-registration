@@ -671,7 +671,10 @@ def align_inplane_with_ip(model_inputs, msk_file_name, roll2septum=True, roll2lv
 
     # Move to center of lv bloodpool
     if roll2lvbood:
-        center = nd.center_of_mass(mask3d==1)
+        if len(np.unique(mask3d)) == 3: # mask with all three labels
+            center = nd.center_of_mass(mask3d==3)
+        else: # here we dont really know what labels are shown, we take every true value
+            center = nd.center_of_mass(mask3d >=1)
         center = center[1:] # ignore z-axis for translation
     else: # use the mean squared error along t as definition of the center of change
 
