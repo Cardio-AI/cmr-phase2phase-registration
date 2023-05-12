@@ -1573,17 +1573,15 @@ def get_n_windows_from_single4D(nda4d, idx, window_size=1,register_backwards=Tru
     debug('idx shape: {}'.format(idx.shape))
     y_len = nda4d.shape[0]
 
-    # define the motion window --> [x_k-window,x_k+window] one of [1,2,3] depending on the temporal resolution/temporal resampling
+    # define the motion window --> [x_k-window,x_k] an w in [1,2,3] depending on the temporal resolution/temporal resampling
     idxs_minus_window = idx - window_size
     #idxs_upper = idx + window_size
 
     debug('idx: {}'.format(idx))
     # fake ring functionality with mod
     idxs_minus_window = np.mod(idxs_minus_window, y_len) # this is faster in the generator, than the tf functions
-    #idxs_upper = np.mod(idxs_upper, y_len)
 
     debug('idx lower: {}'.format(idxs_minus_window))
-    #debug('idx upper: {}'.format(idxs_upper))
     logging.debug('mod took: {:0.3f} s'.format(time() - t1))
     t1 = time()
 
@@ -1602,7 +1600,6 @@ def get_n_windows_from_single4D(nda4d, idx, window_size=1,register_backwards=Tru
 
     x_k= np.squeeze(np.take(nda4d, indices=idx[..., np.newaxis], axis=0))
     x_k_minus_w = np.squeeze(np.take(nda4d, indices=idxs_minus_window[..., np.newaxis], axis=0))
-    #t_upper = np.squeeze(np.take(nda4d, indices=idxs_upper[..., np.newaxis], axis=0))
     logging.debug('first vols shape: {}'.format(x_k_minus_w.shape))
     logging.debug('gather nd took: {:0.3f} s'.format(time() - t1))
 

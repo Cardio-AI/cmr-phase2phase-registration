@@ -1054,8 +1054,8 @@ class PhaseMaskWindowGenerator(DataGenerator):
             # for backwards, shifted is earlier in time (shift = k-1 or k-w)
             x_k, s_k, x_k_shifted, s_k_shifted, i, ID, needed_time = future.result()
             # print(x_.shape, x2_.shape, y_.shape,y2_.shape)
-            x[i,], y[i,] = x_k, x_k_shifted
-            x2[i,], y2[i,] = s_k, s_k_shifted
+            x[i,], y[i,] = x_k_shifted, x_k
+            x2[i,], y2[i,] = s_k_shifted, s_k
             logging.debug('img finished after {:0.3f} sec.'.format(needed_time))
             try:
                 pass
@@ -1076,8 +1076,8 @@ class PhaseMaskWindowGenerator(DataGenerator):
         # y2 = s_shifted
         # repeat the ED vol, compose transform will register each time step to this phase
         if self.REGISTER_BACKWARDS: # here
-            y_p2ed = np.repeat(x[:, 4:5, ...], 5, axis=1) # here we move each phase to the ED phase
-            y2_p2ed_m = np.repeat(x2[:, 4:5, ...], 5, axis=1)
+            y_p2ed = np.repeat(y[:, 4:5, ...], 5, axis=1) # here we move each phase to the ED phase
+            y2_p2ed_m = np.repeat(y2[:, 4:5, ...], 5, axis=1)
         else:
             raise NotImplementedError('need to validate if forward works as expected')
             y_p2ed = np.roll(x, shift=-1, axis=1) # here we move the ed phase to each phases, starting with MS - same target as p2p
@@ -1085,7 +1085,7 @@ class PhaseMaskWindowGenerator(DataGenerator):
         logging.debug('Batchsize: {} preprocessing took: {:0.3f} sec'.format(self.BATCHSIZE, time() - t0))
         zeros = np.zeros((*x.shape[:-1], 3), dtype=np.float32)
         if self.COMPOSE_CONSISTENCY:
-            y2 = np.concatenate([y2, y2_p2ed_m], axis=-1)
+            y2 = np.concatenate([y2_p2ed_m, y2], axis=-1)
             x = np.concatenate([x,y, y_p2ed], axis=-1)
 
             return tuple([[x, x2], [y_p2ed, y, y2, zeros, zeros]])
@@ -1291,7 +1291,7 @@ class PhaseMaskWindowGenerator(DataGenerator):
                                                          intermediate=False
                                                          )
             else:
-
+                raise NotImplementedError('check this behaviour after rafactoring')
                 # not all time steps have a mask, this is very likely a GT, with contours only at the 5 labelled phases,
                 # use the labelled masks defined by the phases in the phase df
                 # Use this for masks with only 5 time-steps labelled. moving and target mask will be the same

@@ -350,6 +350,7 @@ def create_RegistrationModel_inkl_mask(config):
                 lambda x: x, name='keep_spatial_p2p')
             add_zero_spatial_lambda_p2ed = keras.layers.Lambda(
                 lambda x: x, name='keep_spatial_p2ed')
+            print('register in 3D')
         else: # ignore the z-axis for the spatial transformer, only x/y movement
             # zero out the z motion
             # concat zero with the  y and x deformable
@@ -378,7 +379,7 @@ def create_RegistrationModel_inkl_mask(config):
 
             stack_ed_lambda_layer = keras.layers.Lambda(
                 lambda x: keras.layers.Concatenate(axis=-1)(
-                    [x [...,:1], # MS,ES,PF,MD,ED
+                    [x [...,:1], # ED, MS, ES, PF, MD
                      x[...,-1:], # ED, ED, ED, ED, ED
                      ]),
                 name='stack_ed')
@@ -440,7 +441,7 @@ def create_RegistrationModel_inkl_mask(config):
             transformed_mask_p2ed = TimeDistributed(st_p2ed_lambda_layer, name='st_p2ed_mask')(
                 keras.layers.Concatenate(axis=-1, name='mask_flow_p2ed')([input_mask_tensor, flows_p2ed]))
             transformed_p2ed = keras.layers.Lambda(lambda x: x, name='transformed_p2ed')(transformed_p2ed)
-            transformed_masks = keras.layers.Concatenate(axis=-1, name='p2p_p2ed_mask')([transformed_mask, transformed_mask_p2ed])
+            transformed_masks = keras.layers.Concatenate(axis=-1, name='p2p_p2ed_mask')([transformed_mask_p2ed, transformed_mask])
 
             flows_p2ed = keras.layers.Lambda(lambda x: x, name='flowfield_p2ed')(flows_p2ed)
             print('comp transformed:', transformed_p2ed.shape)
