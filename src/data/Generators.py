@@ -1076,8 +1076,8 @@ class PhaseMaskWindowGenerator(DataGenerator):
         # y2 = s_shifted
         # repeat the ED vol, compose transform will register each time step to this phase
         if self.REGISTER_BACKWARDS: # here
-            y_p2ed = np.repeat(y[:, 4:5, ...], 5, axis=1) # here we move each phase to the ED phase
-            y2_p2ed_m = np.repeat(y2[:, 4:5, ...], 5, axis=1)
+            y_p2ed = np.repeat(y[:, 0:1, ...], 5, axis=1) # here we move each phase to the ED phase
+            y2_p2ed_m = np.repeat(y2[:, 0:1, ...], 5, axis=1)
         else:
             raise NotImplementedError('need to validate if forward works as expected')
             y_p2ed = np.roll(x, shift=-1, axis=1) # here we move the ed phase to each phases, starting with MS - same target as p2p
