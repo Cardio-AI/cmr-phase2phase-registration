@@ -372,15 +372,18 @@ def create_RegistrationModel_inkl_mask(config):
             # Here we slice the ED 3D volume and choose the last channel, which represents the actual frame
             # in our stack lambda layers we use the first Channel for transformation
         if register_backwards: # here the ED should be our target
-            # x is in this case x_t+1 e.g.: x_0 = MS
-            # x = cmr = x_k
-            # x2 = mask = x_k
+            # x = cmr = x_k #ED, MS, ES, PF, MD
+            # x2 = mask = x_k #ED, MS, ES, PF, MD
+            # y = ED-w, MS-w, ES-w, PF-w, MD-w
+            # Y_ed = ED, ED, ED, ED, ED
+
             stack_p2p_lambda_layer = keras.layers.Lambda(lambda x: x[...,:2],name='stack_p2p')
 
             stack_ed_lambda_layer = keras.layers.Lambda(
                 lambda x: keras.layers.Concatenate(axis=-1)(
                     [x [...,:1], # ED, MS, ES, PF, MD
                      x[...,-1:], # ED, ED, ED, ED, ED
+
                      ]),
                 name='stack_ed')
 

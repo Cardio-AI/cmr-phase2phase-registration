@@ -1054,8 +1054,8 @@ class PhaseMaskWindowGenerator(DataGenerator):
             # for backwards, shifted is earlier in time (shift = k-1 or k-w)
             x_k, s_k, x_k_shifted, s_k_shifted, i, ID, needed_time = future.result()
             # print(x_.shape, x2_.shape, y_.shape,y2_.shape)
-            x[i,], y[i,] = x_k_shifted, x_k
-            x2[i,], y2[i,] = s_k_shifted, s_k
+            x[i,], y[i,] = x_k, x_k_shifted # shifted to an earlier frame
+            x2[i,], y2[i,] =s_k,  s_k_shifted # shifted to an earlier frame
             logging.debug('img finished after {:0.3f} sec.'.format(needed_time))
             try:
                 pass
@@ -1076,8 +1076,9 @@ class PhaseMaskWindowGenerator(DataGenerator):
         # y2 = s_shifted
         # repeat the ED vol, compose transform will register each time step to this phase
         if self.REGISTER_BACKWARDS: # here
-            y_p2ed = np.repeat(y[:, 0:1, ...], 5, axis=1) # here we move each phase to the ED phase
-            y2_p2ed_m = np.repeat(y2[:, 0:1, ...], 5, axis=1)
+            # x = x_k; y = x_k-w
+            y_p2ed = np.repeat(x[:, 0:1, ...], 5, axis=1) # here we move each phase to the ED phase, starting from ED
+            y2_p2ed_m = np.repeat(x2[:, 0:1, ...], 5, axis=1)
         else:
             raise NotImplementedError('need to validate if forward works as expected')
             y_p2ed = np.roll(x, shift=-1, axis=1) # here we move the ed phase to each phases, starting with MS - same target as p2p

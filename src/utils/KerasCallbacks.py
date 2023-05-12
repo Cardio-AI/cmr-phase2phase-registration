@@ -710,8 +710,8 @@ class WindowMotionCallback(Callback):
                         if first_m.shape[-1] in [2,3]:
                             first_m = first_m[..., self.take_t_elem][..., np.newaxis]
                         if second_m.shape[-1] in [2,3]:
-                            second_m_p2p = second_m[..., self.take_t_elem][..., np.newaxis]
-                            second_m_p2ed = second_m[..., self.take_t_elem+1][..., np.newaxis]
+                            second_m_p2p = second_m[..., self.take_t_elem+1][..., np.newaxis]
+                            second_m_p2ed = second_m[..., self.take_t_elem][..., np.newaxis]
                         if moved_m.shape[-1] in [2,3]:
                             moved_m_p2p = moved_m[..., self.take_t_elem][..., np.newaxis]
                             moved_m_p2ed = moved_m[..., self.take_t_elem+1][..., np.newaxis]
