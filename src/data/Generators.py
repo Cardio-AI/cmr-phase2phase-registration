@@ -1075,7 +1075,7 @@ class PhaseMaskWindowGenerator(DataGenerator):
         # y = x_shifted
         # y2 = s_shifted
         # repeat the ED vol, compose transform will register each time step to this phase
-        if self.REGISTER_BACKWARDS: # here
+        if self.REGISTER_BACKWARDS:
             # x = x_k; y = x_k-w
             y_p2ed = np.repeat(x[:, 0:1, ...], 5, axis=1) # here we move each phase to the ED phase, starting from ED
             y2_p2ed_m = np.repeat(x2[:, 0:1, ...], 5, axis=1)
@@ -1322,7 +1322,7 @@ class PhaseMaskWindowGenerator(DataGenerator):
         #    combined[..., -1][~(combined_m[..., -1] > 0.1)] = 0
 
         if not self.yield_masks:  # clip and normalisation is faster on cropped nda
-            combined = clip_quantile(combined, .9999)
+            combined = clip_quantile(combined, .99)
             logging.debug('quantile clipping took: {:0.3f} s'.format(time() - t1))
             t1 = time()
             # combined = normalise_image(combined, normaliser='minmax')  # normalise per 4D
@@ -1364,6 +1364,7 @@ class PhaseMaskWindowGenerator(DataGenerator):
         # combined = [x_shifted, x_k]
         # for k2k: [x_k-1, x_k]
         # for window: [x_k-w, x_k]
+        # for composed []
         # register backwards: move x_k to fit x_shifted
         # x_k = moving, x_shifted = fixed
         # register backwards == pull vectors which sample from the target/fixed/x_shifted grid

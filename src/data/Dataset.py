@@ -1647,7 +1647,12 @@ def get_n_windows_between_phases_from_single4D(nda4d, idx, register_backwards=Tr
     #
     idxs_phases = idx.copy()
 
-    idxs_shift_to_left = np.roll(idx, -1) # roll to the left side
+    idxs_shift_to_left = np.roll(idx, 1) # shift to the right
+    #shifts
+    # np.roll([0,1,2,3], shift=-1)
+    # --> array([1, 2, 3, 0])
+    # np.roll([0,1,2,3], shift=-1)
+    # --> array([3, 0, 1, 2])
 
     # We add a volume from t/2, which should lie between both phases, for the cycle overflow we need
     # to handle a special case

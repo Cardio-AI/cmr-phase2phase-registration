@@ -411,6 +411,7 @@ def create_RegistrationModel_inkl_mask(config):
 
         # we need to build the u-net after the compose concat path to make sure that our u-net input channels match the input
         config_temp['IMG_CHANNELS'] = input_tensor.shape[-1]
+        print('p2p input channels:', input_tensor.shape[-1])
         unet = create_unet(config_temp, single_model=False)
         print('input before unet:', input_tensor.shape)
         pre_flows = TimeDistributed(unet, name='unet')(input_tensor)
