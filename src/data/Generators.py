@@ -1247,6 +1247,15 @@ class PhaseMaskWindowGenerator(DataGenerator):
         logging.debug('pad/crop took: {:0.3f} s'.format(time() - t1))
         t1 = time()
 
+
+        model_inputs = clip_quantile(model_inputs, .99)
+        logging.debug('quantile clipping took: {:0.3f} s'.format(time() - t1))
+        t1 = time()
+        # combined = normalise_image(combined, normaliser='minmax')  # normalise per 4D
+        model_inputs = normalise_image(model_inputs, normaliser=self.SCALER)  # normalise per 4D
+        logging.debug('normalisation took: {:0.3f} s'.format(time() - t1))
+        t1 = time()
+
         # Added mask smoothness
         import scipy
         import scipy.ndimage
@@ -1321,14 +1330,7 @@ class PhaseMaskWindowGenerator(DataGenerator):
         #    combined[..., 0][~(combined_m[..., 0] > 0.1)] = 0
         #    combined[..., -1][~(combined_m[..., -1] > 0.1)] = 0
 
-        if not self.yield_masks:  # clip and normalisation is faster on cropped nda
-            combined = clip_quantile(combined, .99)
-            logging.debug('quantile clipping took: {:0.3f} s'.format(time() - t1))
-            t1 = time()
-            # combined = normalise_image(combined, normaliser='minmax')  # normalise per 4D
-            combined = normalise_image(combined, normaliser=self.SCALER)  # normalise per 4D
-            logging.debug('normalisation took: {:0.3f} s'.format(time() - t1))
-            t1 = time()
+
 
         return combined, combined_m, i
 
