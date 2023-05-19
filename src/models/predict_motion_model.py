@@ -139,16 +139,16 @@ def pred_fold(config, debug=True):
     msk_t = np.squeeze(target_msk_k2k>0.1)
     """if msk_t.shape[-1] > 1:
         msk_t = msk_t[..., None]"""
-    for dim in range(flows.shape[-1]):
-        flows_masked[..., dim][~msk_t] = 0
+    #for dim in range(flows.shape[-1]):
+     #   flows_masked[..., dim][~msk_t] = 0
 
     if compose_given:
         #msk_ed = np.repeat(msk_target[:,0:1],5,axis=1)# mask the compose flowfield with ED (fixed)
         flows_composed_masked = flows2ed.copy()
         target_msk_k2ed = msk_target[...,:1]
         msk_ed = np.squeeze(target_msk_k2ed>0.1)
-        for dim in range(flows2ed.shape[-1]):
-            flows_composed_masked[..., dim][~msk_ed] = 0
+        #for dim in range(flows2ed.shape[-1]):
+        #    flows_composed_masked[..., dim][~msk_ed] = 0
     else:
         comp = create_dense_compose(config)
         flows_composed_masked = comp.predict(flows_masked)
@@ -159,8 +159,8 @@ def pred_fold(config, debug=True):
         cmr_mov = cmr_moving[i][...,0:1]
         cmr_t = cmr_target[i]
         cmr_m = cmr_moved[i]
-        msk_mov = msk_moving[i][...,0:1]
-        msk_t = msk_target[i][...,1:2] # target mask of each pair-wise p2p
+        msk_mov = msk_moving[i][...,0:1] # ED, MS, ..., MD
+        msk_t = msk_target[i][...,1:2] # target mask of each pair-wise p2p MD,ED,MS,ES,PF
         if msk_t.shape[-1]==2:
             msk_t_p2ed = msk_t[...,:1]
             msk_t = msk_t[..., -1:]

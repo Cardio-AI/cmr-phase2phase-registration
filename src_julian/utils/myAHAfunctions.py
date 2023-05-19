@@ -474,6 +474,8 @@ def myMorales(ff_comp, mask_lvmyo, com_cube, spacing, method, reg_backwards):
 
         # strain calculation
         dx, dy, dz = spacing
+        # TEST
+
         strain = MyocardialStrain(masklvmyo=masklvmyo, com=com, flow=flow)
         strain.calculate_strain(dx=dx, dy=dy, dz=dz)
 
@@ -490,8 +492,8 @@ def myMorales(ff_comp, mask_lvmyo, com_cube, spacing, method, reg_backwards):
         masks_rot[t] = strain.mask_rot
 
         # save strain values
-        Radial[t] += strain.Err
-        Circumferential[t] += strain.Ecc
+        Radial[t] = strain.Err
+        Circumferential[t] = strain.Ecc
 
         # GRS = strain.Err[strain.mask_rot==1].mean()
         # GCS = strain.Ecc[strain.mask_rot==1].mean()
@@ -528,8 +530,8 @@ def calculate_AHA_cube(Err, Ecc, sector_masks_rot, masks_rot, Z_SLICES, N_AHA):
                 mask = ((sector_masks_rot[t, z_rel] == AHA) & (masks_rot[t, z_rel] == label_lvmyo))
                 #mask = (sector_masks_rot[t, z_rel] == AHA) # here we dont mask by the smoothed LV myo
                 if mask.sum()>0:
-                    err = np.ma.array(Err[t, z_rel], mask=~mask).mean()
-                    ecc = np.ma.array(Ecc[t, z_rel], mask=~mask).mean()
+                    err = np.ma.mean(np.ma.array(Err[t, z_rel], mask=~mask))
+                    ecc = np.ma.mean(np.ma.array(Ecc[t, z_rel], mask=~mask))
                 else: # ignore slices where no segment is visible
                     err = np.NaN
                     ecc = np.NaN
@@ -619,14 +621,18 @@ def calculate_center_of_mass_cube(mask_whole, label_bloodpool, base_slices, midc
     # dynamically
     for t in range(nt):
         # calculate com at level
-        com_base = center_of_mass(mask_whole[t, base_slices, ..., 0] == label_bloodpool)
-        com_mc = center_of_mass(mask_whole[t, midcavity_slices, ..., 0] == label_bloodpool)
-        com_apex = center_of_mass(mask_whole[t, apex_slices, ..., 0] == label_bloodpool)
+        com_base = center_of_mass((mask_whole[t, base_slices, ..., 0] == label_bloodpool).astype(int))
+        com_mc = center_of_mass((mask_whole[t, midcavity_slices, ..., 0] == label_bloodpool).astype(int))
+        com_apex = center_of_mass((mask_whole[t, apex_slices, ..., 0] == label_bloodpool).astype(int))
 
         # providing zyx mask coordinates returns zxy center of mass coordinates; reordering
         com_cube[t, 0, 0], com_cube[t, 0, 1], com_cube[t, 0, 2] = (com_base[0], com_base[2], com_base[1])
         com_cube[t, 1, 0], com_cube[t, 1, 1], com_cube[t, 1, 2] = (com_mc[0], com_mc[2], com_mc[1])
         com_cube[t, 2, 0], com_cube[t, 2, 1], com_cube[t, 2, 2] = (com_apex[0], com_apex[2], com_apex[1])
+
+        """com_cube[t, 0, 0], com_cube[t, 0, 1], com_cube[t, 0, 2] = (com_mc[0], com_mc[2], com_mc[1])
+        com_cube[t, 1, 0], com_cube[t, 1, 1], com_cube[t, 1, 2] = (com_mc[0], com_mc[2], com_mc[1])
+        com_cube[t, 2, 0], com_cube[t, 2, 1], com_cube[t, 2, 2] = (com_mc[0], com_mc[2], com_mc[1])"""
 
     # if statically, then overwrite all lines with the first timestep ED
     if method == 'staticED':
@@ -972,8 +978,8 @@ def get_RVIP_list_from_ACDC_masks(path_to_acdc_patient_folders):
 def plot_4x5_MaskQuiver_Magnitude_Err_Ecc(ff_composed, mask_whole, Err, Ecc, z, N):
     nt, nz, ny, nx, _ = ff_composed.shape
     title = ['ED-MS', 'ED-ES', 'ED-PF', 'ED-MD', 'ED-ED']
-    xmin, xmax, ymin, ymax = (30, 110, 20, 80)
-    offset = 40
+    xmin, xmax, ymin, ymax = (0, 96, 0, 96)
+    offset = 0
     cmap_strain='inferno'
     interpol_method = 'bilinear'
     fig, ax = plt.subplots(4, 5, figsize=(12,10))

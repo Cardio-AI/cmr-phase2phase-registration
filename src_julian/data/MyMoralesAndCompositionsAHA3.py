@@ -100,7 +100,7 @@ def calculate_strain(data_root='', metadata_path='/mnt/ssd/julian/data/metadata/
         # load the experiment config
         with open(cfg, encoding='utf-8') as data_file:
             config = json.loads(data_file.read())
-    except Exception as e: # maybe data root is not
+    except Exception as e: # maybe no fold subfolders
         print(e)
         print('data_root: {}'.format(data_root))
         cfg = os.path.join(data_root, 'config/config.json')
@@ -114,7 +114,7 @@ def calculate_strain(data_root='', metadata_path='/mnt/ssd/julian/data/metadata/
     df_patients = []  # df where we will store our results
     metadata_filename = 'DMDTarique_2.0.xlsx'
     RVIP_method = 'staticED'   # staticED (standard), dynamically
-    com_method = 'dynamically'  # dynamically (standard), staticED
+    com_method = 'staticED'  # dynamically (standard), staticED
     N_TIMESTEPS = 5
     Z_SPACING = spacing_vol[-1]
     label_bloodpool = 3
@@ -160,7 +160,7 @@ def calc_strain4singlepatient(path_to_patient_folder, N_TIMESTEPS, RVIP_method, 
     # LV MYO MASKS
     # targetmask doesnt need to be rolled
     # previously "mask" files were used here
-    mask_lvmyo = stack_nii_masks(path_to_patient_folder, 'myo_moving_', N_TIMESTEPS)  # refactored
+    mask_lvmyo = stack_nii_masks(path_to_patient_folder, 'myo_target_', N_TIMESTEPS)  # refactored
     # WHOLE MASKS
     # lvtargetmask doesnt need to be rolled
     mask_whole = stack_nii_masks(path_to_patient_folder, 'fullmask_moving_', N_TIMESTEPS)  # refactored
@@ -200,14 +200,14 @@ def calc_strain4singlepatient(path_to_patient_folder, N_TIMESTEPS, RVIP_method, 
         print(patient_name)
     # IDXs FROM RVIP DETECTION IN WHOLE MASKS
     # get lowest and highest index of z where all timesteps have RVIP identified
-    #rvip_range = calculate_wholeheartvolumeborders_by_RVIP(mask_whole)
+    rvip_range = calculate_wholeheartvolumeborders_by_RVIP(mask_whole)
     # define from where we take the identified heart volume borders
-    wholeheartvolumeborders_lvmyo = [lvmyo_idxs[0], lvmyo_idxs[-1]]  # from LVMYOMASKS range
-    #wholeheartvolumeborders_rviprange = [rvip_range[0], rvip_range[-1]]  # from RVIP range
+    #wholeheartvolumeborders_lvmyo = [lvmyo_idxs[0], lvmyo_idxs[-1]]  # from LVMYOMASKS range
+    wholeheartvolumeborders_rviprange = [rvip_range[0], rvip_range[-1]]  # from RVIP range
     # level ranges
     # 2021.10.06: lvmyo more accurate when not-sparse
-    base_slices, midcavity_slices, apex_slices = get_volumeborders(wholeheartvolumeborders_lvmyo)  # by lvmyo-range
-    #base_slices, midcavity_slices, apex_slices = get_volumeborders(wholeheartvolumeborders_rviprange)  # by rvip-range
+    #base_slices, midcavity_slices, apex_slices = get_volumeborders(wholeheartvolumeborders_lvmyo)  # by lvmyo-range
+    base_slices, midcavity_slices, apex_slices = get_volumeborders(wholeheartvolumeborders_rviprange)  # by rvip-range
     # plot composed flowfields against each other if wanted
     # plot_three_ComposedFlowfields_against_each_other(ff, ff_whole_Sven, ff_whole_itk,
     #                                                  wholeheartvolumeborders_lvmyo, mask_lvmyo)
@@ -416,12 +416,13 @@ def calc_strain4singlepatient(path_to_patient_folder, N_TIMESTEPS, RVIP_method, 
 
     # clip by lower and upper quantile threshold along axis 2 (one threshold per segment)
     q = 0.95
-    rs_overtime_base = np.clip(a=rs_overtime_base, a_min=-1*np.quantile(a=-1*rs_overtime_base, q=q), a_max=np.quantile(a=rs_overtime_base, q=q))
-    cs_overtime_base = np.clip(a=cs_overtime_base, a_min=-1*np.quantile(a=-1*cs_overtime_base, q=q), a_max=np.quantile(a=cs_overtime_base, q=q))
-    rs_overtime_mc = np.clip(a=rs_overtime_mc, a_min=-1*np.quantile(a=-1*rs_overtime_mc, q=q), a_max=np.quantile(a=rs_overtime_mc, q=q))
-    cs_overtime_mc = np.clip(a=cs_overtime_mc, a_min=-1*np.quantile(a=-1*cs_overtime_mc, q=q), a_max=np.quantile(a=cs_overtime_mc, q=q))
-    rs_overtime_apex = np.clip(a=rs_overtime_apex, a_min=-1*np.quantile(a=-1*rs_overtime_apex, q=q), a_max=np.quantile(a=rs_overtime_apex, q=q))
-    cs_overtime_apex = np.clip(a=cs_overtime_apex, a_min=-1*np.quantile(a=-1*cs_overtime_apex, q=q), a_max=np.quantile(a=cs_overtime_apex, q=q))
+    q_lower = 1-q
+    """rs_overtime_base = np.clip(a=rs_overtime_base, a_min=np.quantile(a=rs_overtime_base, q=q_lower), a_max=np.quantile(a=rs_overtime_base, q=q))
+    cs_overtime_base = np.clip(a=cs_overtime_base, a_min=np.quantile(a=cs_overtime_base, q=q_lower), a_max=np.quantile(a=cs_overtime_base, q=q))
+    rs_overtime_mc = np.clip(a=rs_overtime_mc, a_min=-np.quantile(a=rs_overtime_mc, q=q_lower), a_max=np.quantile(a=rs_overtime_mc, q=q))
+    cs_overtime_mc = np.clip(a=cs_overtime_mc, a_min=np.quantile(a=cs_overtime_mc, q=q_lower), a_max=np.quantile(a=cs_overtime_mc, q=q))
+    rs_overtime_apex = np.clip(a=rs_overtime_apex, a_min=np.quantile(a=rs_overtime_apex, q=q_lower), a_max=np.quantile(a=rs_overtime_apex, q=q))
+    cs_overtime_apex = np.clip(a=cs_overtime_apex, a_min=np.quantile(a=cs_overtime_apex, q=q_lower), a_max=np.quantile(a=cs_overtime_apex, q=q))"""
 
     # runtime outputs
     # output min max mean strain for patient; Err and Ecc
@@ -437,8 +438,9 @@ def calc_strain4singlepatient(path_to_patient_folder, N_TIMESTEPS, RVIP_method, 
         (16 * 5, 1))
     cs_AHA_overtime = np.concatenate((cs_overtime_base, cs_overtime_mc, cs_overtime_apex), axis=0).reshape(
         (16 * 5, 1))
-    rs_AHA_overtime = np.nan_to_num(rs_AHA_overtime)
-    cs_AHA_overtime = np.nan_to_num(cs_AHA_overtime)
+    #
+    # rs_AHA_overtime = np.nan_to_num(rs_AHA_overtime)
+    # cs_AHA_overtime = np.nan_to_num(cs_AHA_overtime)
     if (np.isnan(rs_AHA_overtime).any() or np.isnan(cs_AHA_overtime).any()):
         raise NotImplementedError('Some AHA segments have NaN values, please check!')
     INFO('Err min: {:3.1f}%'.format(100 * rs_AHA_overtime.min()))
@@ -453,8 +455,7 @@ def calc_strain4singlepatient(path_to_patient_folder, N_TIMESTEPS, RVIP_method, 
     # plot_3x5_cmroverlaywithmasked_strainormagnitude(ff_whole_itk, Err, Ecc, base_slices, midcavity_slices,
     #                                                 apex_slices, vol_cube, com_cube, masks_rot_lvmyo, method='Ecc')
     # new visalization method ONEVIEW
-    # plot_4x5_MaskQuiver_Magnitude_Err_Ecc(ff_composed=ff_whole_Sven, mask_whole=mask_whole, Err=Err, Ecc=Ecc, z=24,
-    #                                       N=1)
+    # plot_4x5_MaskQuiver_Magnitude_Err_Ecc(ff_composed=ff_whole, mask_whole=masks_rot_lvmyo, Err=Err, Ecc=Ecc, z=24,N=1)
     # ff_composed=ff_whole_Sven
     # N=1
     # nx,ny=128,128
@@ -489,7 +490,7 @@ def calc_strain4singlepatient(path_to_patient_folder, N_TIMESTEPS, RVIP_method, 
     # matplotlib.cm.spring.set_bad(color='white')
     # ax[4].imshow(np.ma.masked_where(Err[t,z] == 0, Err[t,z]), cmap='spring')
     # ax[4].set_title('Err masked')
-    x = 0
+    x=0
     # # base
     # plot_3x5grid_CMRxStrainxSectormasks(com_cube=com_cube[:,0,:],
     #                                     Radial_Morales=Err,
