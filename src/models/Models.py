@@ -331,7 +331,9 @@ def create_RegistrationModel_inkl_mask(config):
                                                  name='deformable_p2p')
         st_layer_p2ed = nrn_layers.SpatialTransformer(interp_method=interp_method, indexing=indexing, ident=True,
                                                       name='deformable_p2ed')
-        st_mask_layer = nrn_layers.SpatialTransformer(interp_method=interp_method, indexing=indexing, ident=True,
+        st_mask_p2p_layer = nrn_layers.SpatialTransformer(interp_method=interp_method, indexing=indexing, ident=True,
+                                                      name='deformable_mask')
+        st_mask_p2ed_layer = nrn_layers.SpatialTransformer(interp_method=interp_method, indexing=indexing, ident=True,
                                                       name='deformable_mask')
 
         # combine moving image and deformable
@@ -340,8 +342,10 @@ def create_RegistrationModel_inkl_mask(config):
             lambda x: st_layer_p2p([x[..., :1], x[..., -3:]]), name='p2p')
         st_p2ed_lambda_layer = keras.layers.Lambda(
             lambda x: st_layer_p2ed([x[..., :1], x[..., -3:]]), name='p2ed')
-        st_mask_lambda_layer = keras.layers.Lambda(
-            lambda x: st_mask_layer([x[..., :1], x[..., -3:]]), name='p2p_mask')
+        st_mask_p2p_lambda_layer = keras.layers.Lambda(
+            lambda x: st_mask_p2p_layer([x[..., :1], x[..., -3:]]), name='p2p_mask')
+        st_mask_p2ed_lambda_layer = keras.layers.Lambda(
+            lambda x: st_mask_p2ed_layer([x[..., :1], x[..., -3:]]), name='p2p_mask')
 
         # lambda layers for spatial transformer indexing of the cmr vol and the deformable
         # deformable follows ij indexing --> z,y,x
@@ -424,7 +428,7 @@ def create_RegistrationModel_inkl_mask(config):
         # transform only one timestep, mostly the first one
         transformed = TimeDistributed(st_lambda_layer, name='st_p2p')(keras.layers.Concatenate(axis=-1, name='cmr_flow_p2p')([input_tensor_raw, flows]))
         print('transformed_p2p:', transformed.shape)
-        transformed_mask = TimeDistributed(st_mask_lambda_layer, name='st_p2p_msk')(
+        transformed_mask = TimeDistributed(st_mask_p2p_lambda_layer, name='st_p2p_msk')(
             keras.layers.Concatenate(axis=-1, name='msk_flow_p2p')([input_mask_tensor, flows]))
 
         if COMPOSE_CONSISTENCY:
@@ -442,7 +446,7 @@ def create_RegistrationModel_inkl_mask(config):
             flows_p2ed = add_zero_spatial_lambda_p2ed(flows_p2ed)
             transformed_p2ed = TimeDistributed(st_p2ed_lambda_layer, name='st_p2ed')(
                 keras.layers.Concatenate(axis=-1, name='cmr_flow_p2ed')([input_tensor_raw, flows_p2ed]))
-            transformed_mask_p2ed = TimeDistributed(st_p2ed_lambda_layer, name='st_p2ed_mask')(
+            transformed_mask_p2ed = TimeDistributed(st_mask_p2ed_lambda_layer, name='st_p2ed_mask')(
                 keras.layers.Concatenate(axis=-1, name='mask_flow_p2ed')([input_mask_tensor, flows_p2ed]))
             transformed_p2ed = keras.layers.Lambda(lambda x: x, name='transformed_p2ed')(transformed_p2ed)
             transformed_masks = keras.layers.Concatenate(axis=-1, name='p2p_p2ed_mask')([transformed_mask_p2ed, transformed_mask])
