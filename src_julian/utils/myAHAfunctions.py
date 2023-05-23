@@ -459,18 +459,13 @@ def myMorales(ff_comp, mask_lvmyo, com_cube, spacing, method, reg_backwards):
             masklvmyo = mask_lvmyo[t, ..., 0] # for p2p defined flowfields take the mask dynamically
         elif method == 'ed2p':
             if reg_backwards:
-                masklvmyo = mask_lvmyo[0, ..., 0] # for composed and backwards take the ED mask fix
+                masklvmyo = mask_lvmyo[0, ..., 0] # for composed and backwards take the ED mask fix, targetmask: MD,ED,MS,ES,PF
             else:
                 masklvmyo = mask_lvmyo[t, ..., 0]  # for composed and forward reg we sample from a dynamic target
         else:
             raise NotImplementedError('invalid method: {}, valid methods: {}'.format(method, ['p2p', 'ed2p']))
         com = com_cube[t]
         flow = ff_comp[t]
-
-        # old
-        # masklvmyo = np.einsum('zyx->xyz', np.squeeze(mask_lvmyo[0, ...]))[..., Z_SLICES]
-        # flow = np.einsum('zyxc->xyzc', ff_comp[t, ...])
-        # maskwhole = np.einsum('zyx->xyz', np.squeeze(mask_whole[0, ...]))[..., Z_SLICES]
 
         # strain calculation
         dx, dy, dz = spacing

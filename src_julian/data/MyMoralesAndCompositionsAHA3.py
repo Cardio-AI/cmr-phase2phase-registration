@@ -160,7 +160,7 @@ def calc_strain4singlepatient(path_to_patient_folder, N_TIMESTEPS, RVIP_method, 
     # LV MYO MASKS
     # targetmask doesnt need to be rolled
     # previously "mask" files were used here
-    mask_lvmyo = stack_nii_masks(path_to_patient_folder, 'myo_target_', N_TIMESTEPS)  # refactored
+    mask_lvmyo = stack_nii_masks(path_to_patient_folder, 'myo_moving_', N_TIMESTEPS)  # refactored
     # WHOLE MASKS
     # lvtargetmask doesnt need to be rolled
     mask_whole = stack_nii_masks(path_to_patient_folder, 'fullmask_moving_', N_TIMESTEPS)  # refactored
@@ -417,12 +417,12 @@ def calc_strain4singlepatient(path_to_patient_folder, N_TIMESTEPS, RVIP_method, 
     # clip by lower and upper quantile threshold along axis 2 (one threshold per segment)
     q = 0.95
     q_lower = 1-q
-    """rs_overtime_base = np.clip(a=rs_overtime_base, a_min=np.quantile(a=rs_overtime_base, q=q_lower), a_max=np.quantile(a=rs_overtime_base, q=q))
+    rs_overtime_base = np.clip(a=rs_overtime_base, a_min=np.quantile(a=rs_overtime_base, q=q_lower), a_max=np.quantile(a=rs_overtime_base, q=q))
     cs_overtime_base = np.clip(a=cs_overtime_base, a_min=np.quantile(a=cs_overtime_base, q=q_lower), a_max=np.quantile(a=cs_overtime_base, q=q))
     rs_overtime_mc = np.clip(a=rs_overtime_mc, a_min=-np.quantile(a=rs_overtime_mc, q=q_lower), a_max=np.quantile(a=rs_overtime_mc, q=q))
     cs_overtime_mc = np.clip(a=cs_overtime_mc, a_min=np.quantile(a=cs_overtime_mc, q=q_lower), a_max=np.quantile(a=cs_overtime_mc, q=q))
     rs_overtime_apex = np.clip(a=rs_overtime_apex, a_min=np.quantile(a=rs_overtime_apex, q=q_lower), a_max=np.quantile(a=rs_overtime_apex, q=q))
-    cs_overtime_apex = np.clip(a=cs_overtime_apex, a_min=np.quantile(a=cs_overtime_apex, q=q_lower), a_max=np.quantile(a=cs_overtime_apex, q=q))"""
+    cs_overtime_apex = np.clip(a=cs_overtime_apex, a_min=np.quantile(a=cs_overtime_apex, q=q_lower), a_max=np.quantile(a=cs_overtime_apex, q=q))
 
     # runtime outputs
     # output min max mean strain for patient; Err and Ecc
