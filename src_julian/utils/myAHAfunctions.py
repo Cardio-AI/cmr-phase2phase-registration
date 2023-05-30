@@ -519,7 +519,25 @@ def calculate_AHA_cube(Err, Ecc, sector_masks_rot, masks_rot, Z_SLICES, N_AHA):
     label_lvmyo = 1
     AHA_cube = np.ndarray((len(N_AHA), nt, len(Z_SLICES), 2))
 
+    # here we derive the mean strain per segment mask and slice, every voxel is weighted equally,
+    # for compatibility reasons with the per-slice average approach we repeat the mean strain value per slice
+    # and average them later
     for t in range(nt):
+        for idx, AHA in enumerate(N_AHA): # check if this segment is visible in this slice
+            mask = ((sector_masks_rot[t] == AHA) & (masks_rot[t] == label_lvmyo))
+            #mask = (sector_masks_rot[t, z_rel] == AHA) # here we dont mask by the smoothed LV myo
+            if mask.sum()>0:
+                err = np.ma.mean(np.ma.array(Err[t], mask=~mask))
+                ecc = np.ma.mean(np.ma.array(Ecc[t], mask=~mask))
+            else: # ignore slices where no segment is visible
+                err = np.NaN
+                ecc = np.NaN
+            AHA_cube[idx, t, ..., 0] = err
+            AHA_cube[idx, t, ..., 1] = ecc
+
+    # here we derive the mean strain value per slice and average them later,
+    # slices with only few voxels are equally weighted as slices with many voxels
+    """for t in range(nt):
         for z_rel, z_abs in enumerate(Z_SLICES):
             for idx, AHA in enumerate(N_AHA): # check if this segment is visible in this slice
                 mask = ((sector_masks_rot[t, z_rel] == AHA) & (masks_rot[t, z_rel] == label_lvmyo))
@@ -531,7 +549,7 @@ def calculate_AHA_cube(Err, Ecc, sector_masks_rot, masks_rot, Z_SLICES, N_AHA):
                     err = np.NaN
                     ecc = np.NaN
                 AHA_cube[idx, t, z_rel, 0] = err
-                AHA_cube[idx, t, z_rel, 1] = ecc
+                AHA_cube[idx, t, z_rel, 1] = ecc"""
 
     return AHA_cube
 

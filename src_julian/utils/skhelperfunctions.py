@@ -700,7 +700,7 @@ def plot_dice_per_slice_line(gt, pred, save_path='reports/figures/error_per_labe
         -------
 
         '''
-    import src_julian.utils.Loss_and_metrics as metr
+    import src.utils.Metrics as metr
 
     myos = [metr.dice_coef_myo(g, p).numpy() for g, p in zip(gt, pred)]
     lvs = [metr.dice_coef_lv(g, p).numpy() for g, p in zip(gt, pred)]
@@ -732,7 +732,7 @@ def plot_dice_per_slice_bar(gt, pred, save_path='reports/figures/error_per_label
     -------
 
     '''
-    import src_julian.utils.Loss_and_metrics as metr
+    import src.utils.Metrics as metr
 
     # calculate the dice per label and per slice
     myos = [metr.dice_coef_myo(g, p).numpy() for g, p in zip(gt, pred)]

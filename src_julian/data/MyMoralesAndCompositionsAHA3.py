@@ -115,6 +115,7 @@ def calculate_strain(data_root='', metadata_path='/mnt/ssd/julian/data/metadata/
     metadata_filename = 'DMDTarique_2.0.xlsx'
     RVIP_method = 'staticED'   # staticED (standard), dynamically
     com_method = 'staticED'  # dynamically (standard), staticED
+
     N_TIMESTEPS = 5
     Z_SPACING = spacing_vol[-1]
     label_bloodpool = 3
@@ -135,10 +136,13 @@ def calculate_strain(data_root='', metadata_path='/mnt/ssd/julian/data/metadata/
 
     # compose metadata xls filepath
     path_to_metadata_xls = os.path.join(metadata_path, metadata_filename)
+    df_dmdahastrain = pd.read_excel(io=path_to_metadata_xls, sheet_name=sheet_name_ahastrain, index_col=0, header=0)
+    df_cleandmd = pd.read_excel(io=path_to_metadata_xls, sheet_name=sheet_name_soalge, engine='openpyxl')
+
     pats = len(patient_folders)
     params = [N_TIMESTEPS, RVIP_method, Z_SPACING, com_method, df_style, ff_style,
                                                label_bloodpool, p2p_style, path_to_metadata_xls,
-                                               sheet_name_ahastrain, sheet_name_soalge, spacing_vol, register_backwards]
+                                               df_dmdahastrain, df_cleandmd, spacing_vol, register_backwards]
     params = [[elem] * pats for elem in params]
 
     for result in executor.map(calc_strain4singlepatient, patient_folders, *params):
@@ -148,8 +152,8 @@ def calculate_strain(data_root='', metadata_path='/mnt/ssd/julian/data/metadata/
 
 
 def calc_strain4singlepatient(path_to_patient_folder, N_TIMESTEPS, RVIP_method, Z_SPACING, com_method, df_style, ff_style, label_bloodpool,
-                              p2p_style, path_to_metadata_xls, sheet_name_ahastrain,
-                              sheet_name_soalge, spacing, register_backwards):
+                              p2p_style, path_to_metadata_xls, df_dmdahastrain,
+                              df_cleandmd, spacing, register_backwards):
     patient_name = os.path.basename(os.path.dirname(path_to_patient_folder))
     # patient_name = os.path.basename(path_to_patient_folder) #test21.10.21
     # iteration info
@@ -532,12 +536,16 @@ def calc_strain4singlepatient(path_to_patient_folder, N_TIMESTEPS, RVIP_method, 
     # the arrays contain 16 values each; for every AHA segment
     cvi_given = False
     try:
-        df_dmdahastrain = pd.read_excel(io=path_to_metadata_xls, sheet_name=sheet_name_ahastrain, index_col=0, header=0)
+        #df_dmdahastrain = pd.read_excel(io=path_to_metadata_xls, sheet_name=sheet_name_ahastrain, index_col=0, header=0)
         cvi_given = True
         INFO('metadata loaded, cvi_given={}'.format(cvi_given))
     except Exception as e:
         print(e)
         cvi_given = False
+
+    # fast hack to read in the new dmd data.
+
+
     if cvi_given:cvi_prs = get_parameter_series_from_xls(df=df_dmdahastrain, parametername='radial peak strain (%)',
                                             patientname=patient_name)
     if cvi_given: cvi_pcs = get_parameter_series_from_xls(df=df_dmdahastrain, parametername='circumferential peak strain (%)',
@@ -567,7 +575,7 @@ def calc_strain4singlepatient(path_to_patient_folder, N_TIMESTEPS, RVIP_method, 
     if df_style == 'time':
         # get soa and lge data for current patient from metadata xls
         if cvi_given:
-            df_cleandmd = pd.read_excel(io=path_to_metadata_xls, sheet_name=sheet_name_soalge, engine='openpyxl')
+            #df_cleandmd = pd.read_excel(io=path_to_metadata_xls, sheet_name=sheet_name_soalge, engine='openpyxl')
             soa = np.repeat(extract_segments(df_cleandmd[df_cleandmd['pat'] == patient_name]['soa'].values[0]),
                         repeats=5, axis=0)
             lge = np.repeat(extract_segments(df_cleandmd[df_cleandmd['pat'] == patient_name]['lgepos'].values[0]),
@@ -603,7 +611,7 @@ def calc_strain4singlepatient(path_to_patient_folder, N_TIMESTEPS, RVIP_method, 
     if df_style == 'peaks':
         # get soa and lge data for current patient from metadata xls
         if cvi_given:
-            df_cleandmd = pd.read_excel(io=path_to_metadata_xls, sheet_name=sheet_name_soalge, engine='openpyxl')
+            #df_cleandmd = pd.read_excel(io=path_to_metadata_xls, sheet_name=sheet_name_soalge, engine='openpyxl')
             soa = extract_segments(df_cleandmd[df_cleandmd['pat'] == patient_name]['soa'].values[0])
             lge = extract_segments(df_cleandmd[df_cleandmd['pat'] == patient_name]['lgepos'].values[0])
 
