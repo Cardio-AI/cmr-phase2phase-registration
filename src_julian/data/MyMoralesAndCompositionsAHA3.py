@@ -63,6 +63,7 @@ def calculate_strain(data_root='', metadata_path='/mnt/ssd/julian/data/metadata/
 
     sorting_lambda = lambda x: os.path.basename(os.path.dirname(x))
     patient_folders = sorted(patient_folders, key=sorting_lambda)
+    patient_folders = [p for p in patient_folders]
 
 
     # define debug mode for a specific patient only
@@ -112,7 +113,7 @@ def calculate_strain(data_root='', metadata_path='/mnt/ssd/julian/data/metadata/
     register_backwards = config.get('REGISTER_BACKWARDS')
     print(spacing_vol)
     df_patients = []  # df where we will store our results
-    metadata_filename = 'DMDTarique_2.0.xlsx'
+    metadata_filename = 'DMDTarique_3.0.xlsx'
     RVIP_method = 'staticED'   # staticED (standard), dynamically
     com_method = 'staticED'  # dynamically (standard), staticED
 
@@ -136,7 +137,7 @@ def calculate_strain(data_root='', metadata_path='/mnt/ssd/julian/data/metadata/
 
     # compose metadata xls filepath
     path_to_metadata_xls = os.path.join(metadata_path, metadata_filename)
-    df_dmdahastrain = pd.read_excel(io=path_to_metadata_xls, sheet_name=sheet_name_ahastrain, index_col=0, header=0)
+    df_dmdahastrain = pd.read_excel(io=path_to_metadata_xls, sheet_name=sheet_name_ahastrain, index_col=0, header=0,engine='openpyxl')
     df_cleandmd = pd.read_excel(io=path_to_metadata_xls, sheet_name=sheet_name_soalge, engine='openpyxl')
 
     pats = len(patient_folders)

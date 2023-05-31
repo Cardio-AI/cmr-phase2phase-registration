@@ -109,7 +109,7 @@ def train_fold(config, in_memory=False):
             logging.info(patient_str)
             logging.info(ind)
             logging.info('indices: \n{}'.format(indices))
-    info('Done!')
+    info('Check Done!')
 
     # instantiate the batch generators
     """n = 10
