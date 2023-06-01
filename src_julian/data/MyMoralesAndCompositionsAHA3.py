@@ -114,8 +114,8 @@ def calculate_strain(data_root='', metadata_path='/mnt/ssd/julian/data/metadata/
     print(spacing_vol)
     df_patients = []  # df where we will store our results
     metadata_filename = 'DMDTarique_3.0.xlsx'
-    RVIP_method = 'staticED'   # staticED (standard), dynamically
-    com_method = 'staticED'  # dynamically (standard), staticED
+    RVIP_method = 'dynamically'   # staticED (standard), dynamically
+    com_method = 'dynamically'  # dynamically (standard), staticED
 
     N_TIMESTEPS = 5
     Z_SPACING = spacing_vol[-1]

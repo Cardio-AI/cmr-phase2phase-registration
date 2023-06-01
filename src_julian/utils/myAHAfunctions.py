@@ -9,7 +9,7 @@ from src_julian.utils.myclasses import mvf
 
 # set up logging
 from src_julian.utils.skhelperfunctions import Console_and_file_logger
-Console_and_file_logger('mvfviz/dmd_temp', logging.INFO)
+#Console_and_file_logger('mvfviz/dmd_temp', logging.INFO)
 
 def calculate_sector_masks(mask_whole, com_cube, RVIP_cube, Z_SLICES, level):
     '''
@@ -335,6 +335,9 @@ def roll_sector_mask_to_bloodpool_center(sector_mask_raw, com_cube, N_TIMESTEPS,
 def bullseye_plot(ax, data, segBold=None, cmap=None, norm=None, labels=[], labelProps={}):
     import matplotlib as mpl
 
+    fig = plt.gcf()
+    from matplotlib import cm
+
     if segBold is None:
         segBold = []
 
@@ -415,26 +418,30 @@ def bullseye_plot(ax, data, segBold=None, cmap=None, norm=None, labels=[], label
     ax.set_ylim([0, 1])
     ax.set_yticklabels([])
     ax.set_xticklabels([])
+    fig.colorbar(cm.ScalarMappable(norm=norm, cmap=cmap), ax=ax, orientation='horizontal')
+    return ax
 
 
-def myBullsplot(data, cmap, norm, ax=None):
+def myBullsplot(data, lge=None, cmap=None, norm=None, ax=None):
     import matplotlib as mpl
 
     # create labelling of the AHA sectors
     # for the labelling, we will use rounded values
     # .51 will be rounded up, .49 will be rounded down, .50 will be rounded down
     # plotted as label will be the integer values then
-    labels=[]
-    for i in range(len(data)): labels.append('{}\n({})'.format(int(np.round(data)[i]), str(i+1)))
 
+    labels = ['{}\n({})'.format(int(round(data[i]*100)), i+1) for i in range(len(data))]
+    if lge is not None:
+        labels = [l + '*' if lg else l for l,lg in zip(labels, lge)]
     # Make a figure and axes with dimensions as desired.
-    # if ax==None:
-    #     fig, ax = plt.subplots(1, 1, figsize=(8, 8), subplot_kw=dict(projection='polar'))
-    # else:
-    #     fig=plt.gcf()
-
+    if ax==None:
+        fig, ax = plt.subplots(1, 1, figsize=(8, 8), subplot_kw=dict(projection='polar'))
+    else:
+        fig=plt.gcf()
+    #from matplotlib import cm
+    #fig.colorbar(cm.ScalarMappable(norm=norm, cmap=cmap), ax=ax , orientation='horizontal')
     # Create the 16 segment model
-    bullseye_plot(ax, data, cmap=cmap, norm=norm, labels=labels, labelProps={'size':7, "weight":'bold'})
+    return bullseye_plot(ax=ax, data=data, cmap=cmap, norm=norm, labels=labels, labelProps={'size':7, "weight":'bold'})
 
 
 def myMorales(ff_comp, mask_lvmyo, com_cube, spacing, method, reg_backwards):
