@@ -114,8 +114,8 @@ def calculate_strain(data_root='', metadata_path='/mnt/ssd/julian/data/metadata/
     print(spacing_vol)
     df_patients = []  # df where we will store our results
     metadata_filename = 'DMDTarique_3.0.xlsx'
-    RVIP_method = 'dynamically'   # staticED (standard), dynamically
-    com_method = 'dynamically'  # dynamically (standard), staticED
+    RVIP_method = 'staticED'   # staticED (standard), dynamically
+    com_method = 'staticED'  # dynamically (standard), staticED
 
     N_TIMESTEPS = 5
     Z_SPACING = spacing_vol[-1]
@@ -161,11 +161,11 @@ def calc_strain4singlepatient(path_to_patient_folder, N_TIMESTEPS, RVIP_method, 
     INFO('now processing: ' + patient_name)
     # CMR of patient
     # targetcmr doesnt need to be rolled
-    vol_cube = stack_nii_volume(path_to_patient_folder, 'cmr_moving_', N_TIMESTEPS)  # refactored
+    #vol_cube = stack_nii_volume(path_to_patient_folder, 'cmr_moving_', N_TIMESTEPS)  # refactored
     # LV MYO MASKS
     # targetmask doesnt need to be rolled
     # previously "mask" files were used here
-    mask_lvmyo = stack_nii_masks(path_to_patient_folder, 'myo_moving_', N_TIMESTEPS)  # refactored
+    mask_lvmyo = stack_nii_masks(path_to_patient_folder, 'myo_target_', N_TIMESTEPS)  # refactored
     # WHOLE MASKS
     # lvtargetmask doesnt need to be rolled
     mask_whole = stack_nii_masks(path_to_patient_folder, 'fullmask_moving_', N_TIMESTEPS)  # refactored
@@ -188,13 +188,14 @@ def calc_strain4singlepatient(path_to_patient_folder, N_TIMESTEPS, RVIP_method, 
     # dont roll the flow!
     # originally from Svens output, ff is of shape cxyzt with c=zyx
     # ff_whole_Sven is tzyxc with c=zyx
-    ff_comp_Sven = stack_nii_flowfield(path_to_patient_folder, 'flow_composed_', N_TIMESTEPS)
+
     # CALCULATE COMPOSED JUST ADDING
     # ff_comp_add = ff_switched.compose_justadding() # order stays the same
     # set which composition will be used as composed flowfield for further analyses
     if p2p_style:
         ff_whole = np.copy(ff.Data)  # p2p
     else:
+        ff_comp_Sven = stack_nii_flowfield(path_to_patient_folder, 'flow_composed_', N_TIMESTEPS)
         ff_whole = ff_comp_Sven  # this is for the masking in Morales DeepStrain
     # IDXs FROM (SPARSE) LVMYOMASKS
     # get all indexes of phases where all timesteps contain lv myo segmentations
@@ -205,14 +206,14 @@ def calc_strain4singlepatient(path_to_patient_folder, N_TIMESTEPS, RVIP_method, 
         print(patient_name)
     # IDXs FROM RVIP DETECTION IN WHOLE MASKS
     # get lowest and highest index of z where all timesteps have RVIP identified
-    rvip_range = calculate_wholeheartvolumeborders_by_RVIP(mask_whole)
+    #rvip_range = calculate_wholeheartvolumeborders_by_RVIP(mask_whole)
     # define from where we take the identified heart volume borders
-    #wholeheartvolumeborders_lvmyo = [lvmyo_idxs[0], lvmyo_idxs[-1]]  # from LVMYOMASKS range
-    wholeheartvolumeborders_rviprange = [rvip_range[0], rvip_range[-1]]  # from RVIP range
+    wholeheartvolumeborders_lvmyo = [lvmyo_idxs[0], lvmyo_idxs[-1]]  # from LVMYOMASKS range
+    #wholeheartvolumeborders_rviprange = [rvip_range[0], rvip_range[-1]]  # from RVIP range
     # level ranges
     # 2021.10.06: lvmyo more accurate when not-sparse
-    #base_slices, midcavity_slices, apex_slices = get_volumeborders(wholeheartvolumeborders_lvmyo)  # by lvmyo-range
-    base_slices, midcavity_slices, apex_slices = get_volumeborders(wholeheartvolumeborders_rviprange)  # by rvip-range
+    base_slices, midcavity_slices, apex_slices = get_volumeborders(wholeheartvolumeborders_lvmyo)  # by lvmyo-range
+    #base_slices, midcavity_slices, apex_slices = get_volumeborders(wholeheartvolumeborders_rviprange)  # by rvip-range
     # plot composed flowfields against each other if wanted
     # plot_three_ComposedFlowfields_against_each_other(ff, ff_whole_Sven, ff_whole_itk,
     #                                                  wholeheartvolumeborders_lvmyo, mask_lvmyo)

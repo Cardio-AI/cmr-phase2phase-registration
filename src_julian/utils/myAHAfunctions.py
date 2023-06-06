@@ -418,7 +418,7 @@ def bullseye_plot(ax, data, segBold=None, cmap=None, norm=None, labels=[], label
     ax.set_ylim([0, 1])
     ax.set_yticklabels([])
     ax.set_xticklabels([])
-    fig.colorbar(cm.ScalarMappable(norm=norm, cmap=cmap), ax=ax, orientation='horizontal')
+    #ax.colorbar(cm.ScalarMappable(norm=norm, cmap=cmap), ax=ax, orientation='horizontal')
     return ax
 
 
@@ -466,7 +466,7 @@ def myMorales(ff_comp, mask_lvmyo, com_cube, spacing, method, reg_backwards):
             masklvmyo = mask_lvmyo[t, ..., 0] # for p2p defined flowfields take the mask dynamically
         elif method == 'ed2p':
             if reg_backwards:
-                masklvmyo = mask_lvmyo[0, ..., 0] # for composed and backwards take the ED mask fix, targetmask: MD,ED,MS,ES,PF
+                masklvmyo = mask_lvmyo[1, ..., 0] # for composed and backwards take the ED mask fix, targetmask: MD,ED,MS,ES,PF
             else:
                 masklvmyo = mask_lvmyo[t, ..., 0]  # for composed and forward reg we sample from a dynamic target
         else:
@@ -532,7 +532,7 @@ def calculate_AHA_cube(Err, Ecc, sector_masks_rot, masks_rot, Z_SLICES, N_AHA):
     for t in range(nt):
         for idx, AHA in enumerate(N_AHA): # check if this segment is visible in this slice
             mask = ((sector_masks_rot[t] == AHA) & (masks_rot[t] == label_lvmyo))
-            #mask = (sector_masks_rot[t, z_rel] == AHA) # here we dont mask by the smoothed LV myo
+            #mask = (sector_masks_rot[t] == AHA) # here we dont mask by the smoothed LV myo
             if mask.sum()>0:
                 err = np.ma.mean(np.ma.array(Err[t], mask=~mask))
                 ecc = np.ma.mean(np.ma.array(Ecc[t], mask=~mask))
@@ -638,6 +638,16 @@ def calculate_center_of_mass_cube(mask_whole, label_bloodpool, base_slices, midc
     nt = mask_whole.shape[0]
     com_cube = np.ndarray((nt, 3, 3))
 
+    if method == 'staticED':
+        com_base = center_of_mass((mask_whole[0, base_slices, ..., 0] == label_bloodpool).astype(int))
+        com_mc = center_of_mass((mask_whole[0, midcavity_slices, ..., 0] == label_bloodpool).astype(int))
+        com_apex = center_of_mass((mask_whole[0, apex_slices, ..., 0] == label_bloodpool).astype(int))
+        # providing zyx mask coordinates returns zxy center of mass coordinates; reordering
+        com_cube[0, 0, 0], com_cube[0, 0, 1], com_cube[0, 0, 2] = (com_base[0], com_base[2], com_base[1])
+        com_cube[0, 1, 0], com_cube[0, 1, 1], com_cube[0, 1, 2] = (com_mc[0], com_mc[2], com_mc[1])
+        com_cube[0, 2, 0], com_cube[0, 2, 1], com_cube[0, 2, 2] = (com_apex[0], com_apex[2], com_apex[1])
+        com_cube = np.repeat([com_cube[0]], repeats=nt, axis=0)
+
     # dynamically
     for t in range(nt):
         # calculate com at level
@@ -645,18 +655,11 @@ def calculate_center_of_mass_cube(mask_whole, label_bloodpool, base_slices, midc
         com_mc = center_of_mass((mask_whole[t, midcavity_slices, ..., 0] == label_bloodpool).astype(int))
         com_apex = center_of_mass((mask_whole[t, apex_slices, ..., 0] == label_bloodpool).astype(int))
 
+
         # providing zyx mask coordinates returns zxy center of mass coordinates; reordering
         com_cube[t, 0, 0], com_cube[t, 0, 1], com_cube[t, 0, 2] = (com_base[0], com_base[2], com_base[1])
         com_cube[t, 1, 0], com_cube[t, 1, 1], com_cube[t, 1, 2] = (com_mc[0], com_mc[2], com_mc[1])
         com_cube[t, 2, 0], com_cube[t, 2, 1], com_cube[t, 2, 2] = (com_apex[0], com_apex[2], com_apex[1])
-
-        """com_cube[t, 0, 0], com_cube[t, 0, 1], com_cube[t, 0, 2] = (com_mc[0], com_mc[2], com_mc[1])
-        com_cube[t, 1, 0], com_cube[t, 1, 1], com_cube[t, 1, 2] = (com_mc[0], com_mc[2], com_mc[1])
-        com_cube[t, 2, 0], com_cube[t, 2, 1], com_cube[t, 2, 2] = (com_mc[0], com_mc[2], com_mc[1])"""
-
-    # if statically, then overwrite all lines with the first timestep ED
-    if method == 'staticED':
-        com_cube = np.repeat([com_cube[0]], repeats=nt, axis=0)
 
     return com_cube
 
@@ -674,14 +677,18 @@ def calculate_RVIP_cube(mask_whole, base_slices, midcavity_slices, apex_slices, 
 
     nt, nz = (mask_whole.shape[0], mask_whole.shape[1])
     RVIP_cube = np.zeros((nt, nz, 2, 2))
-
+    ant, inf = None, None
 
     for t in range(nt):
         # when mask_whole is provided zyx, the returned tuples are y,x
+        # RVIP is derived from full mask, which is the moving mask (ED, MS, ES, PF, MD)
         if method=='dynamically':
             ant, inf = get_ip_from_mask_3d(mask_whole[t], debug=False, keepdim=True, rev=False)
-        elif method=='staticED':
+        elif method=='staticED' and ant is None:
             ant, inf = get_ip_from_mask_3d(mask_whole[0], debug=False, keepdim=True, rev=False)
+        else:
+            # reuse the existing ant, inf
+            pass
 
         # validation plot
         # t, z = (0, 32)

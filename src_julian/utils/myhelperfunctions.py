@@ -43,8 +43,8 @@ def stack_nii_masks(PATH_TO_NII_MASKS, naming, N_TIMESTEPS, ):
     for t in range(N_TIMESTEPS):
         filename = naming + str(t) + '_.nii'
         path_to_file = os.path.join(PATH_TO_NII_MASKS, filename)
-        imgraw = sitk.ReadImage(path_to_file)
-        arrayraw = sitk.GetArrayFromImage(imgraw)
+        arrayraw = sitk.GetArrayFromImage(sitk.ReadImage(path_to_file))
+        #arrayraw = sitk.GetArrayFromImage(imgraw)
         arrayraw_appended = arrayraw[..., np.newaxis]
         arrayraw_rearranged = np.einsum('xyzc->zyxc', arrayraw_appended)
         list.append(arrayraw_rearranged)

@@ -345,7 +345,7 @@ def create_RegistrationModel_inkl_mask(config):
         st_mask_p2p_lambda_layer = keras.layers.Lambda(
             lambda x: st_mask_p2p_layer([x[..., :1], x[..., -3:]]), name='p2p_mask')
         st_mask_p2ed_lambda_layer = keras.layers.Lambda(
-            lambda x: st_mask_p2ed_layer([x[..., :1], x[..., -3:]]), name='p2p_mask')
+            lambda x: st_mask_p2ed_layer([x[..., :1], x[..., -3:]]), name='p2ed_mask')
 
         # lambda layers for spatial transformer indexing of the cmr vol and the deformable
         # deformable follows ij indexing --> z,y,x
