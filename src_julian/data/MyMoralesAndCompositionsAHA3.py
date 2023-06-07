@@ -111,7 +111,7 @@ def calculate_strain(data_root='', metadata_path='/mnt/ssd/julian/data/metadata/
             config = json.loads(data_file.read())
     spacing_vol = list(reversed(config.get('SPACING')))
     register_backwards = config.get('REGISTER_BACKWARDS')
-    print(spacing_vol)
+
     df_patients = []  # df where we will store our results
     metadata_filename = 'DMDTarique_3.0.xlsx'
     RVIP_method = 'staticED'   # staticED (standard), dynamically
@@ -166,6 +166,7 @@ def calc_strain4singlepatient(path_to_patient_folder, N_TIMESTEPS, RVIP_method, 
     # targetmask doesnt need to be rolled
     # previously "mask" files were used here
     mask_lvmyo = stack_nii_masks(path_to_patient_folder, 'myo_target_', N_TIMESTEPS)  # refactored
+    mask_lvmyo = mask_lvmyo>0.1
     # WHOLE MASKS
     # lvtargetmask doesnt need to be rolled
     mask_whole = stack_nii_masks(path_to_patient_folder, 'fullmask_moving_', N_TIMESTEPS)  # refactored
@@ -701,3 +702,106 @@ if __name__ == "__main__":
     # continue with peaks data
     # plot_pairplot_from_dfpatients(df_patients_peaks=df_patients)
     # plot_heatmap_from_dfpatients(df_patients_peaks=df_patients)
+
+
+
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sb
+import scipy as scp
+from scipy import stats
+import pingouin as pg
+
+def get_pvals_uncorrected(df_DMD, target='lge', paired=False):
+    """
+    Derive uncorrected per patient, phase and segment T-Test p-values between two different groups in a pd.DataFrame
+    Parameters
+    ----------
+    df_DMD : (pandas.DataFrame) -->either keyframe2keyframe or composed Strain results from calc_strain()
+    alpha0 : (float) Significant threshold
+    target : (str) group either by lge+/lge- or by dmd vs control
+    paired : (bool)
+
+    Returns (pandas.DataFrame) with a shape of 10 x 16 (5xRS + 5xCS = 10) (16 AHA segments)
+    -------
+
+    """
+    # define results array
+    n_tests = 10  # is the number of columns
+    n_aha = 16
+    pvalue_error = 999  # a value that is written when the pvalue is None
+    dec_p = 5
+    results_pvalues = np.ndarray((n_aha, n_tests))
+    results_cintervals = np.ndarray((n_aha, n_tests), dtype=object)
+
+    for i in range(n_tests):
+        for aha in range(1, n_aha + 1):  # 1-16
+
+            # our dmd splitted by LGE
+            # our dmd splitted by lge: RS
+            our_dmd_p2p0_rs_lgeneg = df_DMD[(df_DMD[target] == 0) & (df_DMD['aha'] == aha) & (df_DMD['phase'] == 0)][
+                'our_rs']
+            our_dmd_p2p1_rs_lgeneg = df_DMD[(df_DMD[target] == 0) & (df_DMD['aha'] == aha) & (df_DMD['phase'] == 1)][
+                'our_rs']
+            our_dmd_p2p2_rs_lgeneg = df_DMD[(df_DMD[target] == 0) & (df_DMD['aha'] == aha) & (df_DMD['phase'] == 2)][
+                'our_rs']
+            our_dmd_p2p3_rs_lgeneg = df_DMD[(df_DMD[target] == 0) & (df_DMD['aha'] == aha) & (df_DMD['phase'] == 3)][
+                'our_rs']
+            our_dmd_p2p4_rs_lgeneg = df_DMD[(df_DMD[target] == 0) & (df_DMD['aha'] == aha) & (df_DMD['phase'] == 4)][
+                'our_rs']
+            our_dmd_p2p0_rs_lgepos = df_DMD[(df_DMD[target] == 1) & (df_DMD['aha'] == aha) & (df_DMD['phase'] == 0)][
+                'our_rs']
+            our_dmd_p2p1_rs_lgepos = df_DMD[(df_DMD[target] == 1) & (df_DMD['aha'] == aha) & (df_DMD['phase'] == 1)][
+                'our_rs']
+            our_dmd_p2p2_rs_lgepos = df_DMD[(df_DMD[target] == 1) & (df_DMD['aha'] == aha) & (df_DMD['phase'] == 2)][
+                'our_rs']
+            our_dmd_p2p3_rs_lgepos = df_DMD[(df_DMD[target] == 1) & (df_DMD['aha'] == aha) & (df_DMD['phase'] == 3)][
+                'our_rs']
+            our_dmd_p2p4_rs_lgepos = df_DMD[(df_DMD[target] == 1) & (df_DMD['aha'] == aha) & (df_DMD['phase'] == 4)][
+                'our_rs']
+
+            # our dmd splitted by lge: CS
+            our_dmd_p2p0_cs_lgeneg = df_DMD[(df_DMD[target] == 0) & (df_DMD['aha'] == aha) & (df_DMD['phase'] == 0)][
+                'our_cs']
+            our_dmd_p2p1_cs_lgeneg = df_DMD[(df_DMD[target] == 0) & (df_DMD['aha'] == aha) & (df_DMD['phase'] == 1)][
+                'our_cs']
+            our_dmd_p2p2_cs_lgeneg = df_DMD[(df_DMD[target] == 0) & (df_DMD['aha'] == aha) & (df_DMD['phase'] == 2)][
+                'our_cs']
+            our_dmd_p2p3_cs_lgeneg = df_DMD[(df_DMD[target] == 0) & (df_DMD['aha'] == aha) & (df_DMD['phase'] == 3)][
+                'our_cs']
+            our_dmd_p2p4_cs_lgeneg = df_DMD[(df_DMD[target] == 0) & (df_DMD['aha'] == aha) & (df_DMD['phase'] == 4)][
+                'our_cs']
+            our_dmd_p2p0_cs_lgepos = df_DMD[(df_DMD[target] == 1) & (df_DMD['aha'] == aha) & (df_DMD['phase'] == 0)][
+                'our_cs']
+            our_dmd_p2p1_cs_lgepos = df_DMD[(df_DMD[target] == 1) & (df_DMD['aha'] == aha) & (df_DMD['phase'] == 1)][
+                'our_cs']
+            our_dmd_p2p2_cs_lgepos = df_DMD[(df_DMD[target] == 1) & (df_DMD['aha'] == aha) & (df_DMD['phase'] == 2)][
+                'our_cs']
+            our_dmd_p2p3_cs_lgepos = df_DMD[(df_DMD[target] == 1) & (df_DMD['aha'] == aha) & (df_DMD['phase'] == 3)][
+                'our_cs']
+            our_dmd_p2p4_cs_lgepos = df_DMD[(df_DMD[target] == 1) & (df_DMD['aha'] == aha) & (df_DMD['phase'] == 4)][
+                'our_cs']
+
+            # define here, which p values shall be computed.
+            # the first element of listing_a will be computed against the first element of listing_b etc.
+            listing_a = [our_dmd_p2p0_rs_lgeneg, our_dmd_p2p1_rs_lgeneg, our_dmd_p2p2_rs_lgeneg, our_dmd_p2p3_rs_lgeneg,
+                         our_dmd_p2p4_rs_lgeneg,
+                         our_dmd_p2p0_cs_lgeneg, our_dmd_p2p1_cs_lgeneg, our_dmd_p2p2_cs_lgeneg, our_dmd_p2p3_cs_lgeneg,
+                         our_dmd_p2p4_cs_lgeneg]
+            listing_b = [our_dmd_p2p0_rs_lgepos, our_dmd_p2p1_rs_lgepos, our_dmd_p2p2_rs_lgepos, our_dmd_p2p3_rs_lgepos,
+                         our_dmd_p2p4_rs_lgepos,
+                         our_dmd_p2p0_cs_lgepos, our_dmd_p2p1_cs_lgepos, our_dmd_p2p2_cs_lgepos, our_dmd_p2p3_cs_lgepos,
+                         our_dmd_p2p4_cs_lgepos]
+
+            # define testing sets here
+            if listing_a[i].size == 1 or listing_b[i].size == 1:
+                results_pvalues[aha - 1, i] = pvalue_error
+            else:
+                res = pg.ttest(listing_a[i], listing_b[i], paired=paired)
+                results_pvalues[aha - 1, i] = float(res['p-val'][0])
+
+    # rounding
+    results_pvalues = np.around(pd.DataFrame(results_pvalues), dec_p)
+
+    return results_pvalues
