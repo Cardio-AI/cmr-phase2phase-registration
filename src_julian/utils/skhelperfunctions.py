@@ -1010,7 +1010,9 @@ def extract_segments(segments_str, segments=16):
         numbers = [int(i) - 1 for i in segments_str.split(',')]
     except Exception as e:
         # print(e)
-        if type(segments_str) == type(1) and (int(segments_str) != 0):
+        if str(segments_str) == 'nan':
+            numbers = []
+        elif type(segments_str) in [np.int32, np.float32, np.float64, np.float16] and (int(segments_str) != 0):
             numbers = [int(segments_str) - 1]
         else:
             # print('cant find a sequence: {}'.format(segments_str))
