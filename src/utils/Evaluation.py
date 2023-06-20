@@ -292,7 +292,7 @@ def cross_validate_f1(x, y):
     plt.show()
 
 
-def create_grid_search():
+def create_grid_search(refit='balanced_accuracy'):
     gammas = [1e-1, 1e-2, 1e-3, 1e-4, 1e-5, 1e-6, 1e-7, 'scale', 'auto']
     Cs = [0.1, 1, 5, 10, 20, 100, 1e3]
     kernels = ['linear', 'poly', 'rbf', 'sigmoid']
@@ -373,7 +373,7 @@ def create_grid_search():
     return GridSearchCV(estimator=pipeline,
                         param_grid=params,
                         scoring=scoring,
-                        refit='balanced_accuracy',  # f1, balanced_accuracy
+                        refit=refit,  # f1, balanced_accuracy
                         cv=skf,
                         n_jobs=16)
 
