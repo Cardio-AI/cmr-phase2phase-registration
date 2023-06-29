@@ -1149,10 +1149,12 @@ class PhaseMaskWindowGenerator(DataGenerator):
         # --------------- LOAD INDICES FOR CARDIAC PHASES--------------
         # Returns the indices in the following order: 'ED#', 'MS#', 'ES#', 'PF#', 'MD#'
         if self.ISACDC:
+            raise NotImplementedError('need to validate if get_phases_as_idx_acdc works')
             idx = get_phases_as_idx_acdc(x, temporal_sampling_factor, len(model_inputs))
         elif self.ISDMD:
             idx = get_phases_as_idx_dmd(x, self.DF_METADATA, temporal_sampling_factor, len(model_inputs))
         else:
+            raise NotImplementedError('need to validate if get_phases_as_idx_acdc works')
             idx = get_phases_as_idx_gcn(x, self.DF_METADATA, temporal_sampling_factor, len(model_inputs))
         logging.debug('index loading took: {:0.3f} s'.format(time() - t1))
         # logging.debug('transposed: \n{}'.format(onehot))

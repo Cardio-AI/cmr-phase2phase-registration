@@ -1350,7 +1350,9 @@ def get_phases_as_idx_dmd(file_path, df, temporal_sampling_factor, length):
     indices = indices.values[0].astype(int) # only the GT started with 1. All predictions start with 0- 1 # the excel sheet starts with 1, indices needs to start with 0
     # scale the idx as we resampled along t (we need to resample the indicies in the same way)
     indices = np.round(indices * temporal_sampling_factor).astype(int)
-    indices = np.clip(indices, a_min=0, a_max=length)
+    assert ((indices >=0).all()) and ((indices<length).all()), 'indicies are: {}, but we have only {} frames'.format(indices, length)
+    # this will hide unplausible in the indicies, avoid this step!
+    #indices = np.clip(indices, a_min=0, a_max=length)
     return  indices
 
 def get_phases_as_onehot_gcn(file_path, df, temporal_sampling_factor=1, length=-1, weight=1):

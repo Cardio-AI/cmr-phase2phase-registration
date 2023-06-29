@@ -316,14 +316,17 @@ def main(args=None):
         print('Dice calculation failed with: {}'.format(e))
 
     try:
+        is_dmd = True
+        if args.iscontrol.lower() == 'true':
+            is_dmd = False
         from src_julian.data.MyMoralesAndCompositionsAHA3 import calculate_strain
         from pathlib import Path
         metadata = Path(config.get('DATA_PATH_SAX')).parent.absolute()
         exp_path = Path(config.get('EXP_PATH')).parent.absolute()
         df_patients_p2p = calculate_strain(data_root=exp_path, metadata_path=metadata,
-                                           debug=False, df_style='time', p2p_style=True, isDMD=True)
+                                           debug=False, df_style='time', p2p_style=True, isDMD=is_dmd)
         df_patients_ed2p = calculate_strain(data_root=exp_path, metadata_path=metadata,
-                                            debug=False, df_style='time', p2p_style=False, isDMD=True)
+                                            debug=False, df_style='time', p2p_style=False, isDMD=is_dmd)
 
         x = 0
         df_patients_p2p.to_csv(os.path.join(exp_path, 'df_DMD_time_p2p.csv'), index=False)
@@ -339,9 +342,11 @@ if __name__ == "__main__":
     # usually these two parameters should encapsulate all experiment parameters
     parser.add_argument('-exp', action='store', default=None)
     parser.add_argument('-data', action='store', default=None)
+    parser.add_argument('-iscontrol', choices=['True','False','true','false'],action='store', default='false')
 
     results = parser.parse_args()
     print('given parameters: {}'.format(results))
+
 
     try:
         main(results)

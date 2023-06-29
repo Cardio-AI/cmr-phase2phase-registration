@@ -361,7 +361,7 @@ def create_grid_search(refit='balanced_accuracy'):
                  'clf__criterion': criterions,
                  'scaler': scaler}
 
-    params = [rf_params, svc_params, lr_params, et_params, dt_params]  # , ens_params]
+    params = [rf_params, svc_params, lr_params, et_params, dt_params, ens_params]
 
     pipeline = Pipeline(steps=[
         ('scaler', StandardScaler()),
@@ -369,6 +369,7 @@ def create_grid_search(refit='balanced_accuracy'):
     ])
     scoring = {'f1': f1_m, 'recall': rec_m, 'balanced_accuracy': bacc_m, 'sens': sens_m, 'spec': spec_m,
                'roc_auc': roc_m, 'precision': prec_m, 'accuracy': acc_m}
+    #scoring ={'balanced_accuracy': bacc_m}
     # scoring = ['recall', 'accuracy', 'balanced_accuracy', 'average_precision','precision', 'f1', 'roc_auc']
     return GridSearchCV(estimator=pipeline,
                         param_grid=params,
@@ -396,7 +397,7 @@ def ttest_per_keyframe(df):
     return ps
 
 
-def plot_strain_per_time(df, title=None, method=None, hue='lge'):
+def plot_strain_per_time(df, title=None, method=None, hue='lge', sig_niv = 0.05):
     # method: (str): enum, one of p2p, comp, window
     import seaborn
     from scipy import stats
@@ -457,7 +458,7 @@ def plot_strain_per_time(df, title=None, method=None, hue='lge'):
     # _ = ax2.set_ylim((-25, 150))
     _ = ax2.set_xticks([0, 1, 2, 3, 4], minor=False)
     _ = ax2.set_xticklabels(phases)
-    _ = ax2.legend(['neg', 'pos'])
+    _ = ax2.legend(['neg', 'pos'], framealpha=0.5)
     _ = ax2.set_xlabel('')
     _ = ax2.set_ylabel('Radial Strain (%)')
     if title is not None:
@@ -468,7 +469,7 @@ def plot_strain_per_time(df, title=None, method=None, hue='lge'):
         # annotate the xticks with ttest p-values
         y_rs = 0.02 + df['our_rs'].max()
         y_cs = 0.02 + df['our_cs'].max()
-        sig_niv = 0.05
+
         # added
         ps = ttest_per_keyframe(df)
 
@@ -481,22 +482,39 @@ def plot_strain_per_time(df, title=None, method=None, hue='lge'):
                      horizontalalignment='center', size='small', color='black')
 
         # segmental p-values
-        alpha0 = float(0.05)
+        alpha0 = float(sig_niv)
         strain = 'RS'
+        strain_col = 'our_rs'
         phase_idx = 0
         df_pvals_uncorrected = get_pvals_uncorrected(df)
         print(df_pvals_uncorrected.shape)
         msk_ss, df_pvals_corrected = get_pvals_corrected(df_pvals_uncorrected, alpha0=alpha0)
-
+        plt.show()
         for c in df_pvals_corrected.columns:
-            if c >= 5:
+            if c >= 5: # first 5 columns are the radial strain for the five phases, col 6 - 10 are the CS strain values
                 strain = 'CS'
+                strain_col = 'our_cs'
                 phase_idx = phase_idx % 5
-            sig_segments = df_pvals_corrected.index[df_pvals_corrected[c] < 0.05].tolist()
+            sig_segments = df_pvals_corrected.index[df_pvals_corrected[c] < sig_niv].tolist()
             pvalues = df_pvals_corrected.iloc[sig_segments, c].tolist()
-            if sig_segments: print(
+            if sig_segments:
+                print('****'*10)
+                print(
                 '{} strain in phase: {} - significant AHA segments: {}, p-values: {}'.format(strain, phases[phase_idx],
                                                                                              sig_segments, pvalues))
+                '''print(df[(df.phase == phase_idx) & (df.aha.isin(sig_segments)) & (
+                            df[hue] == 1)].groupby('aha')[strain_col].mean())
+                print(df[(df.phase == phase_idx) & (df.aha.isin(sig_segments)) & (
+                        df[hue] == 0)].groupby('aha')[strain_col].mean())'''
+                print(df[(df.phase == phase_idx) & (df.aha.isin(sig_segments))].groupby(['aha',hue])[strain_col].mean())
+                fig, ax = plt.subplots(1, 1, figsize=(5, 5))
+                sb.violinplot(ax=ax,
+                              x='aha',
+                              y=strain_col,
+                              hue=hue,
+                              split=True,
+                            data=df[(df.phase == phase_idx) & (df.aha.isin(sig_segments))][['aha', strain_col, hue]]).set_title(phases[phase_idx])
+                plt.show()
             phase_idx += 1
 
 
