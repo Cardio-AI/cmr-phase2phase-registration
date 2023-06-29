@@ -492,7 +492,7 @@ def get_trainings_files(data_path, fold=0, path_to_folds_df=None):
             logging.error(files_)
             x = sorted(glob.glob(os.path.join(data_path, '*')))
             y = x
-    if path_to_folds_df:
+    if path_to_folds_df and os.path.isfile(path_to_folds_df):
         df = pd.read_csv(path_to_folds_df)
         patients = df[df.fold.isin([fold])]
         # make sure we count each patient only once
