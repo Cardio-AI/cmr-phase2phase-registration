@@ -1315,7 +1315,7 @@ def get_phases_as_idx_gcn(file_path, df, temporal_sampling_factor, length):
     # Transform them into an one-hot representation
     indices = df[df.patient.str.contains(patient_str)][
         ['ed#', 'ms#', 'es#', 'pf#', 'md#']]
-    #indices = indices.values[0].astype(int) - 1 # the excel sheet starts with 1, indices needs to start with 0
+    indices = indices.values[0].astype(int)# - 1 # the excel sheet starts with 1, indices needs to start with 0
     # scale the idx as we resampled along t (we need to resample the indicies in the same way)
     indices = np.round(indices * temporal_sampling_factor).astype(int)
     assert (indices<length-1).all(), 'invalid indicies, maybe they start with 1 instead of with 0?'
