@@ -292,7 +292,7 @@ def cross_validate_f1(x, y):
     plt.show()
 
 
-def create_grid_search(refit='balanced_accuracy'):
+def create_grid_search(refit='balanced_accuracy', cv=5):
     gammas = [1e-1, 1e-2, 1e-3, 1e-4, 1e-5, 1e-6, 1e-7, 'scale', 'auto']
     Cs = [0.1, 1, 5, 10, 20, 100, 1e3]
     kernels = ['linear', 'poly', 'rbf', 'sigmoid']
@@ -300,7 +300,6 @@ def create_grid_search(refit='balanced_accuracy'):
     degree = [2, 3, 4, 5]
     n_estimators = [10, 100, 500, 1000]
     criterions = ['gini', 'entropy', 'log_loss']
-    cv = 5
     penalties = ['l2']
     solvers = ['liblinear']
 
@@ -310,11 +309,11 @@ def create_grid_search(refit='balanced_accuracy'):
     skf = StratifiedKFold(n_splits=cv)
     # skf = KFold(n_splits=5)
 
-    [
+    """[
         'standardscaler__copy', 'standardscaler__with_mean', 'standardscaler__with_std',
         'svc__C', 'svc__break_ties', 'svc__cache_size', 'svc__class_weight', 'svc__coef0',
         'svc__decision_function_shape', 'svc__degree', 'svc__gamma', 'svc__kernel', 'svc__max_iter',
-        'svc__probability', 'svc__random_state', 'svc__shrinking', 'svc__tol', 'svc__verbose']
+        'svc__probability', 'svc__random_state', 'svc__shrinking', 'svc__tol', 'svc__verbose']"""
 
     svc_params = {'clf': (SVC(),),
                   'clf__gamma': gammas,
@@ -527,11 +526,11 @@ def plot_strain_per_time(df, title=None, method=None, hue='lge', sig_niv = 0.05)
 
 
 
-def plot_report(clf, x, y, label='', df_strain_comp=None):
+def plot_report(clf, x, y, label='', df_strain_comp=None, cv=5):
 
     pats = np.stack(df_strain_comp.groupby(['pat', 'aha'])['pat'].apply(list).values)[0]
     clf = clf.set_params(**label)
-    skf = StratifiedKFold(n_splits=5)
+    skf = StratifiedKFold(n_splits=cv)
     y_pred = cross_val_predict(clf, x, y, cv=skf)
     hits = y_pred == y
     scores2 = cross_validate(clf, x, y,

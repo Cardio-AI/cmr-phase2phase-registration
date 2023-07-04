@@ -985,7 +985,8 @@ class PhaseMaskWindowGenerator(DataGenerator):
             self.METADATA_FILE = config.get('DF_META',
                                             '/mnt/ssd/data/gcn/02_imported_4D_unfiltered/SAx_3D_dicomTags_phase.csv')
             df = pd.read_csv(self.METADATA_FILE)
-            self.DF_METADATA = df[['patient', 'ED#', 'MS#', 'ES#', 'PF#', 'MD#']]
+            df.columns = df.columns.str.lower()
+            self.DF_METADATA = df[['patient', 'ed#', 'ms#', 'es#', 'pf#', 'md#']]
         # TODO: need to check if this is still necessary!
         self.MASKS = None
 
