@@ -82,7 +82,9 @@ def train_fold(config, in_memory=False):
     # check if we find each patient in the corresponding dataframe
     METADATA_FILE = DF_META
     df = pd.read_csv(METADATA_FILE)
-    DF_METADATA = df[['patient', 'ED#', 'MS#', 'ES#', 'PF#', 'MD#']]
+    DF_METADATA = df[['patient', 'ed#', 'ms#', 'es#', 'pf#', 'md#']]
+    DF_METADATA.columns = DF_METADATA.columns.str.lower()
+    DF_METADATA['patient'] = DF_METADATA['patient'].str.lower()
 
     files_ = x_train_sax + x_val_sax
     info('Check if we find the patient ID and phase mapping for all: {} files.'.format(len(files_)))
@@ -101,9 +103,9 @@ def train_fold(config, in_memory=False):
                 len(patient_str))
             # returns the indices in the following order: 'ED#', 'MS#', 'ES#', 'PF#', 'MD#'
             # reduce by one, as the indexes start at 0, the excel-sheet at 1
-            ind = DF_METADATA[DF_METADATA.patient.str.contains(patient_str)][['ED#', 'MS#', 'ES#', 'PF#', 'MD#']]
+            ind = DF_METADATA[DF_METADATA.patient.str.contains(patient_str)][['ed#', 'ms#', 'es#', 'pf#', 'md#']]
             # for the original dmd ind we need to reduce the idx by one, no modulo necessary as there are no idx with 0
-            indices = ind.values[0].astype(int) - 1
+            indices = ind.values[0].astype(int) #- 1
 
         except Exception as e:
             logging.info(patient_str)
