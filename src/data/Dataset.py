@@ -1347,7 +1347,7 @@ def get_phases_as_idx_dmd(file_path, df, temporal_sampling_factor, length):
     # Reduce the indices of the excel sheet by one, as the indexes start at 0, the excel-sheet at 1
     # Transform them into an one-hot representation
     indices = df[df.patient.str.contains(patient_str, case=False)][
-        ['ED#', 'MS#', 'ES#', 'PF#', 'MD#']]
+        ['ed#', 'ms#', 'es#', 'pf#', 'md#']]
     indices = indices.values[0].astype(int) # only the GT started with 1. All predictions start with 0- 1 # the excel sheet starts with 1, indices needs to start with 0
     # scale the idx as we resampled along t (we need to resample the indicies in the same way)
     indices = np.round(indices * temporal_sampling_factor).astype(int)
