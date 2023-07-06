@@ -136,7 +136,7 @@ def pred_fold(config, debug=True):
     # also necessary for the compose
     # latest status: we should not mask the deformation field
     # instead we mask the strain cubes in order to get plausible strain curves
-    flows_masked = flows.copy()
+    flows_masked = flows
     target_msk_k2k = msk_target[...,1:2]
     msk_t = np.squeeze(target_msk_k2k>0.1)
     """if msk_t.shape[-1] > 1:

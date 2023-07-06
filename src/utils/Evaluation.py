@@ -236,6 +236,7 @@ def create_df_peak(df_strain_comp, df_strain_p2p):
 def cross_validate_f1(x, y):
     import matplotlib.pyplot as plt
     import matplotlib as mpl
+    from sklearn.neural_network import MLPClassifier
     mpl.rcParams.update(mpl.rcParamsDefault)
     plt.rcParams.update({'font.size': 16})
     from sklearn.model_selection import StratifiedKFold
@@ -243,16 +244,17 @@ def cross_validate_f1(x, y):
     skf = StratifiedKFold(n_splits=cv)
 
     clfs = {}
-
+    clfs['MLP'] = make_pipeline(MinMaxScaler(),MLPClassifier(hidden_layer_sizes=(100,50,10), random_state=1,
+              solver='adam'))
     clfs['Logistic Regression'] = LogisticRegression(random_state=1, class_weight='balanced', max_iter=1000)
-    clfs['Random Forest'] = make_pipeline(StandardScaler(), RandomForestClassifier(n_estimators=500, random_state=1,
+    clfs['Random Forest'] = make_pipeline(MinMaxScaler(), RandomForestClassifier(n_estimators=500, random_state=1,
                                                                                    class_weight='balanced'))  # RandomForestClassifier(n_estimators=100, random_state=1, class_weight='balanced')
     clfs['Naive Bayes'] = GaussianNB()
-    clfs['Scaled DecissionTree'] = make_pipeline(StandardScaler(), tree.DecisionTreeClassifier(class_weight='balanced'))
-    clfs['KNN'] = make_pipeline(StandardScaler(), KNeighborsClassifier(n_neighbors=2))
-    clfs['Scaled SVC(poly)'] = make_pipeline(StandardScaler(),
-                                             SVC(kernel='rbf', gamma='auto', class_weight='balanced', C=100))
-    clfs['SVC(poly)'] = SVC(kernel='rbf', gamma='auto', class_weight='balanced', C=100)
+    clfs['Scaled DecissionTree'] = make_pipeline(MinMaxScaler(), tree.DecisionTreeClassifier(class_weight='balanced'))
+    clfs['KNN'] = make_pipeline(MinMaxScaler(), KNeighborsClassifier(n_neighbors=2))
+    clfs['Scaled SVC(sigmoid)'] = make_pipeline(MinMaxScaler(),
+                                             SVC(kernel='sigmoid', gamma='auto', class_weight='balanced', C=100))
+    clfs['SVC(sigmoid)'] = SVC(kernel='sigmoid', gamma='auto', class_weight='balanced', C=100)
     # ‘linear’, ‘poly’, ‘rbf’, ‘sigmoid’, ‘precomputed’
     # NeighborhoodComponentsAnalysis(n_components=10, random_state=random_state),
 
@@ -261,13 +263,13 @@ def cross_validate_f1(x, y):
 
             ('lr', clfs['Logistic Regression']),
             ('rf', clfs['Random Forest']),
-            ('gnb', clfs['Naive Bayes']),
-            ('svc', clfs['Scaled SVC(poly)']),
+            ('mlp', clfs['MLP']),
+            ('svc', clfs['Scaled SVC(sigmoid)']),
             ('dt', clfs['Scaled DecissionTree'])
         ],
         voting='hard')
 
-    fig, ax = plt.subplots(1, 8, figsize=(25, 5))
+    fig, ax = plt.subplots(1, len(clfs.keys()), figsize=(25, 5))
     i = 0
     for label, clf in clfs.items():
         y_pred = cross_val_predict(clf, x, y, cv=skf)
