@@ -108,71 +108,68 @@ def pred_fold(config, debug=True):
     #masks_all_labels_generator = PhaseWindowGenerator(x_train_sax_masks, x_train_sax_masks, config=pred_mask_config,
     #                                              yield_masks=True)
     masks_all_labels_generator = PhaseMaskWindowGenerator(x_val_sax, x_val_sax, config=pred_mask_config)
-    # new version
-    x, y = zip(*[masks_all_labels_generator.__getitem__(i) for i in range(len(masks_all_labels_generator))])
-    _, fullmask_moving = zip(*x)
-
-    fullmask_moving = np.concatenate(fullmask_moving, axis=0)
-    #fullmsk_target = from_channel_to_flat(fullmsk_target)
-    # here we get a list of batches, each with a batchsize of 1
-    x, y = zip(*[pred_generator.__getitem__(i) for i in range(len(pred_generator))])
-    cmr_moving, msk_moving = zip(*x)
-    if len(y[0]) == 4:
-        ed_repeated, cmr_target, msk_target, _ = zip(*y)
-    elif len(y[0])==5:
-        ed_repeated, cmr_target, msk_target, _, _ = zip(*y)
-    else:
-        cmr_target, msk_target, _ = zip(*y)
-    cmr_moving, msk_moving, cmr_target, msk_target = map(np.concatenate, [cmr_moving, msk_moving,cmr_target, msk_target])
-    pred = model.predict(pred_generator)
-    if len(pred)==4:
-        comp_moved2ed, cmr_moved, msk_moved, flows = pred
-    elif len(pred)==5:
-        comp_moved2ed, cmr_moved, msk_moved, flows, flows2ed = pred
-    else:
-        cmr_moved, msk_moved, flows = pred
-
-    # mask the flow field with the target mask
-    # also necessary for the compose
-    # latest status: we should not mask the deformation field
-    # instead we mask the strain cubes in order to get plausible strain curves
-    flows_masked = flows
-    target_msk_k2k = msk_target[...,1:2]
-    msk_t = np.squeeze(target_msk_k2k>0.1)
-    """if msk_t.shape[-1] > 1:
-        msk_t = msk_t[..., None]"""
-    #for dim in range(flows.shape[-1]):
-     #   flows_masked[..., dim][~msk_t] = 0
-
-    if compose_given:
-        #msk_ed = np.repeat(msk_target[:,0:1],5,axis=1)# mask the compose flowfield with ED (fixed)
-        flows_composed_masked = flows2ed.copy()
-        target_msk_k2ed = msk_target[...,:1]
-        msk_ed = np.squeeze(target_msk_k2ed>0.1)
-        #for dim in range(flows2ed.shape[-1]):
-        #    flows_composed_masked[..., dim][~msk_ed] = 0
-    else:
-        comp = create_dense_compose(config)
-        flows_composed_masked = comp.predict(flows_masked)
 
     # iterate over the patients and
     for i in range(len(x_val_sax)):
+
+
+        x, y = masks_all_labels_generator.__getitem__(i)
+        _, fullmask_moving = x
+
+        x, y = pred_generator.__getitem__(i)
+        cmr_moving, msk_moving = x
+
+        if len(y) == 4:
+            ed_repeated, cmr_target, msk_target, _ = y
+        elif len(y) == 5:
+            ed_repeated, cmr_target, msk_target, _, _ = y
+        else:
+            cmr_target, msk_target, _ = y
+
+        pred = model.predict_on_batch(pred_generator.__getitem__(i)[0])
+
+        if len(pred) == 4:
+            comp_moved2ed, cmr_moved, msk_moved, flows = pred
+        elif len(pred) == 5:
+            comp_moved2ed, cmr_moved, msk_moved, flows, flows2ed = pred
+        else:
+            cmr_moved, msk_moved, flows = pred
+
+        flows_masked = flows
+        target_msk_k2k = msk_target[..., 1:2]
+        msk_t = np.squeeze(target_msk_k2k > 0.1)
+        """if msk_t.shape[-1] > 1:
+                msk_t = msk_t[..., None]"""
+        # for dim in range(flows.shape[-1]):
+        #   flows_masked[..., dim][~msk_t] = 0
+
+        if compose_given:
+            # msk_ed = np.repeat(msk_target[:,0:1],5,axis=1)# mask the compose flowfield with ED (fixed)
+            flows_composed_masked = flows2ed.copy()
+            target_msk_k2ed = msk_target[..., :1]
+            msk_ed = np.squeeze(target_msk_k2ed > 0.1)
+            # for dim in range(flows2ed.shape[-1]):
+            #    flows_composed_masked[..., dim][~msk_ed] = 0
+        else:
+            comp = create_dense_compose(config)
+            flows_composed_masked = comp.predict(flows_masked)
+
         filename = x_val_sax[i]
-        cmr_mov = cmr_moving[i][...,0:1]
-        cmr_t = cmr_target[i]
-        cmr_m = cmr_moved[i]
-        msk_mov = msk_moving[i][...,0:1] # ED, MS, ..., MD
-        msk_t = msk_target[i][...,1:2] # target mask of each pair-wise p2p MD,ED,MS,ES,PF
-        if msk_t.shape[-1]==2:
-            msk_t_p2ed = msk_t[...,:1]
+        cmr_mov = cmr_moving[0][..., 0:1]
+        cmr_t = cmr_target[0]
+        cmr_m = cmr_moved[0]
+        msk_mov = msk_moving[0][..., 0:1]  # ED, MS, ..., MD
+        msk_t = msk_target[0][..., 1:2]  # target mask of each pair-wise p2p MD,ED,MS,ES,PF
+        if msk_t.shape[-1] == 2:
+            msk_t_p2ed = msk_t[..., :1]
             msk_t = msk_t[..., -1:]
 
-        msk_m = msk_moved[i][...,1:2]
-        flow = flows[i]
-        flow_comp_m = flows_composed_masked[i]
-        flow_masked = flows_masked[i]
-        fullmsk_t = fullmask_moving[i]
-        fullmsk_t = from_channel_to_flat(fullmsk_t, start_c=1)[...,None]
+        msk_m = msk_moved[0][..., 1:2]
+        flow = flows[0]
+        flow_comp_m = flows_composed_masked[0]
+        flow_masked = flows_masked[0]
+        fullmsk_t = fullmask_moving[0]
+        fullmsk_t = from_channel_to_flat(fullmsk_t, start_c=1)[..., None]
 
         if not all(np.any(msk_t, axis=(1,2,3))):
             print('please check the predicted masks, some timesteps of the target mask seem to be empty!')
@@ -191,6 +188,7 @@ def pred_fold(config, debug=True):
 
         save_gt_and_pred(gt=msk_t, pred=msk_m, exp_path=pred_path.replace('pred',''), patient=p, cfg=config)
         # end new version
+
     return True
 
     # # free as much memory as possible

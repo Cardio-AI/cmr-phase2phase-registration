@@ -585,6 +585,12 @@ def calc_strain4singlepatient(path_to_patient_folder, N_TIMESTEPS, RVIP_method, 
                         repeats=5, axis=0)
             lgeef = np.repeat(extract_segments(df_cleandmd[df_cleandmd['pat'] == patient_name]['lgepos_'].values[0]),
                             repeats=5, axis=0)
+            try:
+                first_split = np.repeat(
+                    extract_segments(df_cleandmd[df_cleandmd['pat'] == patient_name]['first_split'].values[0]),
+                    repeats=5, axis=0)
+            except Exception as e:
+                pass
 
         # NANMEAN!!!
         # rs_overtime_base = AHAcube_base.mean(axis=2)[..., 0]
@@ -614,6 +620,10 @@ def calc_strain4singlepatient(path_to_patient_folder, N_TIMESTEPS, RVIP_method, 
         if cvi_given: df_patient['soa'] = soa
         if cvi_given: df_patient['lge'] = lge
         if cvi_given: df_patient['lgeef'] = lgeef
+        try:
+            df_patient['first_split'] = first_split
+        except Exception as e:
+            pass
     if df_style == 'peaks':
         # get soa and lge data for current patient from metadata xls
         if cvi_given:
@@ -621,6 +631,11 @@ def calc_strain4singlepatient(path_to_patient_folder, N_TIMESTEPS, RVIP_method, 
             soa = extract_segments(df_cleandmd[df_cleandmd['pat'] == patient_name]['soa'].values[0])
             lge = extract_segments(df_cleandmd[df_cleandmd['pat'] == patient_name]['lgepos'].values[0])
             lgeef = extract_segments(df_cleandmd[df_cleandmd['pat'] == patient_name]['lgepos_'].values[0])
+
+            try:
+                first_split = extract_segments(df_cleandmd[df_cleandmd['pat'] == patient_name]['first_split'].values[0])
+            except Exception as e:
+                pass
 
         # get Peak Err/Ecc values for all AHA segments
         # first, mean over all zslices
@@ -653,6 +668,10 @@ def calc_strain4singlepatient(path_to_patient_folder, N_TIMESTEPS, RVIP_method, 
         if cvi_given: df_patient['soa'] = soa
         if cvi_given: df_patient['lge'] = lge
         if cvi_given: df_patient['lgeef'] = lgeef
+        try:
+            df_patient['first_split'] = first_split
+        except Exception as e:
+            pass
     # append the patient df to the whole list of patients df
     return df_patient
 
