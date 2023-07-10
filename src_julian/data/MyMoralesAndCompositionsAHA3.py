@@ -586,9 +586,7 @@ def calc_strain4singlepatient(path_to_patient_folder, N_TIMESTEPS, RVIP_method, 
             lgeef = np.repeat(extract_segments(df_cleandmd[df_cleandmd['pat'] == patient_name]['lgepos_'].values[0]),
                             repeats=5, axis=0)
             try:
-                first_split = np.repeat(
-                    extract_segments(df_cleandmd[df_cleandmd['pat'] == patient_name]['first_split'].values[0]),
-                    repeats=5, axis=0)
+                first_split = df_cleandmd[df_cleandmd['pat'] == patient_name]['first_split'].values[0]
             except Exception as e:
                 pass
 
@@ -633,7 +631,7 @@ def calc_strain4singlepatient(path_to_patient_folder, N_TIMESTEPS, RVIP_method, 
             lgeef = extract_segments(df_cleandmd[df_cleandmd['pat'] == patient_name]['lgepos_'].values[0])
 
             try:
-                first_split = extract_segments(df_cleandmd[df_cleandmd['pat'] == patient_name]['first_split'].values[0])
+                first_split = df_cleandmd[df_cleandmd['pat'] == patient_name]['first_split'].values[0]
             except Exception as e:
                 pass
 
