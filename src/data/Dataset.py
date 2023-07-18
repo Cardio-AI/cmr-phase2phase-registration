@@ -232,7 +232,7 @@ def match_hist(nda,ref, prob_per_z=40):
         # apply hist matching only on some 2d slices +t, this is more realistic, as some series have different scanner settings
         if random.randint(0,100) <= prob_per_z:
             for t in range(nda.shape[0]):
-                nda[t,z] = skimage.exposure.match_histograms(nda[t,z], ref, multichannel=False)
+                nda[t,z] = skimage.exposure.match_histograms(nda[t,z], ref, channel_axis=None)
     return nda
 
 def split_one_4d_sitk_in_list_of_3d_sitk(img_4d_sitk, axis=None, prob=0.8):

@@ -32,6 +32,8 @@ from sklearn.metrics import (precision_recall_curve,
 from sklearn.model_selection import StratifiedKFold
 from sklearn.metrics import make_scorer
 from scipy import stats
+from xgboost import XGBClassifier
+
 
 def get_pvals_uncorrected(df_DMD, target='lge', paired=False):
     """
@@ -245,16 +247,25 @@ def cross_validate_f1(x, y):
 
     clfs = {}
     clfs['MLP'] = make_pipeline(MinMaxScaler(),MLPClassifier(hidden_layer_sizes=(100,50,10), random_state=1,
-              solver='adam'))
+              solver='adam', max_iter=1000))
     clfs['Logistic Regression'] = LogisticRegression(random_state=1, class_weight='balanced', max_iter=1000)
     clfs['Random Forest'] = make_pipeline(MinMaxScaler(), RandomForestClassifier(n_estimators=500, random_state=1,
                                                                                    class_weight='balanced'))  # RandomForestClassifier(n_estimators=100, random_state=1, class_weight='balanced')
     clfs['Naive Bayes'] = GaussianNB()
     clfs['Scaled DecissionTree'] = make_pipeline(MinMaxScaler(), tree.DecisionTreeClassifier(class_weight='balanced'))
     clfs['KNN'] = make_pipeline(MinMaxScaler(), KNeighborsClassifier(n_neighbors=2))
-    clfs['Scaled SVC(sigmoid)'] = make_pipeline(MinMaxScaler(),
-                                             SVC(kernel='sigmoid', gamma='auto', class_weight='balanced', C=100))
-    clfs['SVC(sigmoid)'] = SVC(kernel='sigmoid', gamma='auto', class_weight='balanced', C=100)
+    clfs['Scaled SVC(poly)'] = make_pipeline(MinMaxScaler(),
+                                             SVC(kernel='poly', gamma='auto', class_weight='balanced', C=100))
+    clfs['SVC(poly)'] = SVC(kernel='poly', gamma='auto', class_weight='balanced', C=100)
+
+    params = {'booster': 'dart',
+         'max_depth': 5, 'learning_rate': 0.1,
+         'objective': 'binary:logistic',
+         'sample_type': 'uniform',
+         'normalize_type': 'tree',
+         'rate_drop': 0.1,
+         'skip_drop': 0.5}
+    clfs['xgboost'] = XGBClassifier(**params)
     # ‘linear’, ‘poly’, ‘rbf’, ‘sigmoid’, ‘precomputed’
     # NeighborhoodComponentsAnalysis(n_components=10, random_state=random_state),
 
@@ -264,7 +275,7 @@ def cross_validate_f1(x, y):
             ('lr', clfs['Logistic Regression']),
             ('rf', clfs['Random Forest']),
             ('mlp', clfs['MLP']),
-            ('svc', clfs['Scaled SVC(sigmoid)']),
+            ('svc', clfs['Scaled SVC(poly)']),
             ('dt', clfs['Scaled DecissionTree'])
         ],
         voting='hard')
@@ -304,6 +315,8 @@ def create_grid_search(refit='balanced_accuracy', cv=5):
     criterions = ['gini', 'entropy', 'log_loss']
     penalties = ['l2']
     solvers = ['liblinear']
+    solver_mlp = ['adam', 'sdg', 'lbfgs']
+    hidden_layer_sizes = [(100,), (100,50,10), (50,20,10)]
 
     scaler = [StandardScaler(), MinMaxScaler(), None]
 
@@ -330,15 +343,17 @@ def create_grid_search(refit='balanced_accuracy', cv=5):
     clf2 = RandomForestClassifier(n_estimators=100, random_state=1, class_weight='balanced')
     clf4 = tree.DecisionTreeClassifier(class_weight='balanced')
     clf6 = SVC(kernel='poly', gamma='scale', class_weight='balanced', C=1, degree=3)
+    clf7 = MLPClassifier(hidden_layer_sizes=(100, 50, 10), random_state=1,
+                                                              solver='adam',max_iter=1000)
 
     eclf = VotingClassifier(
         estimators=[
 
             ('lr', clf1),
             ('rf', clf2),
-            ('gnb', GaussianNB()),
             ('svc', clf6),
-            ('dt', clf4)
+            ('dt', clf4),
+            ('mlp', clf7)
         ],
         voting='hard')
 
@@ -361,11 +376,16 @@ def create_grid_search(refit='balanced_accuracy', cv=5):
     dt_params = {'clf': (tree.DecisionTreeClassifier(class_weight='balanced'),),
                  'clf__criterion': criterions,
                  'scaler': scaler}
+    mlp_params = {'clf':(MLPClassifier(hidden_layer_sizes=(100, 50, 10), random_state=1,
+                                                              solver='adam'),),
+                  'clf__solver': solver_mlp,
+                  'clf__hidden_layer_sizes':hidden_layer_sizes,
+                  'scaler': scaler}
 
-    params = [rf_params, svc_params, lr_params, et_params, dt_params, ens_params]
+    params = [rf_params, svc_params, lr_params, et_params, dt_params, ens_params, mlp_params]
 
     pipeline = Pipeline(steps=[
-        ('scaler', StandardScaler()),
+        ('scaler', MinMaxScaler()),
         ('clf', SVC())
     ])
     scoring = {'f1': f1_m, 'recall': rec_m, 'balanced_accuracy': bacc_m, 'sens': sens_m, 'spec': spec_m,
@@ -399,6 +419,20 @@ def ttest_per_keyframe(df):
 
 
 def plot_strain_per_time(df, title=None, method=None, hue='lge', sig_niv = 0.05):
+    """
+    Plot a split violinplot per time (keyframe)
+    Parameters
+    ----------
+    df :
+    title :
+    method :
+    hue :
+    sig_niv :
+
+    Returns
+    -------
+
+    """
     # method: (str): enum, one of p2p, comp, window
     import seaborn
     from scipy import stats
@@ -528,10 +562,10 @@ def plot_strain_per_time(df, title=None, method=None, hue='lge', sig_niv = 0.05)
 
 
 
-def plot_report(clf, x, y, label='', df_strain_comp=None, cv=5):
+def plot_report(clf, x, y, label=None, cv=5):
 
-    pats = np.stack(df_strain_comp.groupby(['pat', 'aha'])['pat'].apply(list).values)[0]
-    clf = clf.set_params(**label)
+    #pats = np.stack(df_strain_comp.groupby(['pat', 'aha'])['pat'].apply(list).values)[0]
+    if label: clf = clf.set_params(**label)
     skf = StratifiedKFold(n_splits=cv)
     y_pred = cross_val_predict(clf, x, y, cv=skf)
     hits = y_pred == y
@@ -539,11 +573,12 @@ def plot_report(clf, x, y, label='', df_strain_comp=None, cv=5):
                              scoring={'specificity': spec_m, 'sensitivity': sens_m, 'roc': roc_m, 'recall': rec_m,
                                       'accuracy': acc_m, 'balanced_accuracy': bacc_m, 'precision': prec_m, 'f1': f1_m},
                              cv=skf)
+    print("Sensitivity: {:0.2f} (+/- {:0.2f})".format(scores2['test_sensitivity'].mean(),
+                                                      scores2['test_sensitivity'].std(), ""))
     print(
         "Specifity: {:0.2f} (+/- {:0.2f})".format(scores2['test_specificity'].mean(), scores2['test_specificity'].std(),
                                                   ""))
-    print("Sensitivity: {:0.2f} (+/- {:0.2f})".format(scores2['test_sensitivity'].mean(),
-                                                      scores2['test_sensitivity'].std(), ""))
+
     print('params: {}'.format(label))
     print("Recall: {:0.2f} (+/- {:0.2f})".format(scores2['test_recall'].mean(), scores2['test_recall'].std()))
     print("Accuracy: {:0.2f} (+/- {:0.2f})".format(scores2['test_accuracy'].mean(), scores2['test_accuracy'].std()))

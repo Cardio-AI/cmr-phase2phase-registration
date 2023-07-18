@@ -983,7 +983,7 @@ class PhaseMaskWindowGenerator(DataGenerator):
         # opens a dataframe with cleaned phases per patient
         if not self.ISACDC:
             self.METADATA_FILE = config.get('DF_META',
-                                            '/mnt/ssd/data/gcn/02_imported_4D_unfiltered/SAx_3D_dicomTags_phase.csv')
+                                            None)
             df = pd.read_csv(self.METADATA_FILE)
             df.columns = df.columns.str.lower()
             df['patient'] = df['patient'].str.lower()
@@ -1354,16 +1354,22 @@ class PhaseMaskWindowGenerator(DataGenerator):
 
         # --------------- Image Augmentation, this is done in 2D -------------
         if self.AUGMENT and random.random() <= self.AUGMENT_PROB:
-            assert False, 'augmentation is not implemented for mask and image generator.'
+            #assert False, 'augmentation is not implemented for mask and image generator.'
             # use albumentation to apply random rotation scaling and shifts
             # we need to make sure to apply the same augmentation on the input and target data
             # Albumentation uses the Interpolation enum from opencv which is different to the SimpleITK enum
-            combined = np.concatenate(combined, axis=0)
+            #combined = np.concatenate(combined, axis=0)
+            shape_ = combined.shape
+            shape_m = combined_m.shape
+            combined = np.reshape(combined, newshape=(shape_[0]*shape_[-1],*shape_[1:-1]))
+            combined_m = np.reshape(combined_m, newshape=(shape_m[0] * shape_m[-1], *shape_m[1:-1]))
             logging.debug('shape combined: {}'.format(combined.shape))
-            combined = augmentation_compose_2d_3d_4d(img=combined, mask=None, config=self.config)
+            combined, combined_m = augmentation_compose_2d_3d_4d(img=combined, mask=combined_m, config=self.config)
             logging.debug('shape combined: {}'.format(combined.shape))
+            combined=np.reshape(combined, newshape=shape_)
+            combined_m = np.reshape(combined_m, newshape=shape_m)
             # split into input and target
-            combined = np.split(combined, indices_or_sections=3, axis=0)
+            #combined = np.split(combined, indices_or_sections=3, axis=0)
             # self.__plot_state_if_debug__(img=combined[self.INPUT_T_ELEM][0], start_time=t1, step='augmented')
             logging.debug('augmentation took: {:0.3f} s'.format(time() - t1))
             t1 = time()

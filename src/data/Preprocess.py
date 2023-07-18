@@ -12,8 +12,10 @@ from src.data.Dataset import describe_sitk, get_metadata_maybe, copy_meta_and_sa
 import numpy as np
 import scipy.ndimage as nd
 
-from albumentations import GridDistortion, RandomRotate90, Compose, ReplayCompose, Downscale, ShiftScaleRotate, Flip, Transpose, OneOf, IAAAdditiveGaussianNoise, \
-    MotionBlur, MedianBlur, Blur, OpticalDistortion, IAAPiecewiseAffine, CLAHE, IAASharpen, IAAEmboss
+from albumentations import GridDistortion, RandomRotate90, Compose, ReplayCompose, Downscale, ShiftScaleRotate, Flip, \
+    Transpose, OneOf, IAAAdditiveGaussianNoise, \
+    MotionBlur, MedianBlur, Blur, OpticalDistortion, IAAPiecewiseAffine, CLAHE, IAASharpen, IAAEmboss, HorizontalFlip, \
+    VerticalFlip, ElasticTransform
 import cv2
 from src.data.Dataset import copy_meta
 #from albumentations.augmentations.transforms import PadIfNeeded, GaussNoise, RandomGamma
@@ -364,11 +366,12 @@ def augmentation_compose_2d_3d_4d(img, mask, probabillity=1, config=None):
             if img_given: targets['{}{}'.format(img_placeholder,z)] = 'image'
             if mask_given: targets['{}{}'.format(mask_placeholder, z)] = 'mask'
 
-    if img.ndim ==4:
+    if img.ndim in [4,5]:
         middle_t = img.shape[0] // 2
         middle_z = img.shape[1] // 2
         # take an image, mask pair from the middle part of the volume and time
         if mask_given:
+            m_ = mask[middle_t,middle_z]
             data = {"image": img[middle_t][middle_z], "mask": m_}
         else:
             data = {"image": img[middle_t][middle_z]}
@@ -402,7 +405,7 @@ def augmentation_compose_2d_3d_4d(img, mask, probabillity=1, config=None):
         if img_given: augmented['image'] = np.stack(images,axis=0)
         if mask_given: augmented['mask'] = np.stack(masks, axis=0)
 
-    if img.ndim == 4:
+    if img.ndim in [4,5]:
         img_4d = []
         mask_4d = []
         for t in range(img.shape[0]):
@@ -459,10 +462,15 @@ def _create_aug_compose(p=1, border_mode=cv2.BORDER_CONSTANT, val=0, targets=Non
     border_mode = config.get('BORDER_MODE', border_mode)
     val = config.get('BORDER_VALUE', val)
     augmentations = []
-    if config.get('RANDOMROTATE', False):augmentations.append(RandomRotate90(p=0.2))
-    if config.get('SHIFTSCALEROTATE', False): augmentations.append(ShiftScaleRotate(p=prob, rotate_limit=0,shift_limit=0.025, scale_limit=0,value=val, border_mode=border_mode))
-    if config.get('GRIDDISTORTION', False): augmentations.append(GridDistortion(p=prob, value=val,border_mode=border_mode))
+    if config.get('HFLIP', False):augmentations.append(HorizontalFlip(p=prob))
+    if config.get('VFLIP', False): augmentations.append(VerticalFlip(p=prob))
+    if config.get('RANDOMROTATE', False): augmentations.append(RandomRotate90(p=0.2))
+    if config.get('SHIFTSCALEROTATE', False): augmentations.append(
+        ShiftScaleRotate(p=prob, rotate_limit=0, shift_limit=0.025, scale_limit=0, value=val, border_mode=border_mode))
+    if config.get('GRIDDISTORTION', False): augmentations.append(
+        GridDistortion(p=prob, value=val, border_mode=border_mode))
     if config.get('DOWNSCALE', False): augmentations.append(Downscale(scale_min=0.9, scale_max=0.9, p=prob))
+    if config.get('ELASTICTRANSFORM', False): augmentations.append(ElasticTransform(p=prob, alpha=20, sigma=20, alpha_affine=20))
     return ReplayCompose(augmentations, p=p,
         additional_targets=targets)
 
