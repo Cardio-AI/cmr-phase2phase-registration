@@ -949,6 +949,7 @@ class PhaseMaskWindowGenerator(DataGenerator):
         self.T_SPACING = config.get('T_SPACING', 10)
         self.PHASES = config.get('PHASES', 5)
         self.HIST_MATCHING = config.get('HIST_MATCHING', False)
+        self.REF_IMAGE = {}
         self.IMG_INTERPOLATION = config.get('IMG_INTERPOLATION', sitk.sitkLinear)
         self.MSK_INTERPOLATION = config.get('MSK_INTERPOLATION', sitk.sitkNearestNeighbor)
         self.AUGMENT_TEMP = config.get('AUGMENT_TEMP', False)
@@ -1102,12 +1103,12 @@ class PhaseMaskWindowGenerator(DataGenerator):
         t0 = time()
         ref = None
         apply_hist_matching = False
-        if self.HIST_MATCHING and random.random() <= self.AUGMENT_PROB:
+        if self.HIST_MATCHING:
             apply_hist_matching = True
             ignore_z = 1
             # use a random image, given to this generator, as histogram template for histogram matching augmentation
             ref = sitk.GetArrayFromImage(sitk.ReadImage((choice(self.IMAGES))))
-            ref = ref[choice(list(range(ref.shape[0] - 1))), choice(list(range(ref.shape[1] - 1))[ignore_z:-ignore_z])]
+            self.REF_IMAGE[ID] = ref[choice(list(range(ref.shape[0] - 1))), choice(list(range(ref.shape[1] - 1))[ignore_z:-ignore_z])]
 
         t1 = time()
 
@@ -1232,11 +1233,7 @@ class PhaseMaskWindowGenerator(DataGenerator):
 
         logging.debug('transform to nda took: {:0.3f} s'.format(time() - t1))
         t1 = time()
-        # --------------- HIST MATCHING--------------
-        if apply_hist_matching:
-            model_inputs = match_hist(model_inputs, ref)
-            logging.debug('hist matching took: {:0.3f} s'.format(time() - t1))
-            t1 = time()
+
 
         # align and crop before smoothing, this improves the speed of the following steps
         # and reduces the memory footprint
@@ -1354,6 +1351,9 @@ class PhaseMaskWindowGenerator(DataGenerator):
 
         # --------------- Image Augmentation, this is done in 2D -------------
         if self.AUGMENT and random.random() <= self.AUGMENT_PROB:
+
+
+
             #assert False, 'augmentation is not implemented for mask and image generator.'
             # use albumentation to apply random rotation scaling and shifts
             # we need to make sure to apply the same augmentation on the input and target data
@@ -1364,6 +1364,15 @@ class PhaseMaskWindowGenerator(DataGenerator):
             combined = np.reshape(combined, newshape=(shape_[0]*shape_[-1],*shape_[1:-1]))
             combined_m = np.reshape(combined_m, newshape=(shape_m[0] * shape_m[-1], *shape_m[1:-1]))
             logging.debug('shape combined: {}'.format(combined.shape))
+
+            # --------------- HIST MATCHING--------------
+            if self.HIST_MATCHING and random.random() <= self.AUGMENT_PROB:
+                ref = self.REF_IMAGE[ID]
+                combined = match_hist(combined, ref)
+                logging.debug('hist matching took: {:0.3f} s'.format(time() - t1))
+                t1 = time()
+
+
             combined, combined_m = augmentation_compose_2d_3d_4d(img=combined, mask=combined_m, config=self.config)
             logging.debug('shape combined: {}'.format(combined.shape))
             combined=np.reshape(combined, newshape=shape_)
