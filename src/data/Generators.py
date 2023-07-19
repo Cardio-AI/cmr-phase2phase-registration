@@ -1103,12 +1103,13 @@ class PhaseMaskWindowGenerator(DataGenerator):
         t0 = time()
         ref = None
         apply_hist_matching = False
-        if self.HIST_MATCHING:
+        # moved this part to the live preprocessing steps to increase the combinations of hist matching
+        """if self.HIST_MATCHING:
             apply_hist_matching = True
             ignore_z = 1
             # use a random image, given to this generator, as histogram template for histogram matching augmentation
             ref = sitk.GetArrayFromImage(sitk.ReadImage((choice(self.IMAGES))))
-            self.REF_IMAGE[ID] = ref[choice(list(range(ref.shape[0] - 1))), choice(list(range(ref.shape[1] - 1))[ignore_z:-ignore_z])]
+            self.REF_IMAGE[ID] = ref[choice(list(range(ref.shape[0] - 1))), choice(list(range(ref.shape[1] - 1))[ignore_z:-ignore_z])]"""
 
         t1 = time()
 
@@ -1367,7 +1368,13 @@ class PhaseMaskWindowGenerator(DataGenerator):
 
             # --------------- HIST MATCHING--------------
             if self.HIST_MATCHING and random.random()<=self.AUGMENT_PROB:
-                ref = self.REF_IMAGE[ID]
+                # this image has the original inplane resolution
+
+                ignore_z = 2
+                ref = sitk.GetArrayFromImage(sitk.ReadImage((choice(self.IMAGES))))
+                ref = ref[
+                    choice(list(range(ref.shape[0] - 1))), choice(list(range(ref.shape[1] - 1))[ignore_z:-ignore_z])]
+                ref = pad_and_crop(ref, target_shape=self.DIM[-2:]) # we do not resample here for computational reasons
                 combined = match_hist(combined, ref)
                 logging.debug('hist matching took: {:0.3f} s'.format(time() - t1))
                 t1 = time()
