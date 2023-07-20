@@ -1254,8 +1254,8 @@ class PhaseMaskWindowGenerator(DataGenerator):
         model_inputs = clip_quantile(model_inputs, .99)
         logging.debug('quantile clipping took: {:0.3f} s'.format(time() - t1))
         t1 = time()
-        # combined = normalise_image(combined, normaliser='minmax')  # normalise per 4D
-        #model_inputs = normalise_image(model_inputs, normaliser=self.SCALER)  # normalise per 4D
+
+        model_inputs = normalise_image(model_inputs, normaliser=self.SCALER)  # normalise per 4D
         logging.debug('normalisation took: {:0.3f} s'.format(time() - t1))
         t1 = time()
 
@@ -1398,7 +1398,7 @@ class PhaseMaskWindowGenerator(DataGenerator):
         # x_k = moving, x_shifted = fixed
         # register backwards == pull vectors which sample from the target/fixed/x_shifted grid
         # this means vectors are from x_shifted/target/fixed (earlier in time) towards x_k/moving
-        combined = normalise_image(combined, normaliser=self.SCALER)  # normalise per 4D
+        #combined = normalise_image(combined, normaliser=self.SCALER)  # normalise per 4D
         # model_inputs, model_m_inputs, model_targets, model_m_targets
         # shifted refers here to back in time (for backward registering)
         if self.IMG_CHANNELS==1:
