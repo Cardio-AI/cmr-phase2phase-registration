@@ -1375,7 +1375,7 @@ class PhaseMaskWindowGenerator(DataGenerator):
                 ref = ref[
                     choice(list(range(ref.shape[0] - 1))), choice(list(range(ref.shape[1] - 1))[ignore_z:-ignore_z])]
                 ref = pad_and_crop(ref, target_shape=self.DIM[-2:]) # we do not resample here for computational reasons
-                combined = match_hist(combined, ref)
+                combined = match_hist(combined, ref, prob_per_z=100) # change all slices in z
                 logging.debug('hist matching took: {:0.3f} s'.format(time() - t1))
                 t1 = time()
 
