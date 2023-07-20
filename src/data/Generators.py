@@ -1367,7 +1367,7 @@ class PhaseMaskWindowGenerator(DataGenerator):
             logging.debug('shape combined: {}'.format(combined.shape))
 
             # --------------- HIST MATCHING--------------
-            if self.HIST_MATCHING and random.random()<=self.AUGMENT_PROB:
+            if self.HIST_MATCHING and random.random()<=0.2:
                 # this image has the original inplane resolution
 
                 ignore_z = 2
