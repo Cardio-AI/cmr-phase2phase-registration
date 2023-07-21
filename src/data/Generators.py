@@ -995,7 +995,7 @@ class PhaseMaskWindowGenerator(DataGenerator):
         # in memory training for the cluster
         if self.IN_MEMORY:
             zipped = [self.__pre_load_one_image__(i, i) for i in range(len(self.IMAGES))]
-            self.IMAGES_SITK, self.MASKS_SITK, _ = list(map(list, zip(*zipped)))
+            self.IMAGES_SITK, self.MASKS_SITK, _, self.INDICIES = list(map(list, zip(*zipped)))
 
         # define a random seed for albumentations
         random.seed(config.get('SEED', 42))
@@ -1100,17 +1100,7 @@ class PhaseMaskWindowGenerator(DataGenerator):
     def __pre_load_one_image__(self, i, ID):
 
         # --------------- HIST MATCHING REFERENCE VOL--------------
-        t0 = time()
-        ref = None
-        apply_hist_matching = False
         # moved this part to the live preprocessing steps to increase the combinations of hist matching
-        """if self.HIST_MATCHING:
-            apply_hist_matching = True
-            ignore_z = 1
-            # use a random image, given to this generator, as histogram template for histogram matching augmentation
-            ref = sitk.GetArrayFromImage(sitk.ReadImage((choice(self.IMAGES))))
-            self.REF_IMAGE[ID] = ref[choice(list(range(ref.shape[0] - 1))), choice(list(range(ref.shape[1] - 1))[ignore_z:-ignore_z])]"""
-
         t1 = time()
 
         x = self.IMAGES[ID]
@@ -1143,13 +1133,6 @@ class PhaseMaskWindowGenerator(DataGenerator):
         logging.debug('temp resampling took: {:0.3f} s'.format(time() - t1))
         t1 = time()
 
-        # --------------- SPLIT IN 3D SITK IMAGES-------------
-        # Create a list of 3D volumes for volume resampling
-        model_inputs = split_one_4d_sitk_in_list_of_3d_sitk(model_inputs, axis=0, prob=self.AUGMENT_PROB)
-        model_m_inputs = split_one_4d_sitk_in_list_of_3d_sitk(model_m_inputs, axis=0, prob=self.AUGMENT_PROB)
-        logging.debug('split in t x 3D took: {:0.3f} s'.format(time() - t1))
-        t1 = time()
-
         # --------------- LOAD INDICES FOR CARDIAC PHASES--------------
         # Returns the indices in the following order: 'ED#', 'MS#', 'ES#', 'PF#', 'MD#'
         if self.ISACDC:
@@ -1161,6 +1144,15 @@ class PhaseMaskWindowGenerator(DataGenerator):
             raise NotImplementedError('need to validate if get_phases_as_idx_gcn works')
             idx = get_phases_as_idx_gcn(x, self.DF_METADATA, temporal_sampling_factor, len(model_inputs))
         logging.debug('index loading took: {:0.3f} s'.format(time() - t1))
+
+        # --------------- SPLIT IN 3D SITK IMAGES-------------
+        # Create a list of 3D volumes for volume resampling
+        model_inputs = split_one_4d_sitk_in_list_of_3d_sitk(model_inputs, axis=0, prob=self.AUGMENT_PROB)
+        model_m_inputs = split_one_4d_sitk_in_list_of_3d_sitk(model_m_inputs, axis=0, prob=self.AUGMENT_PROB)
+        logging.debug('split in t x 3D took: {:0.3f} s'.format(time() - t1))
+        t1 = time()
+
+
         # logging.debug('transposed: \n{}'.format(onehot))
         # self.__plot_state_if_debug__(img=model_inputs[len(model_inputs) // 2], start_time=t0, step='raw')
         t1 = time()
@@ -1284,63 +1276,9 @@ class PhaseMaskWindowGenerator(DataGenerator):
                         smooth[z] = scipy.ndimage.gaussian_filter(smooth[z], sigma=0.8, mode='nearest')
                     model_m_inputs[t] = (smooth > 0.2).astype(np.float32)
         #show_2D_or_3D(model_inputs[5, ...], model_m_inputs[5, ...])'''
-        # --------------- SLICE PAIRS OF INPUT AND TARGET VOLUMES ACCORDING TO CARDIAC PHASE IDX -------------
-        # register backwards returns: [x_k-1, x_k]
-        if self.BETWEEN_PHASES:
-            combined = get_n_windows_between_phases_from_single4D(model_inputs, idx,
-                                                                  register_backwards=self.REGISTER_BACKWARDS,
-                                                                  intermediate=False)
-            combined_m = get_n_windows_between_phases_from_single4D(model_m_inputs, idx,
-                                                                    register_backwards=self.REGISTER_BACKWARDS,
-                                                                    intermediate=False)
-        else:  # Extract the motion before a keyframe, defined by a window size w
-            # we expect the same temporal forward ordering as for k2k
-            # [x_k-w, x_k]
-            combined = get_n_windows_from_single4D(model_inputs, idx, window_size=self.WINDOW_SIZE,
-                                                   register_backwards=self.REGISTER_BACKWARDS,
-                                                   intermediate=False
-                                                   )
-            assert  all(np.any(model_m_inputs, axis=(1, 2, 3))), 'window mode will only work with anatomical constraint if we have a mask for every timestep'
-            if all(np.any(model_m_inputs, axis=(1, 2, 3))):
-                # all time steps / frames in this 4D sequence have a mask (this is very likely a predicted mask)
-                # use the masks defined by the window
-                combined_m = get_n_windows_from_single4D(model_m_inputs, idx, window_size=self.WINDOW_SIZE,
-                                                         register_backwards=self.REGISTER_BACKWARDS,
-                                                         intermediate=False
-                                                         )
-            else:
-                raise NotImplementedError('check this behaviour after rafactoring')
-                # not all time steps have a mask, this is very likely a GT, with contours only at the 5 labelled phases,
-                # use the labelled masks defined by the phases in the phase df
-                # Use this for masks with only 5 time-steps labelled. moving and target mask will be the same
-                combined_m = get_n_windows_between_phases_from_single4D(model_m_inputs, idx,
-                                                                        register_backwards=self.REGISTER_BACKWARDS,
-                                                                        intermediate=False)
-
-        logging.debug('windowing slicing took: {:0.3f} s'.format(time() - t1))
-        t1 = time()
-
-        # results in: 5,z,x,y,c with c==3 or c==2
-        # # [x_k-w, x_k]
-        combined = np.stack(combined, axis=-1)
-        combined_m = np.stack(combined_m, axis=-1)
-
-        # check if the mask for one time step is zero
-        if not all(np.any(combined_m, axis=(1,2,3,4))):
-            print('please check the masks!')
-
-        logging.debug('stacking took: {:0.3f} s'.format(time() - t1))
-        t1 = time()
-
-        # A masked, non-isotrop cmr will have steps after it is resampled to isotrop resolution
-        # remove these steps with the smoothed myo mask
-        #if self.MASKING_IMAGE:
-        #    combined[..., 0][~(combined_m[..., 0] > 0.1)] = 0
-        #    combined[..., -1][~(combined_m[..., -1] > 0.1)] = 0
 
 
-
-        return combined, combined_m, i
+        return model_inputs, model_m_inputs, i, idx
 
     def __preprocess_one_image__(self, i, ID):
         t0 = time()
@@ -1349,11 +1287,9 @@ class PhaseMaskWindowGenerator(DataGenerator):
         # combined: 5,z,x,y,c with c==3
         # temporal order of these channels: [nda[idx_shift_to_left], nda[idx_middle], nda[idxs]]
         if self.IN_MEMORY:
-            combined, combined_m = self.IMAGES_SITK[ID], self.MASKS_SITK[ID]
+            model_inputs, model_m_inputs, idx = self.IMAGES_SITK[ID], self.MASKS_SITK[ID], self.INDICIES[ID]
         else:
-            combined, combined_m, i = self.__pre_load_one_image__(i, ID)
-
-        # continue with live data modifications, such as augmentation/normalisation and standardisation
+            model_inputs, model_m_inputs, i, idx = self.__pre_load_one_image__(i, ID)
 
         # --------------- HIST MATCHING--------------
         if self.HIST_MATCHING and random.random() <= 0.5:
@@ -1370,17 +1306,72 @@ class PhaseMaskWindowGenerator(DataGenerator):
                                                translate=True)
 
             ref = pad_and_crop(ref, target_shape=(
-            ref.shape[0], *self.DIM))  # we do not resample here for computational reasons
+                ref.shape[0], *self.DIM))  # we do not resample here for computational reasons
             q = 0.99
             q_lower = 1 - q
             lower_threshold = np.quantile(a=ref, q=q_lower)
             ref = clip_quantile(ref, upper_quantile=q, lower_boundary=lower_threshold)
 
-            combined = match_hist_any_dim(combined, ref)  # match the 4D histogram
-            combined[0] = normalise_image(combined[0],normaliser=self.SCALER)  # normalise moving and fixed independent
-            combined[1] = normalise_image(combined[1], normaliser=self.SCALER)
+            model_inputs = match_hist_any_dim(model_inputs, ref)  # match the 4D histogram
+            model_inputs = normalise_image(model_inputs, normaliser=self.SCALER)  # normalise moving and fixed independent
+            # combined[1] = normalise_image(combined[1], normaliser=self.SCALER)
             logging.debug('hist matching took: {:0.3f} s'.format(time() - t1))
             t1 = time()
+
+        # --------------- SLICE PAIRS OF INPUT AND TARGET VOLUMES ACCORDING TO CARDIAC PHASE IDX -------------
+        # register backwards returns: [x_k-1, x_k]
+        if self.BETWEEN_PHASES:
+            combined = get_n_windows_between_phases_from_single4D(model_inputs, idx,
+                                                                  register_backwards=self.REGISTER_BACKWARDS,
+                                                                  intermediate=False)
+            combined_m = get_n_windows_between_phases_from_single4D(model_m_inputs, idx,
+                                                                    register_backwards=self.REGISTER_BACKWARDS,
+                                                                    intermediate=False)
+        else:  # Extract the motion before a keyframe, defined by a window size w
+            # we expect the same temporal forward ordering as for k2k
+            # [x_k-w, x_k]
+            combined = get_n_windows_from_single4D(model_inputs, idx, window_size=self.WINDOW_SIZE,
+                                                   register_backwards=self.REGISTER_BACKWARDS,
+                                                   intermediate=False
+                                                   )
+            assert all(np.any(model_m_inputs, axis=(
+            1, 2, 3))), 'window mode will only work with anatomical constraint if we have a mask for every timestep'
+            if all(np.any(model_m_inputs, axis=(1, 2, 3))):
+                # all time steps / frames in this 4D sequence have a mask (this is very likely a predicted mask)
+                # use the masks defined by the window
+                combined_m = get_n_windows_from_single4D(model_m_inputs, idx, window_size=self.WINDOW_SIZE,
+                                                         register_backwards=self.REGISTER_BACKWARDS,
+                                                         intermediate=False
+                                                         )
+            else:
+                raise NotImplementedError('check this behaviour after rafactoring')
+                # not all time steps have a mask, this is very likely a GT, with contours only at the 5 labelled phases,
+                # use the labelled masks defined by the phases in the phase df
+                # Use this for masks with only 5 time-steps labelled. moving and target mask will be the same
+                combined_m = get_n_windows_between_phases_from_single4D(model_m_inputs, idx,
+                                                                        register_backwards=self.REGISTER_BACKWARDS,
+                                                                        intermediate=False)
+
+            logging.debug('windowing slicing took: {:0.3f} s'.format(time() - t1))
+            t1 = time()
+
+            # results in: 5,z,x,y,c with c==3 or c==2
+            # # [x_k-w, x_k]
+        combined = np.stack(combined, axis=-1)
+        combined_m = np.stack(combined_m, axis=-1)
+
+        # check if the mask for one time step is zero
+        if not all(np.any(combined_m, axis=(1, 2, 3, 4))):
+            print('please check the masks!')
+
+        logging.debug('stacking took: {:0.3f} s'.format(time() - t1))
+
+
+
+
+        # continue with live data modifications, such as augmentation/normalisation and standardisation
+
+
 
 
         # --------------- Image Augmentation, this is done in 2D -------------
