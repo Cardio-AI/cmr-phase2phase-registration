@@ -18,7 +18,7 @@ from scipy.ndimage import gaussian_filter1d
 
 from src.data.Dataset import describe_sitk, split_one_4d_sitk_in_list_of_3d_sitk, get_phases_as_onehot_gcn, \
     get_phases_as_onehot_acdc, get_n_windows_from_single4D, get_phases_as_idx_gcn, get_phases_as_idx_acdc, match_hist, \
-    get_n_windows_between_phases_from_single4D, get_phases_as_idx_dmd
+    get_n_windows_between_phases_from_single4D, get_phases_as_idx_dmd, match_hist_any_dim
 from src.data.Preprocess import resample_3D, clip_quantile, normalise_image, transform_to_binary_mask, load_masked_img, \
     augmentation_compose_2d_3d_4d, pad_and_crop, resample_t_of_4d, load_msk, calc_resampled_size, \
     align_inplane_with_ip
@@ -1082,7 +1082,7 @@ class PhaseMaskWindowGenerator(DataGenerator):
         if self.REGISTER_BACKWARDS:
             # x = x_k; y = x_k-w
             y_p2ed = np.repeat(x[:, 0:1, ...], 5, axis=1) # here we move each phase to the ED phase, starting from ED
-            y2_p2ed_m = np.repeat(x2[:, 0:1, ...], 5, axis=1)
+            y2_p2ed_m = np.repeat(x2[:, 0:1, ...], 5, axis=1) # repeat the ED mask
         else:
             raise NotImplementedError('need to validate if forward works as expected')
             y_p2ed = np.roll(x, shift=-1, axis=1) # here we move the ed phase to each phases, starting with MS - same target as p2p
@@ -1090,10 +1090,10 @@ class PhaseMaskWindowGenerator(DataGenerator):
         logging.debug('Batchsize: {} preprocessing took: {:0.3f} sec'.format(self.BATCHSIZE, time() - t0))
         zeros = np.zeros((*x.shape[:-1], 3), dtype=np.float32)
         if self.COMPOSE_CONSISTENCY:
-            y2 = np.concatenate([y2_p2ed_m, y2], axis=-1)
-            x = np.concatenate([x,y, y_p2ed], axis=-1)
+            y2 = np.concatenate([y2_p2ed_m, y2], axis=-1) # repeated ED mask and s_shifted
+            x = np.concatenate([x,y, y_p2ed], axis=-1) # stack [x_k, x_shifted, ed_repeated]
 
-            return tuple([[x, x2], [y_p2ed, y, y2, zeros, zeros]])
+            return tuple([[x, x2], [y_p2ed, y, y2, zeros, zeros]]) # [x_k, s_k], [ed_repeated, s_ed and s_shifted, x_shifted, phi_k2k, phi_k2ed]
         else:
             return tuple([[x, x2], [y, y2, zeros]])
 
@@ -1158,7 +1158,7 @@ class PhaseMaskWindowGenerator(DataGenerator):
         elif self.ISDMD:
             idx = get_phases_as_idx_dmd(x, self.DF_METADATA, temporal_sampling_factor, len(model_inputs))
         else:
-            raise NotImplementedError('need to validate if get_phases_as_idx_acdc works')
+            raise NotImplementedError('need to validate if get_phases_as_idx_gcn works')
             idx = get_phases_as_idx_gcn(x, self.DF_METADATA, temporal_sampling_factor, len(model_inputs))
         logging.debug('index loading took: {:0.3f} s'.format(time() - t1))
         # logging.debug('transposed: \n{}'.format(onehot))
@@ -1371,11 +1371,22 @@ class PhaseMaskWindowGenerator(DataGenerator):
                 # this image has the original inplane resolution
 
                 ignore_z = 2
-                ref = sitk.GetArrayFromImage(sitk.ReadImage((choice(self.IMAGES))))
-                ref = ref[
-                    choice(list(range(ref.shape[0] - 1))), choice(list(range(ref.shape[1] - 1))[ignore_z:-ignore_z])]
-                ref = pad_and_crop(ref, target_shape=self.DIM[-2:]) # we do not resample here for computational reasons
-                combined = match_hist(combined, ref, prob_per_z=100) # change all slices in z
+                ref_id = choice(range(len(self.IMAGES)))
+                ref = sitk.GetArrayFromImage(sitk.ReadImage(self.IMAGES[ref_id]))
+                ref_m = sitk.GetArrayFromImage(sitk.ReadImage(self.IMAGES)[ref_id].replace('clean','mask'))
+                ref, ref_m = align_inplane_with_ip(model_inputs=ref,
+                                                                     msk_file_name=ref_m,
+                                                                     roll2septum=False,
+                                                                     roll2lvbood=True,
+                                                                     rotate=False,
+                                                                     translate=True)
+
+                ref = pad_and_crop(ref, target_shape=(ref.shape[0], *self.DIM)) # we do not resample here for computational reasons
+                ref = clip_quantile(ref, .99)
+
+                combined = match_hist_any_dim(combined, ref) # match the 4D histogram
+                combined[0] = normalise_image(combined[0], normaliser=self.SCALER) # normalise moving and fixed independent
+                combined[1] = normalise_image(combined[1], normaliser=self.SCALER)
                 logging.debug('hist matching took: {:0.3f} s'.format(time() - t1))
                 t1 = time()
 

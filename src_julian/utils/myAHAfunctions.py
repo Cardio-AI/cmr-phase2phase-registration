@@ -431,6 +431,7 @@ def myBullsplot(data, lge=None, cmap=None, norm=None, ax=None):
     # plotted as label will be the integer values then
 
     labels = ['{}\nAHA {}'.format(int(round(data[i]*100)), i+1) for i in range(len(data))]
+
     if lge is not None:
         labels = [l + '*' if lg else l for l,lg in zip(labels, lge)]
     # Make a figure and axes with dimensions as desired.

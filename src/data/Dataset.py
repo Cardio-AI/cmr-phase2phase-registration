@@ -226,6 +226,26 @@ def match_hist_(nda, avg):
     logging.info('fourth: {:0.3f} s'.format(time() - t0))
     return np.reshape(temp, shape_)
 
+
+def match_hist_any_dim(nda, ref):
+    """
+    math the histgram from one ndarray to any other
+    works with any shape
+    Parameters
+    ----------
+    nda :
+    ref :
+
+    Returns
+    -------
+
+    """
+    shape_ = nda.shape
+    shape_ref = ref.shape
+    nda = skimage.exposure.match_histograms(nda.flatten(), ref.flatten(), channel_axis=None)
+    return nda.reshape(shape_)
+
+
 def match_hist(nda,ref, prob_per_z=40):
 
     for z in range(nda.shape[1]):
