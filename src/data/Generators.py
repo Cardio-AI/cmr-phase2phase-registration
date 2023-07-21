@@ -1295,28 +1295,34 @@ class PhaseMaskWindowGenerator(DataGenerator):
         if self.HIST_MATCHING and random.random() <= 0.5:
             # this image has the original inplane resolution
 
-            ref_id = choice(range(len(self.IMAGES)))
-            ref = sitk.GetArrayFromImage(sitk.ReadImage(self.IMAGES[ref_id]))
-            ref_m = sitk.GetArrayFromImage(sitk.ReadImage(self.IMAGES[ref_id].replace('clean', 'mask')))
-            ref, ref_m = align_inplane_with_ip(model_inputs=ref,
-                                               msk_file_name=ref_m,
-                                               roll2septum=False,
-                                               roll2lvbood=True,
-                                               rotate=False,
-                                               translate=True)
+            if self.IN_MEMORY:
+                ref_id = choice(range(len(self.IMAGES_SITK)))
+                ref = self.IMAGES_SITK[ref_id]
+                model_inputs = match_hist_any_dim(model_inputs, ref)
+            else:
 
-            ref = pad_and_crop(ref, target_shape=(
-                ref.shape[0], *self.DIM))  # we do not resample here for computational reasons
-            q = 0.99
-            q_lower = 1 - q
-            lower_threshold = np.quantile(a=ref, q=q_lower)
-            ref = clip_quantile(ref, upper_quantile=q, lower_boundary=lower_threshold)
+                ref_id = choice(range(len(self.IMAGES)))
+                ref = sitk.GetArrayFromImage(sitk.ReadImage(self.IMAGES[ref_id]))
+                ref_m = sitk.GetArrayFromImage(sitk.ReadImage(self.IMAGES[ref_id].replace('clean', 'mask')))
+                ref, ref_m = align_inplane_with_ip(model_inputs=ref,
+                                                   msk_file_name=ref_m,
+                                                   roll2septum=False,
+                                                   roll2lvbood=True,
+                                                   rotate=False,
+                                                   translate=True)
 
-            model_inputs = match_hist_any_dim(model_inputs, ref)  # match the 4D histogram
-            model_inputs = normalise_image(model_inputs, normaliser=self.SCALER)  # normalise moving and fixed independent
-            # combined[1] = normalise_image(combined[1], normaliser=self.SCALER)
-            logging.debug('hist matching took: {:0.3f} s'.format(time() - t1))
-            t1 = time()
+                ref = pad_and_crop(ref, target_shape=(
+                    ref.shape[0], *self.DIM))  # we do not resample here for computational reasons
+                q = 0.99
+                q_lower = 1 - q
+                lower_threshold = np.quantile(a=ref, q=q_lower)
+                ref = clip_quantile(ref, upper_quantile=q, lower_boundary=lower_threshold)
+
+                model_inputs = match_hist_any_dim(model_inputs, ref)  # match the 4D histogram
+                model_inputs = normalise_image(model_inputs, normaliser=self.SCALER)  # normalise moving and fixed independent
+                # combined[1] = normalise_image(combined[1], normaliser=self.SCALER)
+                logging.debug('hist matching took: {:0.3f} s'.format(time() - t1))
+                t1 = time()
 
         # --------------- SLICE PAIRS OF INPUT AND TARGET VOLUMES ACCORDING TO CARDIAC PHASE IDX -------------
         # register backwards returns: [x_k-1, x_k]
