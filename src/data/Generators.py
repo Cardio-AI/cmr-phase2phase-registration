@@ -1277,53 +1277,6 @@ class PhaseMaskWindowGenerator(DataGenerator):
                     model_m_inputs[t] = (smooth > 0.2).astype(np.float32)
         #show_2D_or_3D(model_inputs[5, ...], model_m_inputs[5, ...])'''
 
-
-        return model_inputs, model_m_inputs, i, idx
-
-    def __preprocess_one_image__(self, i, ID):
-        t0 = time()
-        t1 = time()
-        # --------------- LOAD THE MODEL INPUT--------------
-        # combined: 5,z,x,y,c with c==3
-        # temporal order of these channels: [nda[idx_shift_to_left], nda[idx_middle], nda[idxs]]
-        if self.IN_MEMORY:
-            model_inputs, model_m_inputs, idx = self.IMAGES_SITK[ID], self.MASKS_SITK[ID], self.INDICIES[ID]
-        else:
-            model_inputs, model_m_inputs, i, idx = self.__pre_load_one_image__(i, ID)
-
-        # --------------- HIST MATCHING--------------
-        if self.HIST_MATCHING and random.random() <= 0.5:
-            # this image has the original inplane resolution
-
-            if self.IN_MEMORY:
-                ref_id = choice(range(len(self.IMAGES_SITK)))
-                ref = self.IMAGES_SITK[ref_id]
-                model_inputs = match_hist_any_dim(model_inputs, ref)
-            else:
-
-                ref_id = choice(range(len(self.IMAGES)))
-                ref = sitk.GetArrayFromImage(sitk.ReadImage(self.IMAGES[ref_id]))
-                ref_m = sitk.GetArrayFromImage(sitk.ReadImage(self.IMAGES[ref_id].replace('clean', 'mask')))
-                ref, ref_m = align_inplane_with_ip(model_inputs=ref,
-                                                   msk_file_name=ref_m,
-                                                   roll2septum=False,
-                                                   roll2lvbood=True,
-                                                   rotate=False,
-                                                   translate=True)
-
-                ref = pad_and_crop(ref, target_shape=(
-                    ref.shape[0], *self.DIM))  # we do not resample here for computational reasons
-                q = 0.99
-                q_lower = 1 - q
-                lower_threshold = np.quantile(a=ref, q=q_lower)
-                ref = clip_quantile(ref, upper_quantile=q, lower_boundary=lower_threshold)
-
-                model_inputs = match_hist_any_dim(model_inputs, ref)  # match the 4D histogram
-                model_inputs = normalise_image(model_inputs, normaliser=self.SCALER)  # normalise moving and fixed independent
-                # combined[1] = normalise_image(combined[1], normaliser=self.SCALER)
-                logging.debug('hist matching took: {:0.3f} s'.format(time() - t1))
-                t1 = time()
-
         # --------------- SLICE PAIRS OF INPUT AND TARGET VOLUMES ACCORDING TO CARDIAC PHASE IDX -------------
         # register backwards returns: [x_k-1, x_k]
         if self.BETWEEN_PHASES:
@@ -1371,7 +1324,55 @@ class PhaseMaskWindowGenerator(DataGenerator):
             print('please check the masks!')
 
         logging.debug('stacking took: {:0.3f} s'.format(time() - t1))
+        return combined, combined_m, i, idx
 
+        #return model_inputs, model_m_inputs, i, idx
+
+    def __preprocess_one_image__(self, i, ID):
+        t0 = time()
+        t1 = time()
+        # --------------- LOAD THE MODEL INPUT--------------
+        # combined: 5,z,x,y,c with c==3
+        # temporal order of these channels: [nda[idx_shift_to_left], nda[idx_middle], nda[idxs]]
+        if self.IN_MEMORY:
+            combined, combined_m, idx = self.IMAGES_SITK[ID], self.MASKS_SITK[ID], self.INDICIES[ID]
+        else:
+            combined, combined_m, i, idx = self.__pre_load_one_image__(i, ID)
+
+        # --------------- HIST MATCHING--------------
+        if self.HIST_MATCHING and random.random() <= 0.5:
+            # this image has the original inplane resolution
+
+            if self.IN_MEMORY:
+                ref_id = choice(range(len(self.IMAGES_SITK)))
+                ref = self.IMAGES_SITK[ref_id]
+                combined = match_hist_any_dim(combined, ref)
+            else:
+
+                ref_id = choice(range(len(self.IMAGES)))
+                ref = sitk.GetArrayFromImage(sitk.ReadImage(self.IMAGES[ref_id]))
+                ref_m = sitk.GetArrayFromImage(sitk.ReadImage(self.IMAGES[ref_id].replace('clean', 'mask')))
+                ref, ref_m = align_inplane_with_ip(model_inputs=ref,
+                                                   msk_file_name=ref_m,
+                                                   roll2septum=False,
+                                                   roll2lvbood=True,
+                                                   rotate=False,
+                                                   translate=True)
+
+                ref = pad_and_crop(ref, target_shape=(
+                    ref.shape[0], *self.DIM))  # we do not resample here for computational reasons
+                q = 0.99
+                q_lower = 1 - q
+                lower_threshold = np.quantile(a=ref, q=q_lower)
+                ref = clip_quantile(ref, upper_quantile=q, lower_boundary=lower_threshold)
+                # this is just a local hack,
+                # Only inmemory processing matches the histogram in the right manner,
+                # here we match a 4D CMR histogram on two temporally subsampled 4D volumes
+                combined = match_hist_any_dim(combined, ref)  # match the 4D histogram
+                combined = normalise_image(combined, normaliser=self.SCALER)  # normalise moving and fixed independent
+                # combined[1] = normalise_image(combined[1], normaliser=self.SCALER)
+                logging.debug('hist matching took: {:0.3f} s'.format(time() - t1))
+                t1 = time()
 
 
 
