@@ -1250,8 +1250,13 @@ class PhaseMaskWindowGenerator(DataGenerator):
         logging.debug('pad/crop took: {:0.3f} s'.format(time() - t1))
         t1 = time()
 
+        # clip the upper and lower quantile of the cmr grey values
+        q = 0.99
+        q_lower = 1 - q
+        lower_threshold = np.quantile(a=model_inputs, q=q_lower)
+        model_inputs = clip_quantile(model_inputs, upper_quantile=q, lower_boundary=lower_threshold)
 
-        model_inputs = clip_quantile(model_inputs, .99)
+        #model_inputs = clip_quantile(model_inputs, .99)
         logging.debug('quantile clipping took: {:0.3f} s'.format(time() - t1))
         t1 = time()
 
@@ -1350,53 +1355,51 @@ class PhaseMaskWindowGenerator(DataGenerator):
 
         # continue with live data modifications, such as augmentation/normalisation and standardisation
 
+        # --------------- HIST MATCHING--------------
+        if self.HIST_MATCHING and random.random() <= 0.5:
+            # this image has the original inplane resolution
+
+            ref_id = choice(range(len(self.IMAGES)))
+            ref = sitk.GetArrayFromImage(sitk.ReadImage(self.IMAGES[ref_id]))
+            ref_m = sitk.GetArrayFromImage(sitk.ReadImage(self.IMAGES[ref_id].replace('clean', 'mask')))
+            ref, ref_m = align_inplane_with_ip(model_inputs=ref,
+                                               msk_file_name=ref_m,
+                                               roll2septum=False,
+                                               roll2lvbood=True,
+                                               rotate=False,
+                                               translate=True)
+
+            ref = pad_and_crop(ref, target_shape=(
+            ref.shape[0], *self.DIM))  # we do not resample here for computational reasons
+            q = 0.99
+            q_lower = 1 - q
+            lower_threshold = np.quantile(a=ref, q=q_lower)
+            ref = clip_quantile(ref, upper_quantile=q, lower_boundary=lower_threshold)
+
+            combined = match_hist_any_dim(combined, ref)  # match the 4D histogram
+            combined[0] = normalise_image(combined[0],normaliser=self.SCALER)  # normalise moving and fixed independent
+            combined[1] = normalise_image(combined[1], normaliser=self.SCALER)
+            logging.debug('hist matching took: {:0.3f} s'.format(time() - t1))
+            t1 = time()
+
+
         # --------------- Image Augmentation, this is done in 2D -------------
         if self.AUGMENT and random.random() <= self.AUGMENT_PROB:
 
-
-
-            #assert False, 'augmentation is not implemented for mask and image generator.'
-            # use albumentation to apply random rotation scaling and shifts
+            # use albumentation to apply random augmentations
             # we need to make sure to apply the same augmentation on the input and target data
             # Albumentation uses the Interpolation enum from opencv which is different to the SimpleITK enum
-            #combined = np.concatenate(combined, axis=0)
             shape_ = combined.shape
             shape_m = combined_m.shape
-            combined = np.reshape(combined, newshape=(shape_[0]*shape_[-1],*shape_[1:-1]))
+            combined = np.reshape(combined, newshape=(shape_[0] * shape_[-1], *shape_[1:-1]))
             combined_m = np.reshape(combined_m, newshape=(shape_m[0] * shape_m[-1], *shape_m[1:-1]))
             logging.debug('shape combined: {}'.format(combined.shape))
-
-            # --------------- HIST MATCHING--------------
-            if self.HIST_MATCHING and random.random()<=0.2:
-                # this image has the original inplane resolution
-
-                ignore_z = 2
-                ref_id = choice(range(len(self.IMAGES)))
-                ref = sitk.GetArrayFromImage(sitk.ReadImage(self.IMAGES[ref_id]))
-                ref_m = sitk.GetArrayFromImage(sitk.ReadImage(self.IMAGES)[ref_id].replace('clean','mask'))
-                ref, ref_m = align_inplane_with_ip(model_inputs=ref,
-                                                                     msk_file_name=ref_m,
-                                                                     roll2septum=False,
-                                                                     roll2lvbood=True,
-                                                                     rotate=False,
-                                                                     translate=True)
-
-                ref = pad_and_crop(ref, target_shape=(ref.shape[0], *self.DIM)) # we do not resample here for computational reasons
-                ref = clip_quantile(ref, .99)
-
-                combined = match_hist_any_dim(combined, ref) # match the 4D histogram
-                combined[0] = normalise_image(combined[0], normaliser=self.SCALER) # normalise moving and fixed independent
-                combined[1] = normalise_image(combined[1], normaliser=self.SCALER)
-                logging.debug('hist matching took: {:0.3f} s'.format(time() - t1))
-                t1 = time()
-
 
             combined, combined_m = augmentation_compose_2d_3d_4d(img=combined, mask=combined_m, config=self.config)
             logging.debug('shape combined: {}'.format(combined.shape))
             combined=np.reshape(combined, newshape=shape_)
             combined_m = np.reshape(combined_m, newshape=shape_m)
-            # split into input and target
-            #combined = np.split(combined, indices_or_sections=3, axis=0)
+
             # self.__plot_state_if_debug__(img=combined[self.INPUT_T_ELEM][0], start_time=t1, step='augmented')
             logging.debug('augmentation took: {:0.3f} s'.format(time() - t1))
             t1 = time()

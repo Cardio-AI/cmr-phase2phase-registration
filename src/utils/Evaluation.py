@@ -317,6 +317,7 @@ def create_grid_search(refit='balanced_accuracy', cv=5):
     solvers = ['liblinear']
     solver_mlp = ['adam', 'sdg', 'lbfgs']
     hidden_layer_sizes = [(100,), (100,50,10), (50,20,10)]
+    depths = [2,3,4,5]
 
     scaler = [StandardScaler(), MinMaxScaler(), None]
 
@@ -382,7 +383,18 @@ def create_grid_search(refit='balanced_accuracy', cv=5):
                   'clf__hidden_layer_sizes':hidden_layer_sizes,
                   'scaler': scaler}
 
-    params = [rf_params, svc_params, lr_params, et_params, dt_params, ens_params, mlp_params]
+    params_ = {'booster': 'dart',
+              'max_depth': 5, 'learning_rate': 0.1,
+              'objective': 'binary:logistic',
+              'sample_type': 'uniform',
+              'normalize_type': 'tree',
+              'rate_drop': 0.1,
+              'skip_drop': 0.5}
+    xgb_params = {'clf' : XGBClassifier(**params_),
+                  'clf__max_depth': depths,
+                  'scaler':scaler}
+
+    params = [rf_params, svc_params, lr_params, et_params, dt_params, ens_params, mlp_params, xgb_params]
 
     pipeline = Pipeline(steps=[
         ('scaler', MinMaxScaler()),
