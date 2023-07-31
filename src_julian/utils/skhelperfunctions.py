@@ -1005,17 +1005,19 @@ class Console_and_file_logger():
         logging.info('Log level for console: {}'.format(logging.getLevelName(log_lvl)))
 
 def extract_segments(segments_str, segments=16):
-    nda = np.zeros(segments)
+    nda = np.zeros(segments).astype(int)
     try:
-        numbers = [int(i) - 1 for i in segments_str.split(',')]
+        if type(segments_str) in [int, float, np.int32, np.float32, np.float64, np.float16] and (int(segments_str) != 0):
+            numbers = [int(segments_str) - 1] # one lge segment
+        elif ',' in segments_str: # multiple lge segments
+            numbers = [int(i) - 1 for i in segments_str.split(',')]
+        else:
+            numbers = [] # no lge segments
     except Exception as e:
         # print(e)
-        if str(segments_str) == 'nan':
-            numbers = []
-        elif type(segments_str) in [np.int32, np.float32, np.float64, np.float16] and (int(segments_str) != 0):
-            numbers = [int(segments_str) - 1]
-        else:
-            # print('cant find a sequence: {}'.format(segments_str))
-            numbers = []
-    nda[numbers] = 1
+        # better no general exception handling, this could introduce wrong GT,
+        # just because we are not able to process the
+        print('cant find a sequence: {} with {}'.format(segments_str, e))
+        raise e
+    nda[numbers] = int(1)
     return nda

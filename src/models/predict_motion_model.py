@@ -268,6 +268,10 @@ def main(args=None):
         else:
             config['DF_META'] = None
         pred_fold(config)
+        from pathlib import Path
+        exp_path = Path(args.exp).parent
+        gt_path = os.path.join(exp_path, 'gt_m')
+        pred_path = os.path.join(exp_path, 'pred_m')
     else: # predict a CV
         for exp_fold in list(sorted(glob.glob(os.path.join(args.exp, 'f*/')))):
 
@@ -305,8 +309,8 @@ def main(args=None):
                 config['DF_META'] = None
             pred_fold(config)
 
-    gt_path = os.path.join(args.exp, 'gt_m')
-    pred_path = os.path.join(args.exp, 'pred_m')
+        gt_path = os.path.join(args.exp, 'gt_m')
+        pred_path = os.path.join(args.exp, 'pred_m')
     try:
         logging.info('start dice calculation with: {}{}{}'.format(gt_path, pred_path, args.exp))
         calc_dice(gt_path, pred_path, args.exp)

@@ -1332,7 +1332,7 @@ class PhaseMaskWindowGenerator(DataGenerator):
         t0 = time()
         t1 = time()
         # --------------- LOAD THE MODEL INPUT--------------
-        # combined: 5,z,x,y,c with c==3
+        # combined: 5,z,x,y,c with c==2
         # temporal order of these channels: [nda[idx_shift_to_left], nda[idx_middle], nda[idxs]]
         if self.IN_MEMORY:
             combined, combined_m, idx = self.IMAGES_SITK[ID], self.MASKS_SITK[ID], self.INDICIES[ID]
@@ -1346,9 +1346,8 @@ class PhaseMaskWindowGenerator(DataGenerator):
             if self.IN_MEMORY:
                 ref_id = choice(range(len(self.IMAGES_SITK)))
                 ref = self.IMAGES_SITK[ref_id]
-                combined = match_hist_any_dim(combined, ref)
+                combined = match_hist_any_dim(combined, ref) # this histogram should be also clipped and normalised
             else:
-
                 ref_id = choice(range(len(self.IMAGES)))
                 ref = sitk.GetArrayFromImage(sitk.ReadImage(self.IMAGES[ref_id]))
                 ref_m = sitk.GetArrayFromImage(sitk.ReadImage(self.IMAGES[ref_id].replace('clean', 'mask')))
@@ -1374,13 +1373,7 @@ class PhaseMaskWindowGenerator(DataGenerator):
                 logging.debug('hist matching took: {:0.3f} s'.format(time() - t1))
                 t1 = time()
 
-
-
         # continue with live data modifications, such as augmentation/normalisation and standardisation
-
-
-
-
         # --------------- Image Augmentation, this is done in 2D -------------
         if self.AUGMENT and random.random() <= self.AUGMENT_PROB:
 

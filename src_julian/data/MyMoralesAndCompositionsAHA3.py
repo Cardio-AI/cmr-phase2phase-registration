@@ -148,8 +148,10 @@ def calculate_strain(data_root='', metadata_path='/mnt/ssd/julian/data/metadata/
 
     for result in executor.map(calc_strain4singlepatient, patient_folders, *params):
         df_patients.append(result)
+    df_patients = pd.concat(df_patients, axis=0, ignore_index=True)
+    df_patients.sort_values(by=['pat', 'aha'], inplace=True)
 
-    return pd.concat(df_patients, axis=0, ignore_index=True)
+    return df_patients
 
 
 def calc_strain4singlepatient(path_to_patient_folder, N_TIMESTEPS, RVIP_method, Z_SPACING, com_method, df_style, ff_style, label_bloodpool,

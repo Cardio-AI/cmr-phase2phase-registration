@@ -13,6 +13,7 @@ import seaborn as sb
 
 
 import sklearn
+from sklearn.feature_selection import SelectKBest, chi2
 from sklearn.svm import LinearSVC, SVC
 from sklearn.preprocessing import StandardScaler
 from sklearn.datasets import make_classification
@@ -241,9 +242,11 @@ def cross_validate_f1(x, y):
     from sklearn.neural_network import MLPClassifier
     mpl.rcParams.update(mpl.rcParamsDefault)
     plt.rcParams.update({'font.size': 16})
-    from sklearn.model_selection import StratifiedKFold
+    from sklearn.model_selection import StratifiedKFold, KFold
+
     cv = 5
     skf = StratifiedKFold(n_splits=cv)
+    #skf = KFold(n_splits=cv)
 
     clfs = {}
     clfs['MLP'] = make_pipeline(MinMaxScaler(),MLPClassifier(hidden_layer_sizes=(100,50,10), random_state=1,
@@ -309,7 +312,7 @@ def create_grid_search(refit='balanced_accuracy', cv=5):
     gammas = [1e-1, 1e-2, 1e-3, 1e-4, 1e-5, 1e-6, 1e-7, 'scale', 'auto']
     Cs = [0.1, 1, 5, 10, 20, 100, 1e3]
     kernels = ['linear', 'poly', 'rbf', 'sigmoid']
-    weights = [None, 'balanced']
+    weights = ['balanced']
     degree = [2, 3, 4, 5]
     n_estimators = [10, 100, 500, 1000]
     criterions = ['gini', 'entropy', 'log_loss']
@@ -317,13 +320,13 @@ def create_grid_search(refit='balanced_accuracy', cv=5):
     solvers = ['liblinear']
     solver_mlp = ['adam', 'sdg', 'lbfgs']
     hidden_layer_sizes = [(100,), (100,50,10), (50,20,10)]
-    depths = [2,3,4,5]
+    depths = [2,3,5,10]
 
     scaler = [StandardScaler(), MinMaxScaler(), None]
 
     from sklearn.model_selection import StratifiedKFold, KFold
     skf = StratifiedKFold(n_splits=cv)
-    # skf = KFold(n_splits=5)
+    #skf = KFold(n_splits=cv)
 
     """[
         'standardscaler__copy', 'standardscaler__with_mean', 'standardscaler__with_std',
@@ -340,7 +343,28 @@ def create_grid_search(refit='balanced_accuracy', cv=5):
                   'scaler': scaler}
 
     ################ ensemble #############
-    clf1 = LogisticRegression(random_state=1, class_weight='balanced', penalty='l2', )
+    clfs = {}
+    clfs['MLP'] = make_pipeline(MinMaxScaler(), MLPClassifier(hidden_layer_sizes=(100, 50, 10), random_state=1,
+                                                              solver='adam', max_iter=1000))
+    clfs['Logistic Regression'] = LogisticRegression(random_state=1, class_weight='balanced', max_iter=1000)
+    clfs['Random Forest'] = make_pipeline(MinMaxScaler(), RandomForestClassifier(n_estimators=500, random_state=1,
+                                                                                 class_weight='balanced'))  # RandomForestClassifier(n_estimators=100, random_state=1, class_weight='balanced')
+    clfs['Scaled DecissionTree'] = make_pipeline(MinMaxScaler(), tree.DecisionTreeClassifier(class_weight='balanced'))
+    clfs['Scaled SVC(poly)'] = make_pipeline(MinMaxScaler(),
+                                             SVC(kernel='poly', gamma='auto', class_weight='balanced', C=100))
+
+    eclf = VotingClassifier(
+        estimators=[
+
+            ('lr', clfs['Logistic Regression']),
+            ('rf', clfs['Random Forest']),
+            ('mlp', clfs['MLP']),
+            ('svc', clfs['Scaled SVC(poly)']),
+            ('dt', clfs['Scaled DecissionTree'])
+        ],
+        voting='hard')
+
+    """clf1 = LogisticRegression(random_state=1, class_weight='balanced', penalty='l2', )
     clf2 = RandomForestClassifier(n_estimators=100, random_state=1, class_weight='balanced')
     clf4 = tree.DecisionTreeClassifier(class_weight='balanced')
     clf6 = SVC(kernel='poly', gamma='scale', class_weight='balanced', C=1, degree=3)
@@ -356,7 +380,7 @@ def create_grid_search(refit='balanced_accuracy', cv=5):
             ('dt', clf4),
             ('mlp', clf7)
         ],
-        voting='hard')
+        voting='hard')"""
 
     ens_params = {'clf': (eclf,),
                   'scaler': scaler}
@@ -390,15 +414,16 @@ def create_grid_search(refit='balanced_accuracy', cv=5):
               'normalize_type': 'tree',
               'rate_drop': 0.1,
               'skip_drop': 0.5}
-    xgb_params = {'clf' : XGBClassifier(**params_),
+    xgb_params = {'clf' : (XGBClassifier(**params_),),
                   'clf__max_depth': depths,
                   'scaler':scaler}
 
     params = [rf_params, svc_params, lr_params, et_params, dt_params, ens_params, mlp_params, xgb_params]
 
     pipeline = Pipeline(steps=[
-        ('scaler', MinMaxScaler()),
-        ('clf', SVC())
+        ('scaler', None),
+        #('features', SelectKBest(score_func=chi2, k=60)),
+        ('clf', None)
     ])
     scoring = {'f1': f1_m, 'recall': rec_m, 'balanced_accuracy': bacc_m, 'sens': sens_m, 'spec': spec_m,
                'roc_auc': roc_m, 'precision': prec_m, 'accuracy': acc_m}
@@ -413,7 +438,7 @@ def create_grid_search(refit='balanced_accuracy', cv=5):
 
 
 def ttest_per_keyframe(df):
-    ps = {}
+
     ps = {}
     temp_y = np.stack(df.groupby(['pat'])['lge'].apply(list).values).astype(np.float32)
     temp_y_patients = temp_y.sum(axis=1) > 0
