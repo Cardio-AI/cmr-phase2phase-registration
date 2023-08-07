@@ -1,5 +1,5 @@
 # define logging and working directory
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor
 
 from ProjectRoot import change_wd_to_project_root
 
@@ -334,19 +334,8 @@ def calc_strain4singlepatient(path_to_patient_folder, N_TIMESTEPS, RVIP_method, 
     Ecc = np.einsum('txyz->tzyx', Circumferential_Sven)
     masks_rot_lvmyo = np.einsum('txyz->tzyx', masks_rot_Sven)
 
-    q = 0.99
-    q_lower = 1 - q
-    # one lower/upper threshold per CS and RS
-    rs_lower_threshold = np.quantile(a=Err,q=q_lower)
-    rs_upper_threshold = np.quantile(a=Err,q=q)
-    cs_lower_threshold = np.quantile(a=Ecc,q=q_lower)
-    cs_upper_threshold = np.quantile(a=Ecc,q=q)
-
-    Err = np.clip(a=Err, a_min=rs_lower_threshold,
-                               a_max=rs_upper_threshold)
-    Ecc = np.clip(a=Ecc, a_min=cs_lower_threshold,
-                               a_max=cs_upper_threshold)
-
+    # Make sure that we set all strain values outside the myocardium to 0 in before
+    # This happens currently in myMorales()
 
     # now, Strain Tensor and sector masks do have the shape
     # tzyx = (5,16,128,128)
@@ -454,6 +443,9 @@ def calc_strain4singlepatient(path_to_patient_folder, N_TIMESTEPS, RVIP_method, 
         (16 * 5, 1))
     cs_AHA_overtime = np.concatenate((cs_overtime_base, cs_overtime_mc, cs_overtime_apex), axis=0).reshape(
         (16 * 5, 1))
+
+
+
     #
     # rs_AHA_overtime = np.nan_to_num(rs_AHA_overtime)
     # cs_AHA_overtime = np.nan_to_num(cs_AHA_overtime)
@@ -583,7 +575,7 @@ def calc_strain4singlepatient(path_to_patient_folder, N_TIMESTEPS, RVIP_method, 
             #df_cleandmd = pd.read_excel(io=path_to_metadata_xls, sheet_name=sheet_name_soalge, engine='openpyxl')
             soa = np.repeat(extract_segments(df_cleandmd[df_cleandmd['pat'] == patient_name]['soa'].values[0]),
                         repeats=5, axis=0)
-            lge = np.repeat(extract_segments(df_cleandmd[df_cleandmd['pat'] == patient_name]['lgepos'].values[0]),
+            lge = np.repeat(extract_segments(df_cleandmd[df_cleandmd['pat'] == patient_name]['lgepos'].values[0], lge=True),
                         repeats=5, axis=0)
             lgeef = np.repeat(extract_segments(df_cleandmd[df_cleandmd['pat'] == patient_name]['lgepos_'].values[0]),
                             repeats=5, axis=0)
@@ -591,20 +583,6 @@ def calc_strain4singlepatient(path_to_patient_folder, N_TIMESTEPS, RVIP_method, 
                 first_split = df_cleandmd[df_cleandmd['pat'] == patient_name]['first_split'].values[0]
             except Exception as e:
                 pass
-
-        # NANMEAN!!!
-        # rs_overtime_base = AHAcube_base.mean(axis=2)[..., 0]
-        # cs_overtime_base = AHAcube_base.mean(axis=2)[..., 1]
-        # rs_overtime_mc = AHAcube_midcavity.mean(axis=2)[..., 0]
-        # cs_overtime_mc = AHAcube_midcavity.mean(axis=2)[..., 1]
-        # rs_overtime_apex = AHAcube_apex.mean(axis=2)[..., 0]
-        # cs_overtime_apex = AHAcube_apex.mean(axis=2)[..., 1]
-
-        # 80,1 = 5 timesteps * 16 segments as column
-        # rs_AHA_overtime = np.concatenate((rs_overtime_base, rs_overtime_mc, rs_overtime_apex), axis=0).reshape(
-        #     (16 * 5, 1))
-        # cs_AHA_overtime = np.concatenate((cs_overtime_base, cs_overtime_mc, cs_overtime_apex), axis=0).reshape(
-        #     (16 * 5, 1))
 
         patientid = ([patient_name] * 16 * 5)
         ahano = np.repeat(range(1, 17), repeats=5, axis=0)

@@ -312,14 +312,14 @@ def create_grid_search(refit='balanced_accuracy', cv=5):
     gammas = [1e-1, 1e-2, 1e-3, 1e-4, 1e-5, 1e-6, 1e-7, 'scale', 'auto']
     Cs = [0.1, 1, 5, 10, 20, 100, 1e3]
     kernels = ['linear', 'poly', 'rbf', 'sigmoid']
-    weights = ['balanced']
+    weights = ['balanced', None]
     degree = [2, 3, 4, 5]
     n_estimators = [10, 100, 500, 1000]
     criterions = ['gini', 'entropy', 'log_loss']
     penalties = ['l2']
     solvers = ['liblinear']
     solver_mlp = ['adam', 'sdg', 'lbfgs']
-    hidden_layer_sizes = [(100,), (100,50,10), (50,20,10)]
+    hidden_layer_sizes = [(100,), (100,50,10), (50,20,10), (5,10,5)]
     depths = [2,3,5,10]
 
     scaler = [StandardScaler(), MinMaxScaler(), None]
@@ -349,7 +349,7 @@ def create_grid_search(refit='balanced_accuracy', cv=5):
     clfs['Logistic Regression'] = LogisticRegression(random_state=1, class_weight='balanced', max_iter=1000)
     clfs['Random Forest'] = make_pipeline(MinMaxScaler(), RandomForestClassifier(n_estimators=500, random_state=1,
                                                                                  class_weight='balanced'))  # RandomForestClassifier(n_estimators=100, random_state=1, class_weight='balanced')
-    clfs['Scaled DecissionTree'] = make_pipeline(MinMaxScaler(), tree.DecisionTreeClassifier(class_weight='balanced'))
+    clfs['Scaled DecisionTree'] = make_pipeline(MinMaxScaler(), tree.DecisionTreeClassifier(class_weight='balanced'))
     clfs['Scaled SVC(poly)'] = make_pipeline(MinMaxScaler(),
                                              SVC(kernel='poly', gamma='auto', class_weight='balanced', C=100))
 
@@ -360,7 +360,7 @@ def create_grid_search(refit='balanced_accuracy', cv=5):
             ('rf', clfs['Random Forest']),
             ('mlp', clfs['MLP']),
             ('svc', clfs['Scaled SVC(poly)']),
-            ('dt', clfs['Scaled DecissionTree'])
+            ('dt', clfs['Scaled DecisionTree'])
         ],
         voting='hard')
 
@@ -406,6 +406,8 @@ def create_grid_search(refit='balanced_accuracy', cv=5):
                   'clf__solver': solver_mlp,
                   'clf__hidden_layer_sizes':hidden_layer_sizes,
                   'scaler': scaler}
+    nv_params = {'clf': (GaussianNB(),),
+                 'scaler': scaler}
 
     params_ = {'booster': 'dart',
               'max_depth': 5, 'learning_rate': 0.1,
@@ -418,7 +420,7 @@ def create_grid_search(refit='balanced_accuracy', cv=5):
                   'clf__max_depth': depths,
                   'scaler':scaler}
 
-    params = [rf_params, svc_params, lr_params, et_params, dt_params, ens_params, mlp_params, xgb_params]
+    params = [rf_params, svc_params, lr_params, et_params, dt_params, ens_params, mlp_params, xgb_params, nv_params]
 
     pipeline = Pipeline(steps=[
         ('scaler', None),
@@ -437,10 +439,10 @@ def create_grid_search(refit='balanced_accuracy', cv=5):
                         n_jobs=16)
 
 
-def ttest_per_keyframe(df):
+def ttest_per_keyframe(df, hue='lge'):
 
     ps = {}
-    temp_y = np.stack(df.groupby(['pat'])['lge'].apply(list).values).astype(np.float32)
+    temp_y = np.stack(df.groupby(['pat'])[hue].apply(list).values).astype(np.float32)
     temp_y_patients = temp_y.sum(axis=1) > 0
     pat_pos = df.pat.unique()[temp_y_patients == True]
     pat_neg = df.pat.unique()[temp_y_patients == False]
@@ -543,7 +545,7 @@ def plot_strain_per_time(df, title=None, method=None, hue='lge', sig_niv = 0.05)
         y_cs = 0.02 + df['our_cs'].max()
 
         # added
-        ps = ttest_per_keyframe(df)
+        ps = ttest_per_keyframe(df, hue=hue)
 
         for xtick in ax1.get_xticks():
             ax1.text(xtick, y_cs, '{}'.format('**' if ps['{}_{}'.format('cs', xtick)] < sig_niv else ''),
@@ -558,7 +560,7 @@ def plot_strain_per_time(df, title=None, method=None, hue='lge', sig_niv = 0.05)
         strain = 'RS'
         strain_col = 'our_rs'
         phase_idx = 0
-        df_pvals_uncorrected = get_pvals_uncorrected(df)
+        df_pvals_uncorrected = get_pvals_uncorrected(df, target=hue)
         print(df_pvals_uncorrected.shape)
         msk_ss, df_pvals_corrected = get_pvals_corrected(df_pvals_uncorrected, alpha0=alpha0)
         plt.show()

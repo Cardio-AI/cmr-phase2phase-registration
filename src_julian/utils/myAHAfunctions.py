@@ -487,6 +487,7 @@ def myMorales(ff_comp, mask_lvmyo, com_cube, spacing, method, reg_backwards):
         # TODO
         #strain.Err[strain.mask_rot != lv_label] = 0.0
         #strain.Ecc[strain.mask_rot != lv_label] = 0.0
+
         #strain.Err = np.clip(a=strain.Err,a_min=np.quantile(a=strain.Err,q=0.001), a_max=np.quantile(a=strain.Err,q=0.999))
         #strain.Ecc = np.clip(a=strain.Ecc, a_min=np.quantile(a=strain.Ecc, q=0.001),
         #                     a_max=np.quantile(a=strain.Ecc, q=0.999))
@@ -530,13 +531,23 @@ def calculate_AHA_cube(Err, Ecc, sector_masks_rot, masks_rot, Z_SLICES, N_AHA):
     # here we derive the mean strain per segment mask and slice, every voxel is weighted equally,
     # for compatibility reasons with the per-slice average approach we repeat the mean strain value per slice
     # and average them later
+    Err = clip_quantile(Err*(masks_rot== label_lvmyo), q=.999)
+    Ecc = clip_quantile(Ecc*(masks_rot== label_lvmyo), q=.999)
+
     for t in range(nt):
         for idx, AHA in enumerate(N_AHA): # check if this segment is visible in this slice
             mask = ((sector_masks_rot[t] == AHA) & (masks_rot[t] == label_lvmyo))
             #mask = (sector_masks_rot[t] == AHA) # here we dont mask by the smoothed LV myo
             if mask.sum()>0:
-                err = np.ma.mean(np.ma.array(Err[t], mask=~mask))
-                ecc = np.ma.mean(np.ma.array(Ecc[t], mask=~mask))
+
+                err = Err[t]
+                ecc = Ecc[t]
+                #err = clip_quantile(err*mask, q=0.999)
+                #ecc = clip_quantile(ecc*mask, q=0.999)
+                # we create a masked array for mean derivation as here we will divide the sum by #masked voxels
+                # Otherwise we would consider the zero/masked values into the mean calculation
+                err = np.ma.mean(np.ma.array(err, mask=~mask))
+                ecc = np.ma.mean(np.ma.array(ecc, mask=~mask))
             else: # ignore slices where no segment is visible
                 err = np.NaN
                 ecc = np.NaN
@@ -1194,4 +1205,13 @@ def plot_overlay_CMRwithMaskedStrainBySectorAHA(AHA, label_lvmyo, t, z_rel, z_ab
     # plt.imshow(roll_to_center(mask_whole[t, z_abs, ..., 0], com_cube[t, 2], com_cube[t, 1]), alpha=.5, cmap='gray')
     plt.legend()
     plt.show()
+
+def clip_quantile(nda, q = 0.999):
+    q_lower = 1 - q
+    # one lower/upper threshold per CS and RS
+    lower_threshold = np.quantile(a=nda, q=q_lower)
+    upper_threshold = np.quantile(a=nda, q=q)
+
+    return np.clip(a=nda, a_min=lower_threshold,
+            a_max=upper_threshold)
 

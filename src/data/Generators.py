@@ -1340,7 +1340,7 @@ class PhaseMaskWindowGenerator(DataGenerator):
             combined, combined_m, i, idx = self.__pre_load_one_image__(i, ID)
 
         # --------------- HIST MATCHING--------------
-        if self.HIST_MATCHING and random.random() <= 0.5:
+        if self.HIST_MATCHING and random.random() <= 0.2:
             # this image has the original inplane resolution
 
             if self.IN_MEMORY:

@@ -12,7 +12,7 @@ from sklearn.metrics import confusion_matrix
 from src_julian.utils.Utils_io import save_plot, ensure_dir
 import cv2
 
-def get_ip_from_2dmask(nda, debug=False, rev=False):
+def get_ip_from_2dmask(nda, debug=False, rev=False, lvmyo_label=2):
     """
     Find the RVIP on a 2D mask with the following labels
     RV (0), LVMYO (1) and LV (2) mask
@@ -31,7 +31,7 @@ def get_ip_from_2dmask(nda, debug=False, rev=False):
     # initialise some values
     first, second = None, None
     # find first and second insertion points
-    myo_msk = (nda == 2).astype(np.uint8)
+    myo_msk = (nda == lvmyo_label).astype(np.uint8)
     comb_msk = ((nda == 1) | (nda == 2) | (nda == 3)).astype(np.uint8)
     if np.isin(1,nda) and np.isin(2, nda):
         myo_contours, hierarchy = cv2.findContours(myo_msk, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
@@ -1004,7 +1004,8 @@ class Console_and_file_logger():
         logging.info('Log file: {}'.format(log_f))
         logging.info('Log level for console: {}'.format(logging.getLevelName(log_lvl)))
 
-def extract_segments(segments_str, segments=16):
+def extract_segments(segments_str, segments=16, lge=False):
+
     nda = np.zeros(segments).astype(int)
     try:
         if type(segments_str) in [int, float, np.int32, np.float32, np.float64, np.float16] and (int(segments_str) != 0):
@@ -1020,4 +1021,7 @@ def extract_segments(segments_str, segments=16):
         print('cant find a sequence: {} with {}'.format(segments_str, e))
         raise e
     nda[numbers] = int(1)
+    if lge:
+        #print('segment str: {}, return nda: {}'.format(segments_str, nda)) # debug resons
+        pass
     return nda
