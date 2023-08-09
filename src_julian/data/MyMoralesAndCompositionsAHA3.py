@@ -209,14 +209,14 @@ def calc_strain4singlepatient(path_to_patient_folder, N_TIMESTEPS, RVIP_method, 
         print(patient_name)
     # IDXs FROM RVIP DETECTION IN WHOLE MASKS
     # get lowest and highest index of z where all timesteps have RVIP identified
-    #rvip_range = calculate_wholeheartvolumeborders_by_RVIP(mask_whole)
+    rvip_range = calculate_wholeheartvolumeborders_by_RVIP(mask_whole)
     # define from where we take the identified heart volume borders
-    wholeheartvolumeborders_lvmyo = [lvmyo_idxs[0], lvmyo_idxs[-1]]  # from LVMYOMASKS range
-    #wholeheartvolumeborders_rviprange = [rvip_range[0], rvip_range[-1]]  # from RVIP range
+    #wholeheartvolumeborders_lvmyo = [lvmyo_idxs[0], lvmyo_idxs[-1]]  # from LVMYOMASKS range
+    wholeheartvolumeborders_rviprange = [rvip_range[0], rvip_range[-1]]  # from RVIP range
     # level ranges
     # 2021.10.06: lvmyo more accurate when not-sparse
-    base_slices, midcavity_slices, apex_slices = get_volumeborders(wholeheartvolumeborders_lvmyo)  # by lvmyo-range
-    #base_slices, midcavity_slices, apex_slices = get_volumeborders(wholeheartvolumeborders_rviprange)  # by rvip-range
+    #base_slices, midcavity_slices, apex_slices = get_volumeborders(wholeheartvolumeborders_lvmyo)  # by lvmyo-range
+    base_slices, midcavity_slices, apex_slices = get_volumeborders(wholeheartvolumeborders_rviprange)  # by rvip-range
     # plot composed flowfields against each other if wanted
     # plot_three_ComposedFlowfields_against_each_other(ff, ff_whole_Sven, ff_whole_itk,
     #                                                  wholeheartvolumeborders_lvmyo, mask_lvmyo)

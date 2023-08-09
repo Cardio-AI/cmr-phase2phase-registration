@@ -815,8 +815,8 @@ def calculate_wholeheartvolumeborders_by_RVIP(mask_whole):
         res = [i for i in range(len(RVIPup_glob)) if RVIPup_glob[i] != None]
         heartborders[t, 0] = res[0]
         heartborders[t, 1] = res[-1]
-
-    wholeheartvolumeborders = [int(np.max(heartborders[:, 0])), int(np.min(heartborders[:, 1]))]
+    #wholeheartvolumeborders = [int(np.max(heartborders[:, 0])), int(np.min(heartborders[:, 1]))]
+    wholeheartvolumeborders = [int(heartborders[0, 0]), int(heartborders[0, 1])] # use the ED mask as border
 
     return wholeheartvolumeborders
 

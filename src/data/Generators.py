@@ -1158,6 +1158,7 @@ class PhaseMaskWindowGenerator(DataGenerator):
         t1 = time()
 
         # --------------- SPATIAL RESAMPLING-------------
+        new_size_inputs = [list(model_inputs[0].GetSize())] * len(model_inputs) # fallback, if we dont resample
         if self.RESAMPLE:
             target_spacing = list(reversed(self.SPACING))
             input_z_spacing = model_inputs[0].GetSpacing()[-1]
