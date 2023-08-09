@@ -1,6 +1,7 @@
 # define logging and working directory
 from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor
 
+import SimpleITK
 from ProjectRoot import change_wd_to_project_root
 
 # import helper functions
@@ -161,6 +162,11 @@ def calc_strain4singlepatient(path_to_patient_folder, N_TIMESTEPS, RVIP_method, 
     # patient_name = os.path.basename(path_to_patient_folder) #test21.10.21
     # iteration info
     INFO('now processing: ' + patient_name)
+    # overwrite the config spacing
+    import SimpleITK as sitk
+    temp = sitk.ReadImage(sorted(glob.glob(os.path.join(path_to_patient_folder, '*fullmask*.nii')))[0])
+    spacing = list(reversed(temp.GetSpacing()))
+    Z_SPACING = spacing[-1] # (1.5,1.5,2.5)
     # CMR of patient
     # targetcmr doesnt need to be rolled
     #vol_cube = stack_nii_volume(path_to_patient_folder, 'cmr_moving_', N_TIMESTEPS)  # refactored
@@ -177,6 +183,8 @@ def calc_strain4singlepatient(path_to_patient_folder, N_TIMESTEPS, RVIP_method, 
     # originally from Svens output, ff is of shape cxyzt with c=zyx
     ff = mvf(data=stack_nii_flowfield(path_to_patient_folder, 'flow_', N_TIMESTEPS), format='4Dt',
              zspacing=Z_SPACING)  # refactored
+
+
     # load ff_masked if needed
     # ff_masked_raw = mvf(data=stack_nii_flowfield(path_to_patient_folder, 'flow_masked_', N_TIMESTEPS), format='4Dt',
     # zspacing=Z_SPACING)
