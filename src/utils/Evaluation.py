@@ -15,7 +15,7 @@ import seaborn as sb
 import sklearn
 from sklearn.feature_selection import SelectKBest, chi2
 from sklearn.svm import LinearSVC, SVC
-from sklearn.preprocessing import StandardScaler
+from sklearn.preprocessing import StandardScaler, RobustScaler
 from sklearn.datasets import make_classification
 from sklearn import tree
 from sklearn.model_selection import train_test_split, cross_val_score, cross_val_predict, cross_validate, GridSearchCV
@@ -249,8 +249,8 @@ def cross_validate_f1(x, y):
     #skf = KFold(n_splits=cv)
 
     clfs = {}
-    clfs['MLP'] = make_pipeline(MinMaxScaler(),MLPClassifier(hidden_layer_sizes=(100,50,10), random_state=1,
-              solver='adam', max_iter=1000))
+    clfs['MLP'] = make_pipeline(StandardScaler(),MLPClassifier(hidden_layer_sizes=(100,50,10), random_state=1,
+              solver='adam', max_iter=10000))
     clfs['Logistic Regression'] = LogisticRegression(random_state=1, class_weight='balanced', max_iter=1000)
     clfs['Random Forest'] = make_pipeline(MinMaxScaler(), RandomForestClassifier(n_estimators=500, random_state=1,
                                                                                    class_weight='balanced'))  # RandomForestClassifier(n_estimators=100, random_state=1, class_weight='balanced')
@@ -322,7 +322,7 @@ def create_grid_search(refit='balanced_accuracy', cv=5):
     hidden_layer_sizes = [(100,), (100,50,10), (50,20,10), (5,10,5)]
     depths = [2,3,5,10]
 
-    scaler = [StandardScaler(), MinMaxScaler(), None]
+    scaler = [StandardScaler(), MinMaxScaler(), RobustScaler()]
 
     from sklearn.model_selection import StratifiedKFold, KFold
     skf = StratifiedKFold(n_splits=cv)
@@ -345,7 +345,7 @@ def create_grid_search(refit='balanced_accuracy', cv=5):
     ################ ensemble #############
     clfs = {}
     clfs['MLP'] = make_pipeline(MinMaxScaler(), MLPClassifier(hidden_layer_sizes=(100, 50, 10), random_state=1,
-                                                              solver='adam', max_iter=1000))
+                                                              solver='adam', max_iter=10000))
     clfs['Logistic Regression'] = LogisticRegression(random_state=1, class_weight='balanced', max_iter=1000)
     clfs['Random Forest'] = make_pipeline(MinMaxScaler(), RandomForestClassifier(n_estimators=500, random_state=1,
                                                                                  class_weight='balanced'))  # RandomForestClassifier(n_estimators=100, random_state=1, class_weight='balanced')
@@ -402,7 +402,7 @@ def create_grid_search(refit='balanced_accuracy', cv=5):
                  'clf__criterion': criterions,
                  'scaler': scaler}
     mlp_params = {'clf':(MLPClassifier(hidden_layer_sizes=(100, 50, 10), random_state=1,
-                                                              solver='adam'),),
+                                                              solver='adam', max_iter=10000),),
                   'clf__solver': solver_mlp,
                   'clf__hidden_layer_sizes':hidden_layer_sizes,
                   'scaler': scaler}
@@ -428,7 +428,9 @@ def create_grid_search(refit='balanced_accuracy', cv=5):
         ('clf', None)
     ])
     scoring = {'f1': f1_m, 'recall': rec_m, 'balanced_accuracy': bacc_m, 'sens': sens_m, 'spec': spec_m,
-               'roc_auc': roc_m, 'precision': prec_m, 'accuracy': acc_m}
+               'roc_auc': roc_m,
+               #'precision': prec_m,
+               'accuracy': acc_m}
     #scoring ={'balanced_accuracy': bacc_m}
     # scoring = ['recall', 'accuracy', 'balanced_accuracy', 'average_precision','precision', 'f1', 'roc_auc']
     return GridSearchCV(estimator=pipeline,

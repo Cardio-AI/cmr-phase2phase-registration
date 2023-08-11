@@ -1145,12 +1145,7 @@ class PhaseMaskWindowGenerator(DataGenerator):
             idx = get_phases_as_idx_gcn(x, self.DF_METADATA, temporal_sampling_factor, len(model_inputs))
         logging.debug('index loading took: {:0.3f} s'.format(time() - t1))
 
-        # --------------- SPLIT IN 3D SITK IMAGES-------------
-        # Create a list of 3D volumes for volume resampling
-        model_inputs = split_one_4d_sitk_in_list_of_3d_sitk(model_inputs, axis=0, prob=self.AUGMENT_PROB)
-        model_m_inputs = split_one_4d_sitk_in_list_of_3d_sitk(model_m_inputs, axis=0, prob=self.AUGMENT_PROB)
-        logging.debug('split in t x 3D took: {:0.3f} s'.format(time() - t1))
-        t1 = time()
+        new_size_inputs = [list(model_inputs[0].GetSize())] * model_inputs.GetSize()[-1]  # fallback, if we dont resample
 
 
         # logging.debug('transposed: \n{}'.format(onehot))
@@ -1158,8 +1153,16 @@ class PhaseMaskWindowGenerator(DataGenerator):
         t1 = time()
 
         # --------------- SPATIAL RESAMPLING-------------
-        new_size_inputs = [list(model_inputs[0].GetSize())] * len(model_inputs) # fallback, if we dont resample
+
         if self.RESAMPLE:
+
+            # --------------- SPLIT IN 3D SITK IMAGES-------------
+            # Create a list of 3D volumes for volume resampling
+            model_inputs = split_one_4d_sitk_in_list_of_3d_sitk(model_inputs, axis=0, prob=self.AUGMENT_PROB)
+            model_m_inputs = split_one_4d_sitk_in_list_of_3d_sitk(model_m_inputs, axis=0, prob=self.AUGMENT_PROB)
+            logging.debug('split in t x 3D took: {:0.3f} s'.format(time() - t1))
+            t1 = time()
+
             target_spacing = list(reversed(self.SPACING))
             input_z_spacing = model_inputs[0].GetSpacing()[-1]
             if not self.RESAMPLE_Z: # keep z
@@ -1202,16 +1205,19 @@ class PhaseMaskWindowGenerator(DataGenerator):
                                                   spacing=target_spacing,
                                                   interpolate=self.MSK_INTERPOLATION),  # sitk.nearest
                                       zip(model_m_inputs, new_size_inputs)))
+            logging.debug('Spacing after resample: {}'.format(model_inputs[0].GetSpacing()))
+            logging.debug('Size after resample: {}'.format(model_inputs[0].GetSize()))
+            logging.debug('spatial resampling took: {:0.3f} s'.format(time() - t1))
+            # --------------- CONTINUE WITH ND-ARRAYS --------------
+            # transform to nda for further processing
+            model_inputs = np.stack(list(map(lambda x: sitk.GetArrayFromImage(x), model_inputs)), axis=0)
+            model_m_inputs = np.stack(list(map(lambda x: sitk.GetArrayFromImage(x), model_m_inputs)), axis=0)
+        else: # no resampling, no 3D splitting, use the image as it is
+            model_inputs = sitk.GetArrayFromImage(model_inputs)
+            model_m_inputs = sitk.GetArrayFromImage(model_m_inputs)
 
-        logging.debug('Spacing after resample: {}'.format(model_inputs[0].GetSpacing()))
-        logging.debug('Size after resample: {}'.format(model_inputs[0].GetSize()))
-        logging.debug('spatial resampling took: {:0.3f} s'.format(time() - t1))
         t1 = time()
 
-        # --------------- CONTINUE WITH ND-ARRAYS --------------
-        # transform to nda for further processing
-        model_inputs = np.stack(list(map(lambda x: sitk.GetArrayFromImage(x), model_inputs)), axis=0)
-        model_m_inputs = np.stack(list(map(lambda x: sitk.GetArrayFromImage(x), model_m_inputs)), axis=0)
         spatial_sampling_factor = new_size_inputs[0][-1] / old_size
         # Create a sparse mask from the interpolated/resampled mask,
         # by this we drop the interpolated spatial slices and replace them with zero padded slices

@@ -115,8 +115,8 @@ def calculate_strain(data_root='', metadata_path='/mnt/ssd/julian/data/metadata/
 
     df_patients = []  # df where we will store our results
     metadata_filename = 'DMDTarique_3.0.xlsx'
-    RVIP_method = 'staticED'   # staticED (standard), dynamically
-    com_method = 'staticED'  # dynamically (standard), staticED
+    RVIP_method = 'dynamically'   # staticED (standard), dynamically
+    com_method = 'dynamically'  # dynamically (standard), staticED
 
     N_TIMESTEPS = 5
     Z_SPACING = spacing_vol[-1]
@@ -159,6 +159,13 @@ def calc_strain4singlepatient(path_to_patient_folder, N_TIMESTEPS, RVIP_method, 
                               p2p_style, path_to_metadata_xls, df_dmdahastrain,
                               df_cleandmd, spacing, register_backwards):
     patient_name = os.path.basename(os.path.dirname(path_to_patient_folder))
+    if ff_style=='p2p':
+        RVIP_method = 'dynamically'  # staticED (standard), dynamically
+        com_method = 'dynamically'  # dynamically (standard), staticED
+    else:
+        RVIP_method = 'staticED'  # staticED (standard), dynamically
+        com_method = 'staticED'  # dynamically (standard), staticED
+
     # patient_name = os.path.basename(path_to_patient_folder) #test21.10.21
     # iteration info
     INFO('now processing: ' + patient_name)
@@ -173,11 +180,13 @@ def calc_strain4singlepatient(path_to_patient_folder, N_TIMESTEPS, RVIP_method, 
     # LV MYO MASKS
     # targetmask doesnt need to be rolled
     # previously "mask" files were used here
-    mask_lvmyo = stack_nii_masks(path_to_patient_folder, 'myo_target_', N_TIMESTEPS)  # refactored
+    mask_lvmyo = stack_nii_masks(path_to_patient_folder, 'myo_target_', N_TIMESTEPS)  # refactored, ED,MS,ES,PF,MD
     mask_lvmyo = mask_lvmyo>0.1
     # WHOLE MASKS
     # lvtargetmask doesnt need to be rolled
     mask_whole = stack_nii_masks(path_to_patient_folder, 'fullmask_moving_', N_TIMESTEPS)  # refactored
+    # ED, MS, ES, PF, MD, we mask from the target, if we use lvmyo mask together with the sector mask, we should roll
+    mask_whole = np.roll(mask_whole, shift=1, axis=0)
     # FULL FLOWFIELD PHASE-PHASE
     # dont roll the flow!
     # originally from Svens output, ff is of shape cxyzt with c=zyx
@@ -208,23 +217,40 @@ def calc_strain4singlepatient(path_to_patient_folder, N_TIMESTEPS, RVIP_method, 
     else:
         ff_comp_Sven = stack_nii_flowfield(path_to_patient_folder, 'flow_composed_', N_TIMESTEPS)
         ff_whole = ff_comp_Sven  # this is for the masking in Morales DeepStrain
+
+    # remove the most apical and basal slices, as they often are wrong
+    for t in range(mask_lvmyo.shape[0]):
+        mask_given = np.argwhere(mask_lvmyo[t].sum(axis=(1, 2, 3)) > 0)
+        mask_lvmyo[t, mask_given[0]] = 0
+        mask_lvmyo[t, mask_given[-1]] = 0
+        mask_whole[t,mask_given[0]] = 0
+        mask_whole[t, mask_given[-1]] = 0
+        # 2nd border removing
+        mask_given = np.argwhere(mask_lvmyo[t].sum(axis=(1, 2, 3)) > 0)
+        mask_lvmyo[t, mask_given[0]] = 0
+        mask_lvmyo[t, mask_given[-1]] = 0
+        mask_whole[t, mask_given[0]] = 0
+        mask_whole[t, mask_given[-1]] = 0
+
     # IDXs FROM (SPARSE) LVMYOMASKS
     # get all indexes of phases where all timesteps contain lv myo segmentations
     lvmyo_idxs = np.argwhere(
-        np.all(volume(mask_lvmyo, '4Dt', 1).get_segmentationarray(resolution='slicewise')[..., 0],
+        np.any(volume(mask_lvmyo, '4Dt', 1).get_segmentationarray(resolution='slicewise')[..., 0],
                axis=0)).flatten()
     if len(lvmyo_idxs) == 0:
         print(patient_name)
+
+    # the most basal and most apical myomask is often not relyable, we zero them out
     # IDXs FROM RVIP DETECTION IN WHOLE MASKS
     # get lowest and highest index of z where all timesteps have RVIP identified
-    rvip_range = calculate_wholeheartvolumeborders_by_RVIP(mask_whole)
+    #rvip_range = calculate_wholeheartvolumeborders_by_RVIP(mask_whole)
     # define from where we take the identified heart volume borders
-    #wholeheartvolumeborders_lvmyo = [lvmyo_idxs[0], lvmyo_idxs[-1]]  # from LVMYOMASKS range
-    wholeheartvolumeborders_rviprange = [rvip_range[0], rvip_range[-1]]  # from RVIP range
+    wholeheartvolumeborders_lvmyo = [lvmyo_idxs[0], lvmyo_idxs[-1]]  # from LVMYOMASKS range
+    #wholeheartvolumeborders_rviprange = [rvip_range[0], rvip_range[-1]]  # from RVIP range
     # level ranges
     # 2021.10.06: lvmyo more accurate when not-sparse
-    #base_slices, midcavity_slices, apex_slices = get_volumeborders(wholeheartvolumeborders_lvmyo)  # by lvmyo-range
-    base_slices, midcavity_slices, apex_slices = get_volumeborders(wholeheartvolumeborders_rviprange)  # by rvip-range
+    base_slices, midcavity_slices, apex_slices = get_volumeborders(wholeheartvolumeborders_lvmyo)  # by lvmyo-range
+    #base_slices, midcavity_slices, apex_slices = get_volumeborders(wholeheartvolumeborders_rviprange)  # by rvip-range
     # plot composed flowfields against each other if wanted
     # plot_three_ComposedFlowfields_against_each_other(ff, ff_whole_Sven, ff_whole_itk,
     #                                                  wholeheartvolumeborders_lvmyo, mask_lvmyo)
@@ -342,9 +368,6 @@ def calc_strain4singlepatient(path_to_patient_folder, N_TIMESTEPS, RVIP_method, 
     Ecc = np.einsum('txyz->tzyx', Circumferential_Sven)
     masks_rot_lvmyo = np.einsum('txyz->tzyx', masks_rot_Sven)
 
-    # Make sure that we set all strain values outside the myocardium to 0 in before
-    # This happens currently in myMorales()
-
     # now, Strain Tensor and sector masks do have the shape
     # tzyx = (5,16,128,128)
     x = 0
@@ -458,7 +481,8 @@ def calc_strain4singlepatient(path_to_patient_folder, N_TIMESTEPS, RVIP_method, 
     # rs_AHA_overtime = np.nan_to_num(rs_AHA_overtime)
     # cs_AHA_overtime = np.nan_to_num(cs_AHA_overtime)
     if (np.isnan(rs_AHA_overtime).any() or np.isnan(cs_AHA_overtime).any()):
-        raise NotImplementedError('Some AHA segments have NaN values, please check!')
+        print('Some AHA segments have NaN values, please check!')
+        #raise NotImplementedError('Some AHA segments have NaN values, please check!')
     INFO('Err min: {:3.1f}%'.format(100 * rs_AHA_overtime.min()))
     INFO('Err max: {:3.1f}%'.format(100 * rs_AHA_overtime.max()))
     INFO('Err mean: {:3.1f}%'.format(100 * rs_AHA_overtime.mean()))
