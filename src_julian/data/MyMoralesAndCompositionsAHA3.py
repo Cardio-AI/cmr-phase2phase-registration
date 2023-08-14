@@ -180,8 +180,8 @@ def calc_strain4singlepatient(path_to_patient_folder, N_TIMESTEPS, RVIP_method, 
     # LV MYO MASKS
     # targetmask doesnt need to be rolled
     # previously "mask" files were used here
-    mask_lvmyo = stack_nii_masks(path_to_patient_folder, 'myo_target_', N_TIMESTEPS)  # refactored, ED,MS,ES,PF,MD
-    mask_lvmyo = mask_lvmyo>0.1
+    mask_lvmyo = stack_nii_masks(path_to_patient_folder, 'myo_target_', N_TIMESTEPS)  # moving: ED,MS,ES,PF,MD
+    mask_lvmyo = mask_lvmyo>0.5
     # WHOLE MASKS
     # lvtargetmask doesnt need to be rolled
     mask_whole = stack_nii_masks(path_to_patient_folder, 'fullmask_moving_', N_TIMESTEPS)  # refactored
@@ -221,16 +221,16 @@ def calc_strain4singlepatient(path_to_patient_folder, N_TIMESTEPS, RVIP_method, 
     # remove the most apical and basal slices, as they often are wrong
     for t in range(mask_lvmyo.shape[0]):
         mask_given = np.argwhere(mask_lvmyo[t].sum(axis=(1, 2, 3)) > 0)
-        mask_lvmyo[t, mask_given[0]] = 0
-        mask_lvmyo[t, mask_given[-1]] = 0
-        mask_whole[t,mask_given[0]] = 0
-        mask_whole[t, mask_given[-1]] = 0
+        mask_lvmyo[t, 0:int(mask_given[0])] = 0
+        mask_lvmyo[t, int(mask_given[-1]):0] = 0
+        mask_whole[t,0:int(mask_given[0])] = 0
+        mask_whole[t, int(mask_given[-1]):] = 0
         # 2nd border removing
-        mask_given = np.argwhere(mask_lvmyo[t].sum(axis=(1, 2, 3)) > 0)
+        """mask_given = np.argwhere(mask_lvmyo[t].sum(axis=(1, 2, 3)) > 0)
         mask_lvmyo[t, mask_given[0]] = 0
         mask_lvmyo[t, mask_given[-1]] = 0
         mask_whole[t, mask_given[0]] = 0
-        mask_whole[t, mask_given[-1]] = 0
+        mask_whole[t, mask_given[-1]] = 0"""
 
     # IDXs FROM (SPARSE) LVMYOMASKS
     # get all indexes of phases where all timesteps contain lv myo segmentations
@@ -437,17 +437,17 @@ def calc_strain4singlepatient(path_to_patient_folder, N_TIMESTEPS, RVIP_method, 
                                       sector_masks_rot=sector_masks_rot_base,
                                       masks_rot=masks_rot_lvmyo[:, base_slices],
                                       Z_SLICES=base_slices,
-                                      N_AHA=N_AHA_base)
+                                      N_AHA=N_AHA_base, p2p_style=p2p_style)
     AHAcube_midcavity = calculate_AHA_cube(Err=Err[:, midcavity_slices], Ecc=Ecc[:, midcavity_slices],
                                            sector_masks_rot=sector_masks_rot_midcavity,
                                            masks_rot=masks_rot_lvmyo[:, midcavity_slices],
                                            Z_SLICES=midcavity_slices,
-                                           N_AHA=N_AHA_midcavity)
+                                           N_AHA=N_AHA_midcavity, p2p_style=p2p_style)
     AHAcube_apex = calculate_AHA_cube(Err=Err[:, apex_slices], Ecc=Ecc[:, apex_slices],
                                       sector_masks_rot=sector_masks_rot_apex,
                                       masks_rot=masks_rot_lvmyo[:, apex_slices],
                                       Z_SLICES=apex_slices,
-                                      N_AHA=N_AHA_apex)
+                                      N_AHA=N_AHA_apex, p2p_style=p2p_style)
 
     # test with outlier clipping
     # first, assign the values, than clip, than nanmean
@@ -483,12 +483,14 @@ def calc_strain4singlepatient(path_to_patient_folder, N_TIMESTEPS, RVIP_method, 
     if (np.isnan(rs_AHA_overtime).any() or np.isnan(cs_AHA_overtime).any()):
         print('Some AHA segments have NaN values, please check!')
         #raise NotImplementedError('Some AHA segments have NaN values, please check!')
-    INFO('Err min: {:3.1f}%'.format(100 * rs_AHA_overtime.min()))
-    INFO('Err max: {:3.1f}%'.format(100 * rs_AHA_overtime.max()))
-    INFO('Err mean: {:3.1f}%'.format(100 * rs_AHA_overtime.mean()))
-    INFO('Ecc min: {:3.1f}%'.format(100 * cs_AHA_overtime.max()))
-    INFO('Ecc max: {:3.1f}%'.format(100 * cs_AHA_overtime.min()))
-    INFO('Ecc mean: {:3.1f}%'.format(100 * cs_AHA_overtime.mean()))
+    INFO('Strain method: {}'.format(ff_style))
+    INFO('Err min: {:3.1f}%, max: {:3.1f}%, mean: {:3.1f}%'.format(100 * rs_AHA_overtime.min(),
+                                                                   100 * rs_AHA_overtime.max(),
+                                                                   100 * rs_AHA_overtime.mean()))
+    INFO('Ecc min: {:3.1f}%, max: {:3.1f}%, mean: {:3.1f}%'.format(100 * cs_AHA_overtime.min(),
+                                                                   100 * cs_AHA_overtime.max(),
+                                                                   100 * cs_AHA_overtime.mean()))
+
     ######PLOTTING######
     x = 0
     # plot cmr overlay strain map masked

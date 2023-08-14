@@ -518,7 +518,7 @@ def get_mean_strain_values_from_Morales(array, masks):
     return MeanStrains
 
 
-def calculate_AHA_cube(Err, Ecc, sector_masks_rot, masks_rot, Z_SLICES, N_AHA):
+def calculate_AHA_cube(Err, Ecc, sector_masks_rot, masks_rot, Z_SLICES, N_AHA, p2p_style):
     '''
     the last index of AHAcube contains Err (0) and Ecc (1) strain values
     AHAcube is of shape i.e. 6,5,15,2
@@ -531,19 +531,17 @@ def calculate_AHA_cube(Err, Ecc, sector_masks_rot, masks_rot, Z_SLICES, N_AHA):
     # here we derive the mean strain per segment mask and slice, every voxel is weighted equally,
     # for compatibility reasons with the per-slice average approach we repeat the mean strain value per slice
     # and average them later
-    Err = clip_quantile(Err*(masks_rot== label_lvmyo), q=.999)
-    Ecc = clip_quantile(Ecc*(masks_rot== label_lvmyo), q=.999)
+    quantile = .95
+    Err[masks_rot== label_lvmyo] = clip_quantile(Err[masks_rot== label_lvmyo], q=quantile)
+    Ecc[masks_rot== label_lvmyo] = clip_quantile(Ecc[masks_rot== label_lvmyo], q=quantile)
 
     for t in range(nt):
         for idx, AHA in enumerate(N_AHA): # check if this segment is visible in this slice
             mask = ((sector_masks_rot[t] == AHA) & (masks_rot[t] == label_lvmyo))
-            #mask = (sector_masks_rot[t] == AHA) # here we dont mask by the smoothed LV myo
             if mask.sum()>0:
-
                 err = Err[t]
                 ecc = Ecc[t]
-                #err = clip_quantile(err*mask, q=0.999)
-                #ecc = clip_quantile(ecc*mask, q=0.999)
+
                 # we create a masked array for mean derivation as here we will divide the sum by #masked voxels
                 # Otherwise we would consider the zero/masked values into the mean calculation
                 err = np.ma.mean(np.ma.array(err, mask=~mask))
@@ -651,27 +649,26 @@ def calculate_center_of_mass_cube(mask_whole, label_bloodpool, base_slices, midc
     com_cube = np.ndarray((nt, 3, 3))
 
     if method == 'staticED':
-        com_base = center_of_mass((mask_whole[0, base_slices, ..., 0] == label_bloodpool).astype(int))
-        com_mc = center_of_mass((mask_whole[0, midcavity_slices, ..., 0] == label_bloodpool).astype(int))
-        com_apex = center_of_mass((mask_whole[0, apex_slices, ..., 0] == label_bloodpool).astype(int))
+        com_base = center_of_mass((mask_whole[1, base_slices, ..., 0] == label_bloodpool).astype(int))
+        com_mc = center_of_mass((mask_whole[1, midcavity_slices, ..., 0] == label_bloodpool).astype(int))
+        com_apex = center_of_mass((mask_whole[1, apex_slices, ..., 0] == label_bloodpool).astype(int))
         # providing zyx mask coordinates returns zxy center of mass coordinates; reordering
         com_cube[0, 0, 0], com_cube[0, 0, 1], com_cube[0, 0, 2] = (com_base[0], com_base[2], com_base[1])
         com_cube[0, 1, 0], com_cube[0, 1, 1], com_cube[0, 1, 2] = (com_mc[0], com_mc[2], com_mc[1])
         com_cube[0, 2, 0], com_cube[0, 2, 1], com_cube[0, 2, 2] = (com_apex[0], com_apex[2], com_apex[1])
         com_cube = np.repeat([com_cube[0]], repeats=nt, axis=0)
 
-    # dynamically
-    for t in range(nt):
-        # calculate com at level
-        com_base = center_of_mass((mask_whole[t, base_slices, ..., 0] == label_bloodpool).astype(int))
-        com_mc = center_of_mass((mask_whole[t, midcavity_slices, ..., 0] == label_bloodpool).astype(int))
-        com_apex = center_of_mass((mask_whole[t, apex_slices, ..., 0] == label_bloodpool).astype(int))
-
-
-        # providing zyx mask coordinates returns zxy center of mass coordinates; reordering
-        com_cube[t, 0, 0], com_cube[t, 0, 1], com_cube[t, 0, 2] = (com_base[0], com_base[2], com_base[1])
-        com_cube[t, 1, 0], com_cube[t, 1, 1], com_cube[t, 1, 2] = (com_mc[0], com_mc[2], com_mc[1])
-        com_cube[t, 2, 0], com_cube[t, 2, 1], com_cube[t, 2, 2] = (com_apex[0], com_apex[2], com_apex[1])
+    else:
+        # dynamically
+        for t in range(nt):
+            # calculate com at level
+            com_base = center_of_mass((mask_whole[t, base_slices, ..., 0] == label_bloodpool).astype(int))
+            com_mc = center_of_mass((mask_whole[t, midcavity_slices, ..., 0] == label_bloodpool).astype(int))
+            com_apex = center_of_mass((mask_whole[t, apex_slices, ..., 0] == label_bloodpool).astype(int))
+            # providing zyx mask coordinates returns zxy center of mass coordinates; reordering
+            com_cube[t, 0, 0], com_cube[t, 0, 1], com_cube[t, 0, 2] = (com_base[0], com_base[2], com_base[1])
+            com_cube[t, 1, 0], com_cube[t, 1, 1], com_cube[t, 1, 2] = (com_mc[0], com_mc[2], com_mc[1])
+            com_cube[t, 2, 0], com_cube[t, 2, 1], com_cube[t, 2, 2] = (com_apex[0], com_apex[2], com_apex[1])
 
     return com_cube
 
@@ -697,7 +694,7 @@ def calculate_RVIP_cube(mask_whole, base_slices, midcavity_slices, apex_slices, 
         if method=='dynamically':
             ant, inf = get_ip_from_mask_3d(mask_whole[t], debug=False, keepdim=True, rev=False)
         elif method=='staticED' and ant is None:
-            ant, inf = get_ip_from_mask_3d(mask_whole[0], debug=False, keepdim=True, rev=False)
+            ant, inf = get_ip_from_mask_3d(mask_whole[1], debug=False, keepdim=True, rev=False)
         else:
             # reuse the existing ant, inf
             pass

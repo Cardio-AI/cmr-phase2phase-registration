@@ -1055,14 +1055,14 @@ class PhaseMaskWindowGenerator(DataGenerator):
             # use the indexes to order the batch
             # otherwise slower images will always be at the end of the batch
             # for backwards, shifted is earlier in time (shift = k-1 or k-w)
-            try:
-                x_k, s_k, x_k_shifted, s_k_shifted, i, ID, needed_time = future.result()
-                # print(x_.shape, x2_.shape, y_.shape,y2_.shape)
-                x[i,], y[i,] = x_k, x_k_shifted # shifted to an earlier frame
-                x2[i,], y2[i,] =s_k,  s_k_shifted # shifted to an earlier frame
-                logging.debug('img finished after {:0.3f} sec.'.format(needed_time))
+            #try:
+            x_k, s_k, x_k_shifted, s_k_shifted, i, ID, needed_time = future.result()
+            # print(x_.shape, x2_.shape, y_.shape,y2_.shape)
+            x[i,], y[i,] = x_k, x_k_shifted # shifted to an earlier frame
+            x2[i,], y2[i,] =s_k,  s_k_shifted # shifted to an earlier frame
+            logging.debug('img finished after {:0.3f} sec.'.format(needed_time))
                 #pass
-            except Exception as e:
+            """except Exception as e:
                 # write these files into a dedicated error log
                 PrintException()
                 print(e)
@@ -1071,7 +1071,7 @@ class PhaseMaskWindowGenerator(DataGenerator):
                     'image:\n'
                     '{}\n'
                     'mask:\n'
-                    '{}'.format(str(e), self.IMAGES[ID], self.LABELS[ID]))
+                    '{}'.format(str(e), self.IMAGES[ID], self.LABELS[ID]))"""
         # TODO: move the stacking part to self.__preprocess_one_image___()
         # data_generation should only contain the multi-threading logic
         # x = x_k

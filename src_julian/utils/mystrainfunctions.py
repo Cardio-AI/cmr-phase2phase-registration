@@ -470,7 +470,7 @@ def get_volumeborders(wholeheartvolumeborders):
 
     # inits
     # maybe we should remove the most apical and basal slices, they are very likely wrong
-    border = 0
+    border = 1
     min_vol = int(wholeheartvolumeborders[0]) + border
     max_vol = int(wholeheartvolumeborders[1]) - border
     diff = max_vol-min_vol
