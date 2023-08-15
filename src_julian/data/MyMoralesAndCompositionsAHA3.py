@@ -166,6 +166,9 @@ def calc_strain4singlepatient(path_to_patient_folder, N_TIMESTEPS, RVIP_method, 
         RVIP_method = 'staticED'  # staticED (standard), dynamically
         com_method = 'staticED'  # dynamically (standard), staticED
 
+    RVIP_method = 'dynamically'  # staticED (standard), dynamically
+    com_method = 'dynamically'  # dynamically (standard), staticED
+
     # patient_name = os.path.basename(path_to_patient_folder) #test21.10.21
     # iteration info
     INFO('now processing: ' + patient_name)
@@ -180,13 +183,13 @@ def calc_strain4singlepatient(path_to_patient_folder, N_TIMESTEPS, RVIP_method, 
     # LV MYO MASKS
     # targetmask doesnt need to be rolled
     # previously "mask" files were used here
-    mask_lvmyo = stack_nii_masks(path_to_patient_folder, 'myo_target_', N_TIMESTEPS)  # moving: ED,MS,ES,PF,MD
+    mask_lvmyo = stack_nii_masks(path_to_patient_folder, 'myo_moving_', N_TIMESTEPS)  # moving: ED,MS,ES,PF,MD
     mask_lvmyo = mask_lvmyo>0.5
     # WHOLE MASKS
     # lvtargetmask doesnt need to be rolled
     mask_whole = stack_nii_masks(path_to_patient_folder, 'fullmask_moving_', N_TIMESTEPS)  # refactored
     # ED, MS, ES, PF, MD, we mask from the target, if we use lvmyo mask together with the sector mask, we should roll
-    mask_whole = np.roll(mask_whole, shift=1, axis=0)
+    #mask_whole = np.roll(mask_whole, shift=1, axis=0)
     # FULL FLOWFIELD PHASE-PHASE
     # dont roll the flow!
     # originally from Svens output, ff is of shape cxyzt with c=zyx
