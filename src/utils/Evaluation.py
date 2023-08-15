@@ -322,7 +322,7 @@ def create_grid_search(refit='balanced_accuracy', cv=5):
     hidden_layer_sizes = [(100,), (100,50,10), (50,20,10), (5,10,5)]
     depths = [2,3,5,10]
 
-    scaler = [StandardScaler(), MinMaxScaler(), RobustScaler(), None]
+    scaler = [StandardScaler(), MinMaxScaler(), None]
 
     from sklearn.model_selection import StratifiedKFold, KFold
     skf = StratifiedKFold(n_splits=cv)

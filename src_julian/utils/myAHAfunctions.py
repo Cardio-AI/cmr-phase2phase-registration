@@ -467,7 +467,7 @@ def myMorales(ff_comp, mask_lvmyo, com_cube, spacing, method, reg_backwards):
             masklvmyo = mask_lvmyo[t, ..., 0] # for p2p defined flowfields take the mask dynamically
         elif method == 'ed2p':
             if reg_backwards:
-                masklvmyo = mask_lvmyo[0, ..., 0] # for composed and backwards take the ED mask fix, targetmask: MD,ED,MS,ES,PF
+                masklvmyo = mask_lvmyo[1, ..., 0] # for composed and backwards take the ED mask fix, targetmask: MD,ED,MS,ES,PF
             else:
                 masklvmyo = mask_lvmyo[t, ..., 0]  # for composed and forward reg we sample from a dynamic target
         else:
@@ -531,7 +531,7 @@ def calculate_AHA_cube(Err, Ecc, sector_masks_rot, masks_rot, Z_SLICES, N_AHA, p
     # here we derive the mean strain per segment mask and slice, every voxel is weighted equally,
     # for compatibility reasons with the per-slice average approach we repeat the mean strain value per slice
     # and average them later
-    quantile = .99
+    quantile = .95
     msk_heart = (sector_masks_rot>0) & (masks_rot== label_lvmyo)
     Err[msk_heart] = clip_quantile(Err[msk_heart], q=quantile)
     Ecc[msk_heart] = clip_quantile(Ecc[msk_heart], q=quantile)
@@ -650,9 +650,9 @@ def calculate_center_of_mass_cube(mask_whole, label_bloodpool, base_slices, midc
     com_cube = np.ndarray((nt, 3, 3))
 
     if method == 'staticED':
-        com_base = center_of_mass((mask_whole[0, base_slices, ..., 0] == label_bloodpool).astype(int))
-        com_mc = center_of_mass((mask_whole[0, midcavity_slices, ..., 0] == label_bloodpool).astype(int))
-        com_apex = center_of_mass((mask_whole[0, apex_slices, ..., 0] == label_bloodpool).astype(int))
+        com_base = center_of_mass((mask_whole[1, base_slices, ..., 0] == label_bloodpool).astype(int))
+        com_mc = center_of_mass((mask_whole[1, midcavity_slices, ..., 0] == label_bloodpool).astype(int))
+        com_apex = center_of_mass((mask_whole[1, apex_slices, ..., 0] == label_bloodpool).astype(int))
         # providing zyx mask coordinates returns zxy center of mass coordinates; reordering
         com_cube[0, 0, 0], com_cube[0, 0, 1], com_cube[0, 0, 2] = (com_base[0], com_base[2], com_base[1])
         com_cube[0, 1, 0], com_cube[0, 1, 1], com_cube[0, 1, 2] = (com_mc[0], com_mc[2], com_mc[1])
@@ -695,7 +695,7 @@ def calculate_RVIP_cube(mask_whole, base_slices, midcavity_slices, apex_slices, 
         if method=='dynamically':
             ant, inf = get_ip_from_mask_3d(mask_whole[t], debug=False, keepdim=True, rev=False)
         elif method=='staticED' and ant is None:
-            ant, inf = get_ip_from_mask_3d(mask_whole[0], debug=False, keepdim=True, rev=False)
+            ant, inf = get_ip_from_mask_3d(mask_whole[1], debug=False, keepdim=True, rev=False)
         else:
             # reuse the existing ant, inf
             pass
