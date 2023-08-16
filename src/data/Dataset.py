@@ -1747,10 +1747,12 @@ def get_n_windows_between_phases_from_single4D(nda4d, idx, register_backwards=Tr
 def save_3d(nda, fname, isVector=False, cfg=None):
     # save one flowfield
     nda = np.squeeze(nda)
+    if nda.ndim == 4 and nda.shape[-1]==3:
+        nda = np.einsum('zxyc->czxy', nda)
     sitk_img = sitk.GetImageFromArray(nda, isVector=isVector)
     if cfg is not None:
-        spacing = cfg.get('SPACING')
-        if nda.ndim==4:
+        spacing = list(reversed(cfg.get('SPACING')))
+        if nda.ndim==4 and nda.shape[-1]!=3:
             spacing = (*spacing,1)
         sitk_img.SetSpacing(spacing)
     sitk.WriteImage(sitk_img, fname)
@@ -1856,7 +1858,7 @@ def save_all_3d_vols_new(volumes, vol_suffixes, EXP_PATH, exp='example_flows',cf
     experiment_ = '{}/{}'.format(EXP_PATH, exp)
     info(experiment_)
     ensure_dir(experiment_)
-    # iterate over volumes and sufixes save each tuple
+    # iterate over volumes and suffixes save each tuple
     list(map(lambda x : save_phases(x[0], experiment_, x[1], cfg=cfg),list(zip(volumes, vol_suffixes))))
 
 
@@ -1878,8 +1880,8 @@ def save_phases(nda, experiment_, suffix, cfg=None):
     """
     f_name = os.path.join(experiment_, suffix)
     # invert the axis
-    nda = np.einsum('tzyxc->cxyzt', nda)
-    _ = [save_3d(nda[..., t], f_name.replace('.nii', '_{}_.nii'.format(t)), cfg=cfg) for t in range(nda.shape[-1])]
+    #nda = np.einsum('tzyxc->cxyzt', nda)
+    _ = [save_3d(nda[t,...], f_name.replace('.nii', '_{}_.nii'.format(t)), cfg=cfg) for t in range(nda.shape[0])]
 
 
 def all_files_in_df(METADATA_FILE, x_train_sax, x_val_sax):

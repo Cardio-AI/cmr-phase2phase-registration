@@ -459,7 +459,7 @@ def get_wholeheartvolumeborders(segmentation_array, N_TIMESTEPS):
 
     return (int(global_min), int(global_max))
 
-def get_volumeborders(wholeheartvolumeborders):
+def get_volumeborders(lvmyo_idxs):
     '''
     takes the indices of the whole heart volume borders i.e. slice 5 and slice 50 define the cardiac volume within
     a total range of z-slices from 0 to 64
@@ -470,36 +470,20 @@ def get_volumeborders(wholeheartvolumeborders):
 
     # inits
     # maybe we should remove the most apical and basal slices, they are very likely wrong
+
     border = 1
-    min_vol = int(wholeheartvolumeborders[0]) + border
-    max_vol = int(wholeheartvolumeborders[1]) - border
-    diff = max_vol-min_vol
+    lvmyo_idxs = lvmyo_idxs[border:-border]
+    size_heart = len(lvmyo_idxs)
+
+
     perc_midcavity = .35
     perc_apex = .30
-
-    # we will calculate midcavity borders, then from there derive the base and apex ranges
-    z_start_midcavity = np.round(min_vol + diff*perc_apex)
-    z_end_midcavity = np.round(min_vol + diff*perc_apex + diff*perc_midcavity)
-
-    # we have to extend the z_end value by 1 so that the last index will be included in the Z_SLICES array
-    midcavity_slices = np.arange(int(z_start_midcavity), int(z_end_midcavity)+1, 1)
-    if len(midcavity_slices)<2:
-        midcavity_slices = np.arange(int(z_start_midcavity)-1, int(z_end_midcavity) + 1, 1)
-
-    # calculate apex and base ranges on midcavity basis
-    # the upper borders have to be increased by 1, so that arange includes the last entry
-    apex_slices = np.arange(min_vol, midcavity_slices[0]+1, 1) # this makes sure to have at least 2 slices for apical
-    if len(apex_slices) < 2:
-        apex_slices = np.arange(min_vol, midcavity_slices[0] + 2, 1)
-
-    base_slices = np.arange(midcavity_slices[-1], max_vol+1, 1)
-    if len(base_slices) < 2:
-        base_slices = np.arange(midcavity_slices[-1]-1, max_vol + 1, 1)
-
-    if not all([len(apex_slices)>=2, len(midcavity_slices)>=2, len(base_slices)>=2]):
-        print(min_vol, max_vol)
-
-    #assert all([len(apex_slices)>=2, len(midcavity_slices)>=2, len(base_slices)>=2]), 'some areas are too small, calculation of the gradient for single slice areas will not work.'
+    end_apex = int(size_heart * perc_apex)
+    end_midcavity = int(size_heart * (perc_apex+perc_midcavity))
+    # we will calculate mid-cavity borders, then from there derive the base and apex ranges
+    apex_slices = lvmyo_idxs[0:end_apex]
+    midcavity_slices = lvmyo_idxs[end_apex:end_midcavity]
+    base_slices = lvmyo_idxs[end_midcavity:]
 
     return base_slices, midcavity_slices, apex_slices
 

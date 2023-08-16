@@ -158,13 +158,38 @@ def calculate_strain(data_root='', metadata_path='/mnt/ssd/julian/data/metadata/
 def calc_strain4singlepatient(path_to_patient_folder, N_TIMESTEPS, RVIP_method, Z_SPACING, com_method, df_style, ff_style, label_bloodpool,
                               p2p_style, path_to_metadata_xls, df_dmdahastrain,
                               df_cleandmd, spacing, register_backwards):
+    '''
+
+    Parameters
+    ----------
+    path_to_patient_folder :
+    N_TIMESTEPS :
+    RVIP_method :
+    Z_SPACING :
+    com_method :
+    df_style :
+    ff_style :
+    label_bloodpool :
+    p2p_style :
+    path_to_metadata_xls :
+    df_dmdahastrain :
+    df_cleandmd :
+    spacing :
+    register_backwards :
+
+    Returns
+    -------
+
+    '''
     patient_name = os.path.basename(os.path.dirname(path_to_patient_folder))
     if ff_style=='p2p':
         RVIP_method = 'dynamically'  # staticED (standard), dynamically
         com_method = 'dynamically'  # dynamically (standard), staticED
-    else:
+    elif ff_style=='ed2p':
         RVIP_method = 'staticED'  # staticED (standard), dynamically
         com_method = 'staticED'  # dynamically (standard), staticED
+    else:
+        raise NotImplementedError('ffstyle : {} not supported'.format(ff_style))
 
 
     # patient_name = os.path.basename(path_to_patient_folder) #test21.10.21
@@ -173,7 +198,7 @@ def calc_strain4singlepatient(path_to_patient_folder, N_TIMESTEPS, RVIP_method, 
     # overwrite the config spacing
     import SimpleITK as sitk
     temp = sitk.ReadImage(sorted(glob.glob(os.path.join(path_to_patient_folder, '*fullmask*.nii')))[0])
-    spacing = list(reversed(temp.GetSpacing()))
+    spacing = temp.GetSpacing()
     Z_SPACING = spacing[-1] # (1.5,1.5,2.5)
     # CMR of patient
     # targetcmr doesnt need to be rolled
@@ -181,11 +206,11 @@ def calc_strain4singlepatient(path_to_patient_folder, N_TIMESTEPS, RVIP_method, 
     # LV MYO MASKS
     # targetmask doesnt need to be rolled
     # previously "mask" files were used here
-    mask_lvmyo = stack_nii_masks(path_to_patient_folder, 'myo_target_', N_TIMESTEPS)  # moving: ED,MS,ES,PF,MD
-    mask_lvmyo = mask_lvmyo>0.5
+    mask_lvmyo = stack_nii_masks(path_to_patient_folder, 'myo_target_', N_TIMESTEPS)  # moving: MD,ED,MS,ES,PF
+    mask_lvmyo = mask_lvmyo>0.1
     # WHOLE MASKS
     # lvtargetmask doesnt need to be rolled
-    mask_whole = stack_nii_masks(path_to_patient_folder, 'fullmask_moving_', N_TIMESTEPS)  # refactored
+    mask_whole = stack_nii_masks(path_to_patient_folder, 'fullmask_moving_', N_TIMESTEPS)  # ED,MS, ES, PF, MD
     # ED, MS, ES, PF, MD, we mask from the target, if we use lvmyo mask together with the sector mask, we should roll
     mask_whole = np.roll(mask_whole, shift=1, axis=0)
     # FULL FLOWFIELD PHASE-PHASE
@@ -213,6 +238,8 @@ def calc_strain4singlepatient(path_to_patient_folder, N_TIMESTEPS, RVIP_method, 
     # CALCULATE COMPOSED JUST ADDING
     # ff_comp_add = ff_switched.compose_justadding() # order stays the same
     # set which composition will be used as composed flowfield for further analyses
+    #TODO: maybe remove the copy here for mermory reasons, need to chek if we change it
+    idx_ed = 1
     if p2p_style:
         ff_whole = np.copy(ff.Data)  # p2p
     else:
@@ -220,41 +247,22 @@ def calc_strain4singlepatient(path_to_patient_folder, N_TIMESTEPS, RVIP_method, 
         ff_whole = ff_comp_Sven  # this is for the masking in Morales DeepStrain
 
     # remove the most apical and basal slices, as they often are wrong
+    border = 1
     for t in range(mask_lvmyo.shape[0]):
-        mask_given = np.argwhere(mask_lvmyo[t].sum(axis=(1, 2, 3)) > 0)
-        mask_lvmyo[t, 0:int(mask_given[0])] = 0
-        mask_lvmyo[t, int(mask_given[-1]):0] = 0
-        mask_whole[t,0:int(mask_given[0])] = 0
-        mask_whole[t, int(mask_given[-1]):] = 0
-        # 2nd border removing
-        """mask_given = np.argwhere(mask_lvmyo[t].sum(axis=(1, 2, 3)) > 0)
-        mask_lvmyo[t, mask_given[0]] = 0
-        mask_lvmyo[t, mask_given[-1]] = 0
-        mask_whole[t, mask_given[0]] = 0
-        mask_whole[t, mask_given[-1]] = 0"""
+        mask_given = np.argwhere(mask_lvmyo[t].sum(axis=(1, 2)) > 0)
+        mask_lvmyo[t, 0:int(mask_given[border])] = 0
+        mask_lvmyo[t, int(mask_given[-border]):0] = 0
+        mask_whole[t,0:int(mask_given[border])] = 0
+        mask_whole[t, int(mask_given[-border]):] = 0
 
-    # IDXs FROM (SPARSE) LVMYOMASKS
-    # get all indexes of phases where all timesteps contain lv myo segmentations
-    lvmyo_idxs = np.argwhere(
-        np.any(volume(mask_lvmyo, '4Dt', 1).get_segmentationarray(resolution='slicewise')[..., 0],
-               axis=0)).flatten()
+    # get the indexes showing the lvmyo on the ED keyframe
+    lvmyo_idxs = np.argwhere(mask_lvmyo[idx_ed].sum(axis=(1,2)) > 0)[:,0]
     if len(lvmyo_idxs) == 0:
         print(patient_name)
 
     # the most basal and most apical myomask is often not relyable, we zero them out
-    # IDXs FROM RVIP DETECTION IN WHOLE MASKS
-    # get lowest and highest index of z where all timesteps have RVIP identified
-    #rvip_range = calculate_wholeheartvolumeborders_by_RVIP(mask_whole)
-    # define from where we take the identified heart volume borders
-    wholeheartvolumeborders_lvmyo = [lvmyo_idxs[0], lvmyo_idxs[-1]]  # from LVMYOMASKS range
-    #wholeheartvolumeborders_rviprange = [rvip_range[0], rvip_range[-1]]  # from RVIP range
-    # level ranges
-    # 2021.10.06: lvmyo more accurate when not-sparse
-    base_slices, midcavity_slices, apex_slices = get_volumeborders(wholeheartvolumeborders_lvmyo)  # by lvmyo-range
-    #base_slices, midcavity_slices, apex_slices = get_volumeborders(wholeheartvolumeborders_rviprange)  # by rvip-range
-    # plot composed flowfields against each other if wanted
-    # plot_three_ComposedFlowfields_against_each_other(ff, ff_whole_Sven, ff_whole_itk,
-    #                                                  wholeheartvolumeborders_lvmyo, mask_lvmyo)
+    base_slices, midcavity_slices, apex_slices = get_volumeborders(lvmyo_idxs)  # by lvmyo-range
+
     if len(base_slices)==0 or len(midcavity_slices)==0 or len(apex_slices)==0:
         raise NotImplementedError('some areas are empty')
     # plot quiver one slice if wanted
@@ -265,13 +273,13 @@ def calc_strain4singlepatient(path_to_patient_folder, N_TIMESTEPS, RVIP_method, 
     # c = y,x
     # dynamically: every timestep gets different mean RVIPs for base mid cavity apex
     # staticED: every timestep contains the same mean RVIPs for base mid cavity apex of ED
-    RVIP_cube = calculate_RVIP_cube(mask_whole, base_slices, midcavity_slices, apex_slices, method=RVIP_method)
+    RVIP_cube = calculate_RVIP_cube(mask_whole, base_slices, midcavity_slices, apex_slices, method=RVIP_method, idx_ed=idx_ed)
     # CALCULATE COM CUBE 5x3x3
     # base, midcavity, apex : axis=1
     # c = z,y,x
     com_cube = calculate_center_of_mass_cube(mask_whole, label_bloodpool=label_bloodpool,
                                              base_slices=base_slices, midcavity_slices=midcavity_slices,
-                                             apex_slices=apex_slices, method=com_method)
+                                             apex_slices=apex_slices, method=com_method, idx_ed=idx_ed)
     # plot_1x5_quiver_flowfield(ff=ff_comp_Sven, mask_lvmyo=mask_lvmyo, z_abs=24, N=1, crop=[35, 85, 25, 75], style='comp', headwidth=10, headlength=10, width=.1)
     # x=0
     # validation plot: for midcavity all slices with com, rvip and masks
@@ -308,8 +316,7 @@ def calc_strain4singlepatient(path_to_patient_folder, N_TIMESTEPS, RVIP_method, 
     ff_Moralesinput = mvf(ff_whole, format='4Dt', zspacing=Z_SPACING)
     ff_Moralesinput = ff_Moralesinput.switch_channel()
     ff_Moralesinput = np.einsum('tzyxc->txyzc', ff_Moralesinput)
-    # prepare mask_lvmyo for Morales
-    mask_lvmyo_Moralesinput = np.einsum('tzyxc->txyzc', mask_lvmyo)
+    mask_lvmyo_Moralesinput = np.einsum('tzyxc->txyzc', mask_lvmyo[...,None])
     # prepare com_cube for Morales
     # com_cube originally contains c=z,y,x order
     # for roll_to_center to work, we have to give t,c with c=y,x,z into Morales
@@ -333,7 +340,8 @@ def calc_strain4singlepatient(path_to_patient_folder, N_TIMESTEPS, RVIP_method, 
                                     com_cube=com_cube_Moralesinput[:, 0, :],
                                     spacing=spacing,
                                     method=ff_style,
-                                    reg_backwards=register_backwards)
+                                    reg_backwards=register_backwards,
+                                    idx_ed=idx_ed)
     Radial_Sven_mc, \
     Circumferential_Sven_mc, \
     masks_rot_Sven_mc = myMorales(ff_comp=ff_Moralesinput[:, :, :, midcavity_slices],
@@ -341,7 +349,8 @@ def calc_strain4singlepatient(path_to_patient_folder, N_TIMESTEPS, RVIP_method, 
                                   com_cube=com_cube_Moralesinput[:, 1, :],
                                   spacing=spacing,
                                   method=ff_style,
-                                  reg_backwards=register_backwards)
+                                  reg_backwards=register_backwards,
+                                    idx_ed=idx_ed)
     Radial_Sven_apex, \
     Circumferential_Sven_apex, \
     masks_rot_Sven_apex = myMorales(ff_comp=ff_Moralesinput[:, :, :, apex_slices],
@@ -349,25 +358,30 @@ def calc_strain4singlepatient(path_to_patient_folder, N_TIMESTEPS, RVIP_method, 
                                     com_cube=com_cube_Moralesinput[:, 2, :],
                                     spacing=spacing,
                                     method=ff_style,
-                                    reg_backwards=register_backwards)
+                                    reg_backwards=register_backwards,
+                                    idx_ed=idx_ed)
     # stack the information together
-    # create whole colume arrays with stacked information contained
-    Radial_Sven = np.zeros((ff.nt, ff.nx, ff.ny, ff.nz))
-    Radial_Sven[..., base_slices] = Radial_Sven_base
-    Radial_Sven[..., midcavity_slices] = Radial_Sven_mc
-    Radial_Sven[..., apex_slices] = Radial_Sven_apex
-    Circumferential_Sven = np.zeros((ff.nt, ff.nx, ff.ny, ff.nz))
-    Circumferential_Sven[..., base_slices] = Circumferential_Sven_base
-    Circumferential_Sven[..., midcavity_slices] = Circumferential_Sven_mc
-    Circumferential_Sven[..., apex_slices] = Circumferential_Sven_apex
-    masks_rot_Sven = np.zeros((ff.nt, ff.nx, ff.ny, ff.nz))
-    masks_rot_Sven[..., base_slices] = masks_rot_Sven_base
-    masks_rot_Sven[..., midcavity_slices] = masks_rot_Sven_mc
-    masks_rot_Sven[..., apex_slices] = masks_rot_Sven_apex
+    # create whole volume arrays with stacked information contained
+    Err = np.zeros((ff.nt, ff.nx, ff.ny, ff.nz))
+    Err[..., base_slices] = Radial_Sven_base
+    Err[..., midcavity_slices] = Radial_Sven_mc
+    Err[..., apex_slices] = Radial_Sven_apex
+    Ecc = np.zeros((ff.nt, ff.nx, ff.ny, ff.nz))
+    Ecc[..., base_slices] = Circumferential_Sven_base
+    Ecc[..., midcavity_slices] = Circumferential_Sven_mc
+    Ecc[..., apex_slices] = Circumferential_Sven_apex
+    masks_rot_lvmyo = np.zeros((ff.nt, ff.nx, ff.ny, ff.nz))
+    masks_rot_lvmyo[..., base_slices] = masks_rot_Sven_base
+    masks_rot_lvmyo[..., midcavity_slices] = masks_rot_Sven_mc
+    masks_rot_lvmyo[..., apex_slices] = masks_rot_Sven_apex
+
+    if max(base_slices)==Err.shape[-1]:
+        print(base_slices)
+
     # most important: rearrange Strain Tensor for further processing
-    Err = np.einsum('txyz->tzyx', Radial_Sven)
-    Ecc = np.einsum('txyz->tzyx', Circumferential_Sven)
-    masks_rot_lvmyo = np.einsum('txyz->tzyx', masks_rot_Sven)
+    Err = np.einsum('txyz->tzyx', Err)
+    Ecc = np.einsum('txyz->tzyx', Ecc)
+    masks_rot_lvmyo = np.einsum('txyz->tzyx', masks_rot_lvmyo)
 
     # now, Strain Tensor and sector masks do have the shape
     # tzyx = (5,16,128,128)
@@ -568,15 +582,11 @@ def calc_strain4singlepatient(path_to_patient_folder, N_TIMESTEPS, RVIP_method, 
     # the arrays contain 16 values each; for every AHA segment
     cvi_given = False
     try:
-        #df_dmdahastrain = pd.read_excel(io=path_to_metadata_xls, sheet_name=sheet_name_ahastrain, index_col=0, header=0)
         cvi_given = True
         INFO('metadata loaded, cvi_given={}'.format(cvi_given))
     except Exception as e:
         print(e)
         cvi_given = False
-
-    # fast hack to read in the new dmd data.
-
 
     if cvi_given:cvi_prs = get_parameter_series_from_xls(df=df_dmdahastrain, parametername='radial peak strain (%)',
                                             patientname=patient_name)
