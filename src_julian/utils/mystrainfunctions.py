@@ -459,7 +459,7 @@ def get_wholeheartvolumeborders(segmentation_array, N_TIMESTEPS):
 
     return (int(global_min), int(global_max))
 
-def get_volumeborders(lvmyo_idxs):
+def get_volumeborders(lvmyo_idxs, border =1):
     '''
     takes the indices of the whole heart volume borders i.e. slice 5 and slice 50 define the cardiac volume within
     a total range of z-slices from 0 to 64
@@ -471,7 +471,6 @@ def get_volumeborders(lvmyo_idxs):
     # inits
     # maybe we should remove the most apical and basal slices, they are very likely wrong
 
-    border = 1
     lvmyo_idxs = lvmyo_idxs[border:-border]
     size_heart = len(lvmyo_idxs)
 

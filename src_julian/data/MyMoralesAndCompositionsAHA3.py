@@ -191,6 +191,9 @@ def calc_strain4singlepatient(path_to_patient_folder, N_TIMESTEPS, RVIP_method, 
     else:
         raise NotImplementedError('ffstyle : {} not supported'.format(ff_style))
 
+    RVIP_method = 'dynamically'  # staticED (standard), dynamically
+    com_method = 'dynamically'  # dynamically (standard), staticED
+
 
     # patient_name = os.path.basename(path_to_patient_folder) #test21.10.21
     # iteration info
@@ -199,26 +202,23 @@ def calc_strain4singlepatient(path_to_patient_folder, N_TIMESTEPS, RVIP_method, 
     import SimpleITK as sitk
     temp = sitk.ReadImage(sorted(glob.glob(os.path.join(path_to_patient_folder, '*fullmask*.nii')))[0])
     spacing = temp.GetSpacing()
-    Z_SPACING = spacing[-1] # (1.5,1.5,2.5) x,y,z
+    Z_SPACING = spacing[-1] # (1.5,1.5,2.5) x,y,z sitk representation
     # CMR of patient
     #vol_cube = stack_nii_volume(path_to_patient_folder, 'cmr_moving_', N_TIMESTEPS)  # refactored
     # LV MYO MASKS
     mask_lvmyo = stack_nii_masks(path_to_patient_folder, 'myo_moving_', N_TIMESTEPS)  # moving: ED,MS, ES, PF, MD
     mask_lvmyo = mask_lvmyo>0.1
-    mask_lvmyo = np.roll(mask_lvmyo, shift=1, axis=0)
+    #mask_lvmyo = np.roll(mask_lvmyo, shift=1, axis=0)
     # WHOLE MASKS
     mask_whole = stack_nii_masks(path_to_patient_folder, 'fullmask_moving_', N_TIMESTEPS)  # ED,MS, ES, PF, MD
-    mask_whole = np.roll(mask_whole, shift=1, axis=0)
+    #mask_whole = np.roll(mask_whole, shift=1, axis=0)
     # FULL FLOWFIELD PHASE-PHASE
     # ff stored is of shape t x cxyz with c=zyx <-- need to verify if this is now still the case
-    idx_ed = 1
+    idx_ed = 0
     if p2p_style:
         ff_whole = stack_nii_flowfield(path_to_patient_folder, 'flow_', N_TIMESTEPS)
     else:
         ff_whole = stack_nii_flowfield(path_to_patient_folder, 'flow_composed_', N_TIMESTEPS)
-
-    #ff = mvf(data=stack_nii_flowfield(path_to_patient_folder, 'flow_', N_TIMESTEPS), format='4Dt',
-    #         zspacing=Z_SPACING)  # refactored
 
     # Mask: MD,ED,MS,ES,PF - TZYXC
     # Flow: MD-ED,ED-MS,MS-ES,ES-PF,PF-MD - TZYXC
@@ -229,6 +229,7 @@ def calc_strain4singlepatient(path_to_patient_folder, N_TIMESTEPS, RVIP_method, 
     nt, nz, nx, ny, nc = shape_
 
     # remove the most apical and basal slices, as they often are wrong
+    # use different borders depending on t, as the heart size changes
     border = 1
     for t in range(mask_lvmyo.shape[0]):
         mask_given = np.argwhere(mask_lvmyo[t].sum(axis=(1, 2)) > 0)
@@ -335,20 +336,17 @@ def calc_strain4singlepatient(path_to_patient_folder, N_TIMESTEPS, RVIP_method, 
     ######AHA DIVISIONS#####
     # calculate array of sector masks with the same shape as the whole 4DCMR
     # entries only where slices are given
-    sector_masks_raw_base = calculate_sector_masks(mask_whole=mask_whole,
+    sector_masks_raw_base = calculate_sector_masks(mask_whole=mask_whole[:,base_slices],
                                                    com_cube=com_cube[:, 0, :],
-                                                   RVIP_cube=RVIP_cube,
-                                                   Z_SLICES=base_slices,
+                                                   RVIP_cube=RVIP_cube[:,base_slices],
                                                    level='base')
-    sector_masks_raw_midcavity = calculate_sector_masks(mask_whole=mask_whole,
+    sector_masks_raw_midcavity = calculate_sector_masks(mask_whole=mask_whole[:,midcavity_slices],
                                                         com_cube=com_cube[:, 1, :],
-                                                        RVIP_cube=RVIP_cube,
-                                                        Z_SLICES=midcavity_slices,
+                                                        RVIP_cube=RVIP_cube[:,midcavity_slices],
                                                         level='mid-cavity')
-    sector_masks_raw_apex = calculate_sector_masks(mask_whole=mask_whole,
+    sector_masks_raw_apex = calculate_sector_masks(mask_whole=mask_whole[:,apex_slices],
                                                    com_cube=com_cube[:, 2, :],
-                                                   RVIP_cube=RVIP_cube,
-                                                   Z_SLICES=apex_slices,
+                                                   RVIP_cube=RVIP_cube[:,apex_slices],
                                                    level='apex')
 
     # validation plots for sector masks raw
@@ -365,25 +363,19 @@ def calc_strain4singlepatient(path_to_patient_folder, N_TIMESTEPS, RVIP_method, 
     # plt.show()
     # roll sector masks to center for overlay plotting with Strain Maps
     sector_masks_rot_base = roll_sector_mask_to_bloodpool_center(sector_mask_raw=sector_masks_raw_base,
-                                                                 com_cube=com_cube[:, 0, :],
-                                                                 N_TIMESTEPS=N_TIMESTEPS,
-                                                                 Z_SLICES=base_slices)
+                                                                 com_cube=com_cube[:, 0, :])
     sector_masks_rot_midcavity = roll_sector_mask_to_bloodpool_center(sector_mask_raw=sector_masks_raw_midcavity,
-                                                                      com_cube=com_cube[:, 1, :],
-                                                                      N_TIMESTEPS=N_TIMESTEPS,
-                                                                      Z_SLICES=midcavity_slices)
+                                                                      com_cube=com_cube[:, 1, :])
     sector_masks_rot_apex = roll_sector_mask_to_bloodpool_center(sector_mask_raw=sector_masks_raw_apex,
-                                                                 com_cube=com_cube[:, 2, :],
-                                                                 N_TIMESTEPS=N_TIMESTEPS,
-                                                                 Z_SLICES=apex_slices)
+                                                                 com_cube=com_cube[:, 2, :])
     # it seems that the secor mask has a shape of: t,z,x,y
     # roll_sector_mask_to_bloodpool_center uses the function "roll_to_center" from morales
     # This method expects an axis order of x,y
     # we keep that part and change the axis afterwards.
 
-    sector_masks_rot_base = np.einsum('tzxy->tzyx', sector_masks_rot_base)
+    """sector_masks_rot_base = np.einsum('tzxy->tzyx', sector_masks_rot_base)
     sector_masks_rot_midcavity = np.einsum('tzxy->tzyx', sector_masks_rot_midcavity)
-    sector_masks_rot_apex = np.einsum('tzxy->tzyx', sector_masks_rot_apex)
+    sector_masks_rot_apex = np.einsum('tzxy->tzyx', sector_masks_rot_apex)"""
 
     quantile = .95
     msk_heart = (masks_rot_lvmyo == 1)
@@ -691,6 +683,7 @@ if __name__ == "__main__":
     x=0
     df_patients_p2p.to_csv(os.path.join(results.exp, 'df_DMD_time_p2p.csv'), index=False)
     df_patients_ed2p.to_csv(os.path.join(results.exp, 'df_DMD_time_ed2p.csv'), index=False)
+    print('calculate strain done!')
 
     # continue with peaks data
     # plot_pairplot_from_dfpatients(df_patients_peaks=df_patients)

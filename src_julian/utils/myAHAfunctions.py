@@ -11,7 +11,7 @@ from src_julian.utils.myclasses import mvf
 from src_julian.utils.skhelperfunctions import Console_and_file_logger
 #Console_and_file_logger('mvfviz/dmd_temp', logging.INFO)
 
-def calculate_sector_masks(mask_whole, com_cube, RVIP_cube, Z_SLICES, level):
+def calculate_sector_masks(mask_whole, com_cube, RVIP_cube, level):
     '''
     calculates an array of same shape as mask_whole which contains labels of AHA segments
     mask_whole has to be of form tzyxc
@@ -20,7 +20,7 @@ def calculate_sector_masks(mask_whole, com_cube, RVIP_cube, Z_SLICES, level):
     # inits
     sector_masks = np.zeros_like(mask_whole)
     nt, nz, ny, nx = mask_whole.shape
-    z = Z_SLICES[0] # take the RVIP of the first slice of this area, all rvips in an area should be the same (mean rvip)
+    z = 0 # take the RVIP of the first slice of this area, all rvips in an area should be the same (mean rvip)
     # we will have the same sector mask for all slices within the apical/mid/basal area
     for t in range(nt):
         # COM_glob needs order y,x
@@ -33,9 +33,8 @@ def calculate_sector_masks(mask_whole, com_cube, RVIP_cube, Z_SLICES, level):
                                                        level=level)
         elif level == 'apex':
             sector_msk = get_AHA_4_sector_mask(ant=ant, inf=inf, COM_glob=COM_glob, N_AHA=4, nx=nx, ny=ny)
+        sector_masks[t] = sector_msk[None,...]
 
-        for z in Z_SLICES:
-            sector_masks[t, z] = sector_msk
     return sector_masks
 
 
@@ -324,13 +323,13 @@ def plot_3x5grid_CMRxStrainxSectormasks(com_cube, Radial_Morales, masks_rot_Mora
     cb.set_label(str(type) + ' in %')
     plt.show()
 
-def roll_sector_mask_to_bloodpool_center(sector_mask_raw, com_cube, N_TIMESTEPS, Z_SLICES):
+def roll_sector_mask_to_bloodpool_center(sector_mask_raw, com_cube):
     # roll sector masks to center for overlay
-    sector_masks_rot = np.zeros_like(sector_mask_raw[:, Z_SLICES, ...])
-    for t in range(N_TIMESTEPS):
+    sector_masks_rot = np.zeros_like(sector_mask_raw)
+    for t in range(sector_masks_rot.shape[0]):
         cx, cy = (com_cube[t, 2], com_cube[t, 1])
-        for idx, val in enumerate(Z_SLICES):
-            sector_masks_rot[t, idx] = roll_to_center(sector_mask_raw[t, val], cx, cy)
+        for z in range(sector_masks_rot.shape[1]):
+            sector_masks_rot[t, z] = roll_to_center(sector_mask_raw[t, z], cx, cy)
     return sector_masks_rot
 
 # https://stackoverflow.com/questions/53629554/add-some-numbers-in-a-figure-generated-with-python
@@ -647,7 +646,7 @@ def calculate_center_of_mass_cube(mask_whole, label_bloodpool, base_slices, midc
     else:
         # dynamically
         for t in range(nt):
-            # calculate com at level
+            # calculate a different com per keyframe
             com_base = center_of_mass((mask_whole[t, base_slices, ...] == label_bloodpool).astype(int))
             com_mc = center_of_mass((mask_whole[t, midcavity_slices, ...] == label_bloodpool).astype(int))
             com_apex = center_of_mass((mask_whole[t, apex_slices, ...] == label_bloodpool).astype(int))
