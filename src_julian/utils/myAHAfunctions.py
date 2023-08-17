@@ -20,20 +20,22 @@ def calculate_sector_masks(mask_whole, com_cube, RVIP_cube, Z_SLICES, level):
     # inits
     sector_masks = np.zeros_like(mask_whole)
     nt, nz, ny, nx = mask_whole.shape
-
+    z = Z_SLICES[0] # take the RVIP of the first slice of this area, all rvips in an area should be the same (mean rvip)
+    # we will have the same sector mask for all slices within the apical/mid/basal area
     for t in range(nt):
         # COM_glob needs order y,x
         # ant and inf RVIP need order y,x
         COM_glob = [com_cube[t, 1], com_cube[t, 2]]
-        for z in Z_SLICES:
-            ant = [RVIP_cube[t,z,0,0], RVIP_cube[t,z,0,1]]
-            inf = [RVIP_cube[t,z,1,0], RVIP_cube[t,z,1,1]]
-            if level == 'base' or level == 'mid-cavity':
-                sector_masks[t, z] = get_AHA_6_sector_mask(ant=ant, inf=inf, COM_glob=COM_glob, N_AHA=6, nx=nx, ny=ny,
-                                                           level=level)
-            elif level == 'apex':
-                sector_masks[t, z] = get_AHA_4_sector_mask(ant=ant, inf=inf, COM_glob=COM_glob, N_AHA=4, nx=nx, ny=ny)
+        ant = [RVIP_cube[t, z, 0, 0], RVIP_cube[t, z, 0, 1]]
+        inf = [RVIP_cube[t, z, 1, 0], RVIP_cube[t, z, 1, 1]]
+        if level == 'base' or level == 'mid-cavity':
+            sector_msk = get_AHA_6_sector_mask(ant=ant, inf=inf, COM_glob=COM_glob, N_AHA=6, nx=nx, ny=ny,
+                                                       level=level)
+        elif level == 'apex':
+            sector_msk = get_AHA_4_sector_mask(ant=ant, inf=inf, COM_glob=COM_glob, N_AHA=4, nx=nx, ny=ny)
 
+        for z in Z_SLICES:
+            sector_masks[t, z] = sector_msk
     return sector_masks
 
 
@@ -445,26 +447,24 @@ def myBullsplot(data, lge=None, cmap=None, norm=None, ax=None):
     return bullseye_plot(ax=ax, data=data, cmap=cmap, norm=norm, labels=labels, labelProps={'size':7, "weight":'bold'})
 
 
-def myMorales(ff_comp, mask_lvmyo, com_cube, spacing, method, reg_backwards, idx_ed):
+def myMorales(ff, mask_lvmyo, com_cube, spacing, method, reg_backwards, idx_ed):
     '''
     tbd
     '''
     from src_julian.utils.MoralesFast import MyocardialStrain
 
-    # define the lv label for the mask_lvmyo (should always be 1!!!)
+    # define the lv label for the mask_lvmyo (should always be 1 as it is a binary mask)
     lv_label = 1
 
     # inits
-    Radial = np.zeros((ff_comp.shape[:-1]))
-    Circumferential = np.zeros((ff_comp.shape[:-1]))
-    masks_rot = np.zeros((ff_comp.shape[:-1]))
+    Radial = np.zeros((ff.shape[:-1]))
+    Circumferential = np.zeros((ff.shape[:-1]))
+    masks_rot = np.zeros((ff.shape[:-1]))
 
-    for t in range(ff_comp.shape[0]):
-        # take data from timestep
+    for t in range(ff.shape[0]):
         # for ED->X defined composed flowfields only take the ED mask
-        # masklvmyo = mask_lvmyo[0, ..., 0]
         if method == 'p2p':
-            masklvmyo = mask_lvmyo[t, ..., 0] # for p2p defined flowfields take the mask dynamically
+            masklvmyo = mask_lvmyo[t, ..., 0] # for p2p defined flow fields take the mask dynamically
         elif method == 'ed2p':
             if reg_backwards:
                 masklvmyo = mask_lvmyo[idx_ed, ..., 0] # for composed and backwards take the ED mask fix, targetmask: MD,ED,MS,ES,PF
@@ -473,11 +473,10 @@ def myMorales(ff_comp, mask_lvmyo, com_cube, spacing, method, reg_backwards, idx
         else:
             raise NotImplementedError('invalid method: {}, valid methods: {}'.format(method, ['p2p', 'ed2p']))
         com = com_cube[t]
-        flow = ff_comp[t]
+        flow = ff[t]
 
         # strain calculation
         dx, dy, dz = spacing
-        # TEST
 
         strain = MyocardialStrain(masklvmyo=masklvmyo, com=com, flow=flow)
         strain.calculate_strain(dx=dx, dy=dy, dz=dz)
@@ -516,10 +515,11 @@ def calculate_AHA_cube(Err, Ecc, sector_masks_rot, masks_rot, Z_SLICES, N_AHA, p
     # here we derive the mean strain per segment mask and slice, every voxel is weighted equally,
     # for compatibility reasons with the per-slice average approach we repeat the mean strain value per slice
     # and average them later
-    quantile = .9
+    # this clips values per apex/mid/base, we should change this
+    """quantile = .95
     msk_heart = (sector_masks_rot>0) & (masks_rot== label_lvmyo)
     Err[msk_heart] = clip_quantile(Err[msk_heart], q=quantile)
-    Ecc[msk_heart] = clip_quantile(Ecc[msk_heart], q=quantile)
+    Ecc[msk_heart] = clip_quantile(Ecc[msk_heart], q=quantile)"""
 
     for t in range(nt):
         for idx, AHA in enumerate(N_AHA): # check if this segment is visible in this slice
@@ -638,10 +638,10 @@ def calculate_center_of_mass_cube(mask_whole, label_bloodpool, base_slices, midc
         com_base = center_of_mass((mask_whole[idx_ed, base_slices, ...] == label_bloodpool).astype(int))
         com_mc = center_of_mass((mask_whole[idx_ed, midcavity_slices, ...] == label_bloodpool).astype(int))
         com_apex = center_of_mass((mask_whole[idx_ed, apex_slices, ...] == label_bloodpool).astype(int))
-        # providing zyx mask coordinates returns zxy center of mass coordinates; reordering
-        com_cube[0, 0, 0], com_cube[0, 0, 1], com_cube[0, 0, 2] = (com_base[0], com_base[2], com_base[1])
-        com_cube[0, 1, 0], com_cube[0, 1, 1], com_cube[0, 1, 2] = (com_mc[0], com_mc[2], com_mc[1])
-        com_cube[0, 2, 0], com_cube[0, 2, 1], com_cube[0, 2, 2] = (com_apex[0], com_apex[2], com_apex[1])
+        # providing zyx mask coordinates returns zyx center of mass coordinates
+        com_cube[0, 0, 0], com_cube[0, 0, 1], com_cube[0, 0, 2] = (com_base[0], com_base[1], com_base[2])
+        com_cube[0, 1, 0], com_cube[0, 1, 1], com_cube[0, 1, 2] = (com_mc[0], com_mc[1], com_mc[2])
+        com_cube[0, 2, 0], com_cube[0, 2, 1], com_cube[0, 2, 2] = (com_apex[0], com_apex[1], com_apex[2])
         com_cube = np.repeat([com_cube[0]], repeats=nt, axis=0)
 
     else:
@@ -651,10 +651,10 @@ def calculate_center_of_mass_cube(mask_whole, label_bloodpool, base_slices, midc
             com_base = center_of_mass((mask_whole[t, base_slices, ...] == label_bloodpool).astype(int))
             com_mc = center_of_mass((mask_whole[t, midcavity_slices, ...] == label_bloodpool).astype(int))
             com_apex = center_of_mass((mask_whole[t, apex_slices, ...] == label_bloodpool).astype(int))
-            # providing zyx mask coordinates returns zxy center of mass coordinates; reordering
-            com_cube[t, 0, 0], com_cube[t, 0, 1], com_cube[t, 0, 2] = (com_base[0], com_base[2], com_base[1])
-            com_cube[t, 1, 0], com_cube[t, 1, 1], com_cube[t, 1, 2] = (com_mc[0], com_mc[2], com_mc[1])
-            com_cube[t, 2, 0], com_cube[t, 2, 1], com_cube[t, 2, 2] = (com_apex[0], com_apex[2], com_apex[1])
+            # providing zyx mask coordinates returns zyx center of mass coordinates
+            com_cube[t, 0, 0], com_cube[t, 0, 1], com_cube[t, 0, 2] = (com_base[0], com_base[1], com_base[2])
+            com_cube[t, 1, 0], com_cube[t, 1, 1], com_cube[t, 1, 2] = (com_mc[0], com_mc[1], com_mc[2])
+            com_cube[t, 2, 0], com_cube[t, 2, 1], com_cube[t, 2, 2] = (com_apex[0], com_apex[1], com_apex[2])
 
     return com_cube
 
@@ -676,7 +676,7 @@ def calculate_RVIP_cube(mask_whole, base_slices, midcavity_slices, apex_slices, 
 
     for t in range(nt):
         # when mask_whole is provided zyx, the returned tuples are y,x
-        # RVIP is derived from full mask, which is the moving mask (ED, MS, ES, PF, MD)
+        # RVIP is derived from full mask, which is the rolled moving mask (MD, ED, MS, ES, PF)
         if method=='dynamically':
             ant, inf = get_ip_from_mask_3d(mask_whole[t], debug=False, keepdim=True, rev=False)
         elif method=='staticED' and ant is None:
@@ -684,18 +684,6 @@ def calculate_RVIP_cube(mask_whole, base_slices, midcavity_slices, apex_slices, 
         else:
             # reuse the existing ant, inf
             pass
-
-        # validation plot
-        # t, z = (0, 32)
-        # cx, cy = center_of_mass(mask_whole[t, z, ..., 0] == label_bloodpool) # provided zyx returns xy because of image domain and np array domain
-        # plt.figure()
-        # plt.imshow(mask_whole[t, z], cmap='gray')
-        # plt.scatter(inf[z][0], inf[z][1], label='inf')
-        # plt.scatter(ant[z][0], ant[z][1], label='ant')
-        # plt.scatter(cy, cx, label='com')
-        # plt.legend()
-        # plt.show()
-
 
         # write RVIP mean coordinates for all slices
         # remember: when we provide mask_whole as tzyx, the returned RVIP tuples are y,x above.
@@ -719,8 +707,6 @@ def calculate_RVIP_cube(mask_whole, base_slices, midcavity_slices, apex_slices, 
         apex = inf[apex_slices[0]:apex_slices[-1] + 1]
         if all(i is None for i in apex):
             apex = midcavity[:len(apex)]
-            #print('use midcav RVIP for apex')
-            #print(midcavity)
         if all(i is None for i in base):
             base = midcavity[:len(base)]
         if all(i is None for i in apex):

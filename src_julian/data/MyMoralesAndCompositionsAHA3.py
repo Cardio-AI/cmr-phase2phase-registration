@@ -199,59 +199,41 @@ def calc_strain4singlepatient(path_to_patient_folder, N_TIMESTEPS, RVIP_method, 
     import SimpleITK as sitk
     temp = sitk.ReadImage(sorted(glob.glob(os.path.join(path_to_patient_folder, '*fullmask*.nii')))[0])
     spacing = temp.GetSpacing()
-    Z_SPACING = spacing[-1] # (1.5,1.5,2.5)
+    Z_SPACING = spacing[-1] # (1.5,1.5,2.5) x,y,z
     # CMR of patient
-    # targetcmr doesnt need to be rolled
     #vol_cube = stack_nii_volume(path_to_patient_folder, 'cmr_moving_', N_TIMESTEPS)  # refactored
     # LV MYO MASKS
-    # targetmask doesnt need to be rolled
-    # previously "mask" files were used here
-    mask_lvmyo = stack_nii_masks(path_to_patient_folder, 'myo_target_', N_TIMESTEPS)  # moving: MD,ED,MS,ES,PF
+    mask_lvmyo = stack_nii_masks(path_to_patient_folder, 'myo_moving_', N_TIMESTEPS)  # moving: ED,MS, ES, PF, MD
     mask_lvmyo = mask_lvmyo>0.1
+    mask_lvmyo = np.roll(mask_lvmyo, shift=1, axis=0)
     # WHOLE MASKS
-    # lvtargetmask doesnt need to be rolled
     mask_whole = stack_nii_masks(path_to_patient_folder, 'fullmask_moving_', N_TIMESTEPS)  # ED,MS, ES, PF, MD
-    # ED, MS, ES, PF, MD, we mask from the target, if we use lvmyo mask together with the sector mask, we should roll
     mask_whole = np.roll(mask_whole, shift=1, axis=0)
     # FULL FLOWFIELD PHASE-PHASE
-    # dont roll the flow!
-    # originally from Svens output, ff is of shape cxyzt with c=zyx
-    ff = mvf(data=stack_nii_flowfield(path_to_patient_folder, 'flow_', N_TIMESTEPS), format='4Dt',
-             zspacing=Z_SPACING)  # refactored
-
-
-    # load ff_masked if needed
-    # ff_masked_raw = mvf(data=stack_nii_flowfield(path_to_patient_folder, 'flow_masked_', N_TIMESTEPS), format='4Dt',
-    # zspacing=Z_SPACING)
-    # ff_masked = np.copy(ff_masked_raw.Data)
-    # ff is now of shape tzyxc with c=zyx
-    # CALCULATE COMPOSED FLOWFIELD
-    # forward = standard
-    # reversed means that the displacement fields are added in reverse order
-    # ff_whole_itk = ff.compose_sitk(np.arange(0, ff.nz), method=composition_direction)
-    # ff_whole_itk is tzyxc with c=zyx
-    # LOAD SVENS COMPOSED
-    # dont roll the flow!
-    # originally from Svens output, ff is of shape cxyzt with c=zyx
-    # ff_whole_Sven is tzyxc with c=zyx
-
-    # CALCULATE COMPOSED JUST ADDING
-    # ff_comp_add = ff_switched.compose_justadding() # order stays the same
-    # set which composition will be used as composed flowfield for further analyses
-    #TODO: maybe remove the copy here for mermory reasons, need to chek if we change it
+    # ff stored is of shape t x cxyz with c=zyx <-- need to verify if this is now still the case
     idx_ed = 1
     if p2p_style:
-        ff_whole = np.copy(ff.Data)  # p2p
+        ff_whole = stack_nii_flowfield(path_to_patient_folder, 'flow_', N_TIMESTEPS)
     else:
-        ff_comp_Sven = stack_nii_flowfield(path_to_patient_folder, 'flow_composed_', N_TIMESTEPS)
-        ff_whole = ff_comp_Sven  # this is for the masking in Morales DeepStrain
+        ff_whole = stack_nii_flowfield(path_to_patient_folder, 'flow_composed_', N_TIMESTEPS)
+
+    #ff = mvf(data=stack_nii_flowfield(path_to_patient_folder, 'flow_', N_TIMESTEPS), format='4Dt',
+    #         zspacing=Z_SPACING)  # refactored
+
+    # Mask: MD,ED,MS,ES,PF - TZYXC
+    # Flow: MD-ED,ED-MS,MS-ES,ES-PF,PF-MD - TZYXC
+    # Flow composed: ED-ED,ED-MS,ED-ES,ED-PF,ED-MD - TZYXC
+
+    shape_ = ff_whole.shape
+    dim_ = ff_whole.ndim
+    nt, nz, nx, ny, nc = shape_
 
     # remove the most apical and basal slices, as they often are wrong
     border = 1
     for t in range(mask_lvmyo.shape[0]):
         mask_given = np.argwhere(mask_lvmyo[t].sum(axis=(1, 2)) > 0)
         mask_lvmyo[t, 0:int(mask_given[border])] = 0
-        mask_lvmyo[t, int(mask_given[-border]):0] = 0
+        mask_lvmyo[t, int(mask_given[-border]):] = 0
         mask_whole[t,0:int(mask_given[border])] = 0
         mask_whole[t, int(mask_given[-border]):] = 0
 
@@ -260,19 +242,16 @@ def calc_strain4singlepatient(path_to_patient_folder, N_TIMESTEPS, RVIP_method, 
     if len(lvmyo_idxs) == 0:
         print(patient_name)
 
-    # the most basal and most apical myomask is often not relyable, we zero them out
+    # the most basal and most apical myom ask is often not reliable, we zero them out
     base_slices, midcavity_slices, apex_slices = get_volumeborders(lvmyo_idxs)  # by lvmyo-range
 
     if len(base_slices)==0 or len(midcavity_slices)==0 or len(apex_slices)==0:
         raise NotImplementedError('some areas are empty')
-    # plot quiver one slice if wanted
-    # plot_Quiver_onetime_oneslice(t=0, slice=24, N=1, ff_whole=ff_whole_Sven, mask_whole=mask_whole, scale=1)
-    # CALCULATE RVIP CUBE 5x64x2x2
-    # contains anterior and inferior mean RVIP coordinates for LVMYO masks slices range
-    # contains mean RVIP coordinates for base, mid cavity, apex ranges!
+
     # c = y,x
     # dynamically: every timestep gets different mean RVIPs for base mid cavity apex
     # staticED: every timestep contains the same mean RVIPs for base mid cavity apex of ED
+    # c = z,y,x
     RVIP_cube = calculate_RVIP_cube(mask_whole, base_slices, midcavity_slices, apex_slices, method=RVIP_method, idx_ed=idx_ed)
     # CALCULATE COM CUBE 5x3x3
     # base, midcavity, apex : axis=1
@@ -280,50 +259,20 @@ def calc_strain4singlepatient(path_to_patient_folder, N_TIMESTEPS, RVIP_method, 
     com_cube = calculate_center_of_mass_cube(mask_whole, label_bloodpool=label_bloodpool,
                                              base_slices=base_slices, midcavity_slices=midcavity_slices,
                                              apex_slices=apex_slices, method=com_method, idx_ed=idx_ed)
-    # plot_1x5_quiver_flowfield(ff=ff_comp_Sven, mask_lvmyo=mask_lvmyo, z_abs=24, N=1, crop=[35, 85, 25, 75], style='comp', headwidth=10, headlength=10, width=.1)
-    # x=0
-    # validation plot: for midcavity all slices with com, rvip and masks
-    # t=1
-    # fig,ax=plt.subplots(1,len(midcavity_slices), sharey=True)
-    # for zrel, zabs in enumerate(midcavity_slices):
-    #     ax[zrel].imshow(mask_whole[t,zabs], cmap='gray')
-    #     ax[zrel].scatter(com_cube[t, 1, 1], com_cube[t, 1, 2], label='com')
-    #     ax[zrel].scatter(RVIP_cube[t, zabs, 0, 0], RVIP_cube[t, zabs, 0, 1], label='ant')
-    #     ax[zrel].scatter(RVIP_cube[t, zabs, 1, 0], RVIP_cube[t, zabs, 1, 1], label='inf')
-    # plt.legend()
-    # plt.show()
-    # validation plot: one slice with whole mask, myomask, com, rvip
-    # slice = middle of mid-cavity; equals middle of the heart volume
-    # zrel = 7
-    # t = 0
-    # zabs = midcavity_slices[zrel]
-    # fig, ax = plt.subplots(1, 1, sharey=True)
-    # ax.imshow(mask_whole[t, zabs], cmap='gray')
-    # ax.scatter(com_cube[t, 1, 1], com_cube[t, 1, 2], label='com')
-    # ax.scatter(RVIP_cube[t, zabs, 0, 0], RVIP_cube[t, zabs, 0, 1], label='ant')
-    # ax.scatter(RVIP_cube[t, zabs, 1, 0], RVIP_cube[t, zabs, 1, 1], label='inf')
-    # ax.imshow(mask_lvmyo[t, zabs], alpha=.5)
-    # plt.legend()
-    # plt.show()
-    # NOTES ON LAYOUTS BEFORE DEEPSTRAIN
-    # ff_whole_itk : tzyxc with c=zyx
-    # mask_lvmyo : tzyxc
-    # com_cube : tc with c=zyx
-    # zsliceswholevolume : 0...63
-    # N_TIMESTEPS : 5
-    # REARRANGE INPUTS FOR DEEPSTRAIN
-    # prepare my flowfield for Morales
-    ff_Moralesinput = mvf(ff_whole, format='4Dt', zspacing=Z_SPACING)
-    ff_Moralesinput = ff_Moralesinput.switch_channel()
+    # Morales expects a shape of: x,y,z, also for the channels
+    # C of ff should be z,y,x such as the axis, invert them
+    ff_Moralesinput = np.stack([ff_whole[..., 2],
+                         ff_whole[..., 1],
+                         ff_whole[..., 0]], axis=-1)
+
     ff_Moralesinput = np.einsum('tzyxc->txyzc', ff_Moralesinput)
     mask_lvmyo_Moralesinput = np.einsum('tzyxc->txyzc', mask_lvmyo[...,None])
-    # prepare com_cube for Morales
-    # com_cube originally contains c=z,y,x order
-    # for roll_to_center to work, we have to give t,c with c=y,x,z into Morales
+
+    # for roll_to_center to work, we have to give t,c with c=x,y,z into Morales
     # DeepStrain will not make use of cz, so only the first two entries are relevant
     com_cube_Moralesinput = np.zeros_like(com_cube)
-    com_cube_Moralesinput[..., 0] = com_cube[..., 1]
-    com_cube_Moralesinput[..., 1] = com_cube[..., 2]
+    com_cube_Moralesinput[..., 0] = com_cube[..., 2]
+    com_cube_Moralesinput[..., 1] = com_cube[..., 1]
     com_cube_Moralesinput[..., 2] = com_cube[..., 0]
     # validation plot: plot mask and center of mass before DeepStrain call
     # t, z = (2, 24)
@@ -335,7 +284,7 @@ def calc_strain4singlepatient(path_to_patient_folder, N_TIMESTEPS, RVIP_method, 
     # we call the algorithm three times; for base, mc, apex, then put the results together
     Radial_Sven_base, \
     Circumferential_Sven_base, \
-    masks_rot_Sven_base = myMorales(ff_comp=ff_Moralesinput[:, :, :, base_slices],
+    masks_rot_Sven_base = myMorales(ff=ff_Moralesinput[:, :, :, base_slices],
                                     mask_lvmyo=mask_lvmyo_Moralesinput[:, :, :, base_slices],
                                     com_cube=com_cube_Moralesinput[:, 0, :],
                                     spacing=spacing,
@@ -344,7 +293,7 @@ def calc_strain4singlepatient(path_to_patient_folder, N_TIMESTEPS, RVIP_method, 
                                     idx_ed=idx_ed)
     Radial_Sven_mc, \
     Circumferential_Sven_mc, \
-    masks_rot_Sven_mc = myMorales(ff_comp=ff_Moralesinput[:, :, :, midcavity_slices],
+    masks_rot_Sven_mc = myMorales(ff=ff_Moralesinput[:, :, :, midcavity_slices],
                                   mask_lvmyo=mask_lvmyo_Moralesinput[:, :, :, midcavity_slices],
                                   com_cube=com_cube_Moralesinput[:, 1, :],
                                   spacing=spacing,
@@ -353,7 +302,7 @@ def calc_strain4singlepatient(path_to_patient_folder, N_TIMESTEPS, RVIP_method, 
                                     idx_ed=idx_ed)
     Radial_Sven_apex, \
     Circumferential_Sven_apex, \
-    masks_rot_Sven_apex = myMorales(ff_comp=ff_Moralesinput[:, :, :, apex_slices],
+    masks_rot_Sven_apex = myMorales(ff=ff_Moralesinput[:, :, :, apex_slices],
                                     mask_lvmyo=mask_lvmyo_Moralesinput[:, :, :, apex_slices],
                                     com_cube=com_cube_Moralesinput[:, 2, :],
                                     spacing=spacing,
@@ -362,15 +311,15 @@ def calc_strain4singlepatient(path_to_patient_folder, N_TIMESTEPS, RVIP_method, 
                                     idx_ed=idx_ed)
     # stack the information together
     # create whole volume arrays with stacked information contained
-    Err = np.zeros((ff.nt, ff.nx, ff.ny, ff.nz))
+    Err = np.zeros((nt, nx, ny, nz))
     Err[..., base_slices] = Radial_Sven_base
     Err[..., midcavity_slices] = Radial_Sven_mc
     Err[..., apex_slices] = Radial_Sven_apex
-    Ecc = np.zeros((ff.nt, ff.nx, ff.ny, ff.nz))
+    Ecc = np.zeros((nt, nx, ny, nz))
     Ecc[..., base_slices] = Circumferential_Sven_base
     Ecc[..., midcavity_slices] = Circumferential_Sven_mc
     Ecc[..., apex_slices] = Circumferential_Sven_apex
-    masks_rot_lvmyo = np.zeros((ff.nt, ff.nx, ff.ny, ff.nz))
+    masks_rot_lvmyo = np.zeros((nt, nx, ny, nz))
     masks_rot_lvmyo[..., base_slices] = masks_rot_Sven_base
     masks_rot_lvmyo[..., midcavity_slices] = masks_rot_Sven_mc
     masks_rot_lvmyo[..., apex_slices] = masks_rot_Sven_apex
@@ -378,27 +327,11 @@ def calc_strain4singlepatient(path_to_patient_folder, N_TIMESTEPS, RVIP_method, 
     if max(base_slices)==Err.shape[-1]:
         print(base_slices)
 
-    # most important: rearrange Strain Tensor for further processing
+    # Rearrange Strain Tensor for further processing
     Err = np.einsum('txyz->tzyx', Err)
     Ecc = np.einsum('txyz->tzyx', Ecc)
     masks_rot_lvmyo = np.einsum('txyz->tzyx', masks_rot_lvmyo)
 
-    # now, Strain Tensor and sector masks do have the shape
-    # tzyx = (5,16,128,128)
-    x = 0
-    # validation line plotting: Err and Ecc mean strain curves; masked
-    # plt.plot(get_mean_strain_values_from_Morales(Err, masks_rot_lvmyo))
-    # plt.plot(get_mean_strain_values_from_Morales(Ecc, masks_rot_lvmyo))
-    # validation plot: single slice and time, cmr rolled, mask rot, Strain overlay
-    # t=0
-    # z=24
-    # plt.figure()
-    # plt.imshow(Err[t,z], cmap='inferno')
-    # plt.colorbar()
-    # # plt.imshow(roll_to_center(vol_cube[t, z, ..., 0], com_cube[t, 1, 2], com_cube[t, 1, 1]), cmap='gray', alpha=.5)
-    # # plt.imshow(masks_rot_lvmyo[t,z], alpha=.2, cmap='gray')
-    # # plt.imshow(roll_to_center(mask_whole[t,z,...,0], com_cube[t, 1, 2], com_cube[t, 1, 1]), alpha=.3)
-    # plt.show()
     ######AHA DIVISIONS#####
     # calculate array of sector masks with the same shape as the whole 4DCMR
     # entries only where slices are given
@@ -417,6 +350,7 @@ def calc_strain4singlepatient(path_to_patient_folder, N_TIMESTEPS, RVIP_method, 
                                                    RVIP_cube=RVIP_cube,
                                                    Z_SLICES=apex_slices,
                                                    level='apex')
+
     # validation plots for sector masks raw
     # t=3
     # z=24
@@ -442,6 +376,21 @@ def calc_strain4singlepatient(path_to_patient_folder, N_TIMESTEPS, RVIP_method, 
                                                                  com_cube=com_cube[:, 2, :],
                                                                  N_TIMESTEPS=N_TIMESTEPS,
                                                                  Z_SLICES=apex_slices)
+    # it seems that the secor mask has a shape of: t,z,x,y
+    # roll_sector_mask_to_bloodpool_center uses the function "roll_to_center" from morales
+    # This method expects an axis order of x,y
+    # we keep that part and change the axis afterwards.
+
+    sector_masks_rot_base = np.einsum('tzxy->tzyx', sector_masks_rot_base)
+    sector_masks_rot_midcavity = np.einsum('tzxy->tzyx', sector_masks_rot_midcavity)
+    sector_masks_rot_apex = np.einsum('tzxy->tzyx', sector_masks_rot_apex)
+
+    quantile = .95
+    msk_heart = (masks_rot_lvmyo == 1)
+    Err[msk_heart] = clip_quantile(Err[msk_heart], q=quantile)
+    Ecc[msk_heart] = clip_quantile(Ecc[msk_heart], q=quantile)
+
+
     # calculate the AHA cubes
     # we can read out the Err and Ecc with the sector masks in a desired AHA segment order
     # we can define the order of the array entries by AHA ascending here
@@ -464,16 +413,13 @@ def calc_strain4singlepatient(path_to_patient_folder, N_TIMESTEPS, RVIP_method, 
                                       Z_SLICES=apex_slices,
                                       N_AHA=N_AHA_apex, p2p_style=p2p_style)
 
-    # test with outlier clipping
-    # first, assign the values, than clip, than nanmean
+
     rs_overtime_base = AHAcube_base[..., 0]
     cs_overtime_base = AHAcube_base[..., 1]
     rs_overtime_mc = AHAcube_midcavity[..., 0]
     cs_overtime_mc = AHAcube_midcavity[..., 1]
     rs_overtime_apex = AHAcube_apex[..., 0]
     cs_overtime_apex = AHAcube_apex[..., 1]
-
-    # clip by lower and upper quantile threshold along axis 2 (one threshold per segment)
 
     # runtime outputs
     # output min max mean strain for patient; Err and Ecc

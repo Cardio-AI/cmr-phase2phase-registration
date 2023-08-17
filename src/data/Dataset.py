@@ -1748,7 +1748,7 @@ def save_3d(nda, fname, isVector=False, cfg=None):
     # save one flowfield
     nda = np.squeeze(nda)
     if nda.ndim == 4 and nda.shape[-1]==3:
-        nda = np.einsum('zxyc->czxy', nda)
+        nda = np.einsum('zyxc->czyx', nda)
     sitk_img = sitk.GetImageFromArray(nda, isVector=isVector)
     if cfg is not None:
         spacing = list(reversed(cfg.get('SPACING')))

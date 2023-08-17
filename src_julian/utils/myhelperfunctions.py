@@ -29,8 +29,8 @@ def stack_nii_flowfield(PATH_TO_NII_FILES, naming, Ntimesteps):
         name_ff = naming + str(t) + '_.nii'
         path_to_file = os.path.join(PATH_TO_NII_FILES, name_ff)
         data_ff = sitk.GetArrayFromImage(sitk.ReadImage(path_to_file))
-        # data_ff=czyx
-        data_ff = np.einsum('czyx->zyxc', data_ff) # should be the same shape as implemented by julian
+        # data_ff=czxy
+        data_ff = np.einsum('czxy->zxyc', data_ff) # should be the same shape as implemented by julian
         list.append(data_ff)
 
     array = np.array(list)
@@ -44,9 +44,6 @@ def stack_nii_masks(PATH_TO_NII_MASKS, naming, N_TIMESTEPS, ):
         filename = naming + str(t) + '_.nii'
         path_to_file = os.path.join(PATH_TO_NII_MASKS, filename)
         arrayraw = sitk.GetArrayFromImage(sitk.ReadImage(path_to_file))
-        #arrayraw = sitk.GetArrayFromImage(imgraw)
-        arrayraw_appended = arrayraw[..., np.newaxis]
-        #arrayraw_rearranged = np.einsum('xyzc->zyxc', arrayraw_appended)
         list.append(arrayraw)
 
     maskstack = np.array(list)
