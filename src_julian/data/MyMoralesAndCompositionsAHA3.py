@@ -1,7 +1,9 @@
 # define logging and working directory
+import copy
 from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor
 
 import SimpleITK
+import scipy.ndimage
 from ProjectRoot import change_wd_to_project_root
 
 # import helper functions
@@ -191,9 +193,6 @@ def calc_strain4singlepatient(path_to_patient_folder, N_TIMESTEPS, RVIP_method, 
     else:
         raise NotImplementedError('ffstyle : {} not supported'.format(ff_style))
 
-    RVIP_method = 'dynamically'  # staticED (standard), dynamically
-    com_method = 'dynamically'  # dynamically (standard), staticED
-
 
     # patient_name = os.path.basename(path_to_patient_folder) #test21.10.21
     # iteration info
@@ -207,16 +206,16 @@ def calc_strain4singlepatient(path_to_patient_folder, N_TIMESTEPS, RVIP_method, 
     #vol_cube = stack_nii_volume(path_to_patient_folder, 'cmr_moving_', N_TIMESTEPS)  # refactored
     # LV MYO MASKS
     mask_lvmyo = stack_nii_masks(path_to_patient_folder, 'myo_moving_', N_TIMESTEPS)  # moving: ED,MS, ES, PF, MD
-    mask_lvmyo = mask_lvmyo>0.1
-    #mask_lvmyo = np.roll(mask_lvmyo, shift=1, axis=0)
+    #mask_lvmyo = mask_lvmyo>0.1
+    mask_lvmyo = np.roll(mask_lvmyo, shift=1, axis=0)
     # WHOLE MASKS
     mask_whole = stack_nii_masks(path_to_patient_folder, 'fullmask_moving_', N_TIMESTEPS)  # ED,MS, ES, PF, MD
-    #mask_whole = np.roll(mask_whole, shift=1, axis=0)
+    mask_whole = np.roll(mask_whole, shift=1, axis=0)
     # FULL FLOWFIELD PHASE-PHASE
     # ff stored is of shape t x cxyz with c=zyx <-- need to verify if this is now still the case
     idx_ed = 0
     if p2p_style:
-        ff_whole = stack_nii_flowfield(path_to_patient_folder, 'flow_', N_TIMESTEPS)
+        ff_whole = stack_nii_flowfield(path_to_patient_folder, 'flow_masked_', N_TIMESTEPS)
     else:
         ff_whole = stack_nii_flowfield(path_to_patient_folder, 'flow_composed_', N_TIMESTEPS)
 
@@ -238,13 +237,14 @@ def calc_strain4singlepatient(path_to_patient_folder, N_TIMESTEPS, RVIP_method, 
         mask_whole[t,0:int(mask_given[border])] = 0
         mask_whole[t, int(mask_given[-border]):] = 0
 
+
     # get the indexes showing the lvmyo on the ED keyframe
     lvmyo_idxs = np.argwhere(mask_lvmyo[idx_ed].sum(axis=(1,2)) > 0)[:,0]
     if len(lvmyo_idxs) == 0:
         print(patient_name)
 
     # the most basal and most apical myom ask is often not reliable, we zero them out
-    base_slices, midcavity_slices, apex_slices = get_volumeborders(lvmyo_idxs)  # by lvmyo-range
+    base_slices, midcavity_slices, apex_slices = get_volumeborders(lvmyo_idxs,border=1)  # by lvmyo-range
 
     if len(base_slices)==0 or len(midcavity_slices)==0 or len(apex_slices)==0:
         raise NotImplementedError('some areas are empty')
@@ -267,7 +267,7 @@ def calc_strain4singlepatient(path_to_patient_folder, N_TIMESTEPS, RVIP_method, 
                          ff_whole[..., 0]], axis=-1)
 
     ff_Moralesinput = np.einsum('tzyxc->txyzc', ff_Moralesinput)
-    mask_lvmyo_Moralesinput = np.einsum('tzyxc->txyzc', mask_lvmyo[...,None])
+    mask_lvmyo_Moralesinput = np.einsum('tzyxc->txyzc', copy.deepcopy(mask_lvmyo[...,None]))
 
     # for roll_to_center to work, we have to give t,c with c=x,y,z into Morales
     # DeepStrain will not make use of cz, so only the first two entries are relevant
@@ -333,6 +333,8 @@ def calc_strain4singlepatient(path_to_patient_folder, N_TIMESTEPS, RVIP_method, 
     Ecc = np.einsum('txyz->tzyx', Ecc)
     masks_rot_lvmyo = np.einsum('txyz->tzyx', masks_rot_lvmyo)
 
+
+
     ######AHA DIVISIONS#####
     # calculate array of sector masks with the same shape as the whole 4DCMR
     # entries only where slices are given
@@ -377,10 +379,11 @@ def calc_strain4singlepatient(path_to_patient_folder, N_TIMESTEPS, RVIP_method, 
     sector_masks_rot_midcavity = np.einsum('tzxy->tzyx', sector_masks_rot_midcavity)
     sector_masks_rot_apex = np.einsum('tzxy->tzyx', sector_masks_rot_apex)"""
 
-    quantile = .95
-    msk_heart = (masks_rot_lvmyo == 1)
-    Err[msk_heart] = clip_quantile(Err[msk_heart], q=quantile)
-    Ecc[msk_heart] = clip_quantile(Ecc[msk_heart], q=quantile)
+    for t in range(masks_rot_lvmyo.shape[0]):
+        quantile = .95
+        msk_heart = (masks_rot_lvmyo[t] == 1)
+        Err[t,msk_heart] = clip_quantile(Err[t,msk_heart], q=quantile)
+        Ecc[t,msk_heart] = clip_quantile(Ecc[t,msk_heart], q=quantile)
 
 
     # calculate the AHA cubes
@@ -406,21 +409,23 @@ def calc_strain4singlepatient(path_to_patient_folder, N_TIMESTEPS, RVIP_method, 
                                       N_AHA=N_AHA_apex, p2p_style=p2p_style)
 
 
-    rs_overtime_base = AHAcube_base[..., 0]
-    cs_overtime_base = AHAcube_base[..., 1]
-    rs_overtime_mc = AHAcube_midcavity[..., 0]
-    cs_overtime_mc = AHAcube_midcavity[..., 1]
-    rs_overtime_apex = AHAcube_apex[..., 0]
-    cs_overtime_apex = AHAcube_apex[..., 1]
+    # the strain per slice, axis=2 should be the same,
+    # no need to calc the mean, just take one of them
+    rs_overtime_base = AHAcube_base[...,0, 0]
+    cs_overtime_base = AHAcube_base[...,0, 1]
+    rs_overtime_mc = AHAcube_midcavity[...,0, 0]
+    cs_overtime_mc = AHAcube_midcavity[...,0, 1]
+    rs_overtime_apex = AHAcube_apex[...,0, 0]
+    cs_overtime_apex = AHAcube_apex[...,0, 1]
 
     # runtime outputs
     # output min max mean strain for patient; Err and Ecc
-    rs_overtime_base = np.nanmean(rs_overtime_base, axis=2)
+    """rs_overtime_base = np.nanmean(rs_overtime_base, axis=2)
     cs_overtime_base = np.nanmean(cs_overtime_base, axis=2)
     rs_overtime_mc = np.nanmean(rs_overtime_mc, axis=2)
     cs_overtime_mc = np.nanmean(cs_overtime_mc, axis=2)
     rs_overtime_apex = np.nanmean(rs_overtime_apex, axis=2)
-    cs_overtime_apex = np.nanmean(cs_overtime_apex, axis=2)
+    cs_overtime_apex = np.nanmean(cs_overtime_apex, axis=2)"""
     # 80,1 = 5 timesteps * 16 segments as column
 
     rs_AHA_overtime = np.concatenate((rs_overtime_base, rs_overtime_mc, rs_overtime_apex), axis=0).reshape(

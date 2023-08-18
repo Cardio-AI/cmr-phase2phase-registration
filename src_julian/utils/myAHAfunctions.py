@@ -471,7 +471,7 @@ def myMorales(ff, mask_lvmyo, com_cube, spacing, method, reg_backwards, idx_ed):
                 masklvmyo = mask_lvmyo[t, ..., 0]  # for composed and forward reg we sample from a dynamic target
         else:
             raise NotImplementedError('invalid method: {}, valid methods: {}'.format(method, ['p2p', 'ed2p']))
-        com = com_cube[t]
+        com = com_cube[t] # for ed2p each t has the same com
         flow = ff[t]
 
         # strain calculation
@@ -515,10 +515,6 @@ def calculate_AHA_cube(Err, Ecc, sector_masks_rot, masks_rot, Z_SLICES, N_AHA, p
     # for compatibility reasons with the per-slice average approach we repeat the mean strain value per slice
     # and average them later
     # this clips values per apex/mid/base, we should change this
-    """quantile = .95
-    msk_heart = (sector_masks_rot>0) & (masks_rot== label_lvmyo)
-    Err[msk_heart] = clip_quantile(Err[msk_heart], q=quantile)
-    Ecc[msk_heart] = clip_quantile(Ecc[msk_heart], q=quantile)"""
 
     for t in range(nt):
         for idx, AHA in enumerate(N_AHA): # check if this segment is visible in this slice
@@ -526,7 +522,6 @@ def calculate_AHA_cube(Err, Ecc, sector_masks_rot, masks_rot, Z_SLICES, N_AHA, p
             if mask.sum()>0:
                 err = Err[t]
                 ecc = Ecc[t]
-
                 # we create a masked array for mean derivation as here we will divide the sum by #masked voxels
                 # Otherwise we would consider the zero/masked values into the mean calculation
                 err = np.ma.mean(np.ma.array(err, mask=~mask))
@@ -536,22 +531,6 @@ def calculate_AHA_cube(Err, Ecc, sector_masks_rot, masks_rot, Z_SLICES, N_AHA, p
                 ecc = np.NaN
             AHA_cube[idx, t, ..., 0] = err
             AHA_cube[idx, t, ..., 1] = ecc
-
-    # here we derive the mean strain value per slice and average them later,
-    # slices with only few voxels are equally weighted as slices with many voxels
-    """for t in range(nt):
-        for z_rel, z_abs in enumerate(Z_SLICES):
-            for idx, AHA in enumerate(N_AHA): # check if this segment is visible in this slice
-                mask = ((sector_masks_rot[t, z_rel] == AHA) & (masks_rot[t, z_rel] == label_lvmyo))
-                #mask = (sector_masks_rot[t, z_rel] == AHA) # here we dont mask by the smoothed LV myo
-                if mask.sum()>0:
-                    err = np.ma.mean(np.ma.array(Err[t, z_rel], mask=~mask))
-                    ecc = np.ma.mean(np.ma.array(Ecc[t, z_rel], mask=~mask))
-                else: # ignore slices where no segment is visible
-                    err = np.NaN
-                    ecc = np.NaN
-                AHA_cube[idx, t, z_rel, 0] = err
-                AHA_cube[idx, t, z_rel, 1] = ecc"""
 
     return AHA_cube
 
