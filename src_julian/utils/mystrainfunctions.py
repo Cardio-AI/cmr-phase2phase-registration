@@ -471,14 +471,14 @@ def get_volumeborders(lvmyo_idxs, border =1):
     # inits
     # maybe we should remove the most apical and basal slices, they are very likely wrong
 
-    lvmyo_idxs = lvmyo_idxs[border:-border]
+    lvmyo_idxs = lvmyo_idxs[:-border]
     size_heart = len(lvmyo_idxs)
 
 
     perc_midcavity = .35
     perc_apex = .30
-    end_apex = int(size_heart * perc_apex)
-    end_midcavity = int(size_heart * (perc_apex+perc_midcavity))
+    end_apex = int(round(size_heart * perc_apex))
+    end_midcavity = int(round(size_heart * (perc_apex+perc_midcavity)))
     # we will calculate mid-cavity borders, then from there derive the base and apex ranges
     apex_slices = lvmyo_idxs[0:end_apex]
     midcavity_slices = lvmyo_idxs[end_apex:end_midcavity]

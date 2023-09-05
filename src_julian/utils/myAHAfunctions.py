@@ -651,30 +651,56 @@ def calculate_RVIP_cube(mask_whole, base_slices, midcavity_slices, apex_slices, 
     nt, nz = (mask_whole.shape[0], mask_whole.shape[1])
     RVIP_cube = np.zeros((nt, nz, 2, 2))
     ant, inf = None, None
+    if method=='dynamically':
+        for t in range(nt):
+            # when mask_whole is provided zyx, the returned tuples are y,x
+            # RVIP is derived from full mask, which is the rolled moving mask (MD, ED, MS, ES, PF)
+            ant, inf = get_ip_from_mask_3d(mask_whole[t], debug=False, keepdim=False, rev=False)
 
-    for t in range(nt):
-        # when mask_whole is provided zyx, the returned tuples are y,x
-        # RVIP is derived from full mask, which is the rolled moving mask (MD, ED, MS, ES, PF)
-        if method=='dynamically':
-            ant, inf = get_ip_from_mask_3d(mask_whole[t], debug=False, keepdim=True, rev=False)
-        elif method=='staticED' and ant is None:
-            ant, inf = get_ip_from_mask_3d(mask_whole[idx_ed], debug=False, keepdim=True, rev=False)
-        else:
-            # reuse the existing ant, inf
-            pass
+            try:
+                #ant = np.array(ant, dtype='object')[midcavity_slices]
+                #ant = [x for x in ant if x != None]
+                RVIP_cube[t, :, 0] = np.nanmean(np.array(ant), axis=0)
 
+                #inf = np.array(inf, dtype='object')[midcavity_slices]
+                #inf = [x for x in inf if x != None]
+                RVIP_cube[t, :, 1] = np.nanmean(np.array(inf), axis=0)
+            except:
+                print('a')
+    else:
+        ant, inf = get_ip_from_mask_3d(mask_whole[idx_ed], debug=False, keepdim=False, rev=False)
+        #ant = np.array(ant, dtype='object')[midcavity_slices]
+        #ant = [x for x in ant if x != None]
+        RVIP_cube[:, :, 0] = np.nanmean(np.array(ant), axis=0)
+
+        #inf = np.array(inf, dtype='object')[midcavity_slices]
+        #inf = [x for x in inf if x != None]
+        RVIP_cube[:, :, 1] = np.nanmean(np.array(inf), axis=0)
+
+
+        """RVIP_cube[t, base_slices, 0] = np.nanmean(np.array(ant), axis=0)
+        RVIP_cube[t, midcavity_slices, 0] = np.nanmean(np.array(ant), axis=0)
+        RVIP_cube[t, apex_slices, 0] = np.nanmean(np.array(ant), axis=0)
+
+        inf = np.array(inf, dtype='object')[midcavity_slices]
+        RVIP_cube[t, base_slices, 1] = np.nanmean(np.array(inf), axis=0)
+        RVIP_cube[t, midcavity_slices, 1] = np.nanmean(np.array(inf), axis=0)
+        RVIP_cube[t, apex_slices, 1] = np.nanmean(np.array(inf), axis=0)"""
+
+        # here we define different rvips per apical, midcavity, basal
         # write RVIP mean coordinates for all slices
         # remember: when we provide mask_whole as tzyx, the returned RVIP tuples are y,x above.
         # This method fails if we dont find RVIPS at the apical or basal area
         # here we should fallback to the RVIP of the midcavity
         # anterior RVIPs
-        base = ant[base_slices[0]:base_slices[-1] + 1]
-        midcavity = ant[midcavity_slices[0]:midcavity_slices[-1] + 1]
-        apex = ant[apex_slices[0]:apex_slices[-1] + 1]
-        if all(i is None for i in apex):
+        # base = ant[base_slices[0]:base_slices[-1] + 1]
+        # midcavity = ant[midcavity_slices[0]:midcavity_slices[-1] + 1]
+        # apex = ant[apex_slices[0]:apex_slices[-1] + 1]
+        """if all(i is None for i in apex):
             apex = midcavity[:len(apex)]
         if all(i is None for i in base):
             base = midcavity[:len(base)]
+        
         RVIP_cube[t, base_slices, 0] = np.array([x for x in base if x != None]).mean(axis=0)
         RVIP_cube[t, midcavity_slices, 0] = np.array([x for x in midcavity if x != None]).mean(axis=0)
         RVIP_cube[t, apex_slices, 0] = np.array([x for x in apex if x != None]).mean(axis=0)
@@ -691,7 +717,7 @@ def calculate_RVIP_cube(mask_whole, base_slices, midcavity_slices, apex_slices, 
             print('None')
         RVIP_cube[t, base_slices, 1] = np.array([x for x in base if x != None]).mean(axis=0)
         RVIP_cube[t, midcavity_slices, 1] = np.array([x for x in midcavity if x != None]).mean(axis=0)
-        RVIP_cube[t, apex_slices, 1] = np.array([x for x in apex if x != None]).mean(axis=0)
+        RVIP_cube[t, apex_slices, 1] = np.array([x for x in apex if x != None]).mean(axis=0)"""
 
     return RVIP_cube
 

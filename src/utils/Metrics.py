@@ -353,7 +353,7 @@ class SSIM:
 
             shape_ytrue = get_shape(y_true)
             # combine t, z and c (the latter if it is greater than 1)
-            # SSIM is defined for 2D images, here we stack the temporal, spatial and channels slices
+            # SSIM is defined for 2D images, here we stack the temporal, spatial and channel slices
             t_shape = (shape_ytrue[0], shape_ytrue[-3], shape_ytrue[-2], shape_ytrue[1] * shape_ytrue[2])
             ssim = 0.
             """if shape_ytrue[-1]>1:

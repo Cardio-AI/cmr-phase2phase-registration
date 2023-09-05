@@ -193,7 +193,6 @@ def calc_strain4singlepatient(path_to_patient_folder, N_TIMESTEPS, RVIP_method, 
     else:
         raise NotImplementedError('ffstyle : {} not supported'.format(ff_style))
 
-
     # patient_name = os.path.basename(path_to_patient_folder) #test21.10.21
     # iteration info
     INFO('now processing: ' + patient_name)
@@ -205,21 +204,20 @@ def calc_strain4singlepatient(path_to_patient_folder, N_TIMESTEPS, RVIP_method, 
     # CMR of patient
     #vol_cube = stack_nii_volume(path_to_patient_folder, 'cmr_moving_', N_TIMESTEPS)  # refactored
     # LV MYO MASKS
-    mask_lvmyo = stack_nii_masks(path_to_patient_folder, 'myo_moving_', N_TIMESTEPS)  # moving: ED,MS, ES, PF, MD
+    mask_lvmyo = stack_nii_masks(path_to_patient_folder, 'myo_target_', N_TIMESTEPS)  # moving: ED,MS, ES, PF, MD
     #mask_lvmyo = mask_lvmyo>0.1
-    mask_lvmyo = np.roll(mask_lvmyo, shift=1, axis=0)
+    #mask_lvmyo = np.roll(mask_lvmyo, shift=1, axis=0)
     # WHOLE MASKS
     mask_whole = stack_nii_masks(path_to_patient_folder, 'fullmask_moving_', N_TIMESTEPS)  # ED,MS, ES, PF, MD
     mask_whole = np.roll(mask_whole, shift=1, axis=0)
     # FULL FLOWFIELD PHASE-PHASE
-    # ff stored is of shape t x cxyz with c=zyx <-- need to verify if this is now still the case
-    idx_ed = 0
+    idx_ed = 1
     if p2p_style:
         ff_whole = stack_nii_flowfield(path_to_patient_folder, 'flow_masked_', N_TIMESTEPS)
     else:
         ff_whole = stack_nii_flowfield(path_to_patient_folder, 'flow_composed_', N_TIMESTEPS)
 
-    # Mask: MD,ED,MS,ES,PF - TZYXC
+    # Mask target: MD,ED,MS,ES,PF - TZYXC
     # Flow: MD-ED,ED-MS,MS-ES,ES-PF,PF-MD - TZYXC
     # Flow composed: ED-ED,ED-MS,ED-ES,ED-PF,ED-MD - TZYXC
 
@@ -228,29 +226,35 @@ def calc_strain4singlepatient(path_to_patient_folder, N_TIMESTEPS, RVIP_method, 
     nt, nz, nx, ny, nc = shape_
 
     # remove the most apical and basal slices, as they often are wrong
-    # use different borders depending on t, as the heart size changes
+    # use different absolute border indices depending on t, as the heart size changes over time
     border = 1
     for t in range(mask_lvmyo.shape[0]):
-        mask_given = np.argwhere(mask_lvmyo[t].sum(axis=(1, 2)) > 0)
+        mask_given = np.argwhere(mask_lvmyo[t].sum(axis=(1, 2)) > 0) # get a list of indices along z
+        # clean lvmyo mask
         mask_lvmyo[t, 0:int(mask_given[border])] = 0
         mask_lvmyo[t, int(mask_given[-border]):] = 0
+        # clean mask whole
         mask_whole[t,0:int(mask_given[border])] = 0
         mask_whole[t, int(mask_given[-border]):] = 0
 
 
     # get the indexes showing the lvmyo on the ED keyframe
     lvmyo_idxs = np.argwhere(mask_lvmyo[idx_ed].sum(axis=(1,2)) > 0)[:,0]
+    # define the heart border according to slices that show the blood-pool and the lvmyo
+    # this should exclude failing slices and the most apical slices, which are not part of the AHA16 model
+    lvmyo_idxs = np.argwhere(((mask_whole[idx_ed] == 3).sum(axis=(1, 2)) > 0) & ((mask_whole[idx_ed] == 2).sum(axis=(1, 2)) > 0))[:,
+    0]
     if len(lvmyo_idxs) == 0:
         print(patient_name)
 
-    # the most basal and most apical myom ask is often not reliable, we zero them out
+    # the most basal and most apical myo mask is often not reliable, we zero them out
     base_slices, midcavity_slices, apex_slices = get_volumeborders(lvmyo_idxs,border=1)  # by lvmyo-range
 
     if len(base_slices)==0 or len(midcavity_slices)==0 or len(apex_slices)==0:
         raise NotImplementedError('some areas are empty')
 
     # c = y,x
-    # dynamically: every timestep gets different mean RVIPs for base mid cavity apex
+    # dynamically: every timestep gets different mean RVIPs for base, mid cavity, apex
     # staticED: every timestep contains the same mean RVIPs for base mid cavity apex of ED
     # c = z,y,x
     RVIP_cube = calculate_RVIP_cube(mask_whole, base_slices, midcavity_slices, apex_slices, method=RVIP_method, idx_ed=idx_ed)
@@ -261,7 +265,7 @@ def calc_strain4singlepatient(path_to_patient_folder, N_TIMESTEPS, RVIP_method, 
                                              base_slices=base_slices, midcavity_slices=midcavity_slices,
                                              apex_slices=apex_slices, method=com_method, idx_ed=idx_ed)
     # Morales expects a shape of: x,y,z, also for the channels
-    # C of ff should be z,y,x such as the axis, invert them
+    # C of ff should be z,y,x such as the axis, so we need to invert them
     ff_Moralesinput = np.stack([ff_whole[..., 2],
                          ff_whole[..., 1],
                          ff_whole[..., 0]], axis=-1)
@@ -370,20 +374,27 @@ def calc_strain4singlepatient(path_to_patient_folder, N_TIMESTEPS, RVIP_method, 
                                                                       com_cube=com_cube[:, 1, :])
     sector_masks_rot_apex = roll_sector_mask_to_bloodpool_center(sector_mask_raw=sector_masks_raw_apex,
                                                                  com_cube=com_cube[:, 2, :])
-    # it seems that the secor mask has a shape of: t,z,x,y
+    # it seems that the sector mask has a shape of: t,z,x,y
     # roll_sector_mask_to_bloodpool_center uses the function "roll_to_center" from morales
     # This method expects an axis order of x,y
     # we keep that part and change the axis afterwards.
+    # Changing the axis afterwards does not work properly
 
     """sector_masks_rot_base = np.einsum('tzxy->tzyx', sector_masks_rot_base)
     sector_masks_rot_midcavity = np.einsum('tzxy->tzyx', sector_masks_rot_midcavity)
     sector_masks_rot_apex = np.einsum('tzxy->tzyx', sector_masks_rot_apex)"""
 
-    for t in range(masks_rot_lvmyo.shape[0]):
+    """for t in range(masks_rot_lvmyo.shape[0]):
         quantile = .95
         msk_heart = (masks_rot_lvmyo[t] == 1)
         Err[t,msk_heart] = clip_quantile(Err[t,msk_heart], q=quantile)
-        Ecc[t,msk_heart] = clip_quantile(Ecc[t,msk_heart], q=quantile)
+        Ecc[t,msk_heart] = clip_quantile(Ecc[t,msk_heart], q=quantile)"""
+
+    # Clip outliers
+    quantile = .95
+    msk_heart = (masks_rot_lvmyo == 1)
+    Err[msk_heart] = clip_quantile(Err[msk_heart], q=quantile)
+    Ecc[msk_heart] = clip_quantile(Ecc[msk_heart], q=quantile)
 
 
     # calculate the AHA cubes
