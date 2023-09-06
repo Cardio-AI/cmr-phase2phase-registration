@@ -323,6 +323,7 @@ def create_grid_search(refit='balanced_accuracy', cv=5):
     depths = [2,3,5,10]
 
     scaler = [StandardScaler(), MinMaxScaler(), None]
+    scaler = [None]
 
     from sklearn.model_selection import StratifiedKFold, KFold
     skf = StratifiedKFold(n_splits=cv)
@@ -400,6 +401,7 @@ def create_grid_search(refit='balanced_accuracy', cv=5):
                  'scaler': scaler}
     dt_params = {'clf': (tree.DecisionTreeClassifier(class_weight='balanced'),),
                  'clf__criterion': criterions,
+                 #'clf__class_weight': weights,
                  'scaler': scaler}
     mlp_params = {'clf':(MLPClassifier(hidden_layer_sizes=(100, 50, 10), random_state=1,
                                                               solver='adam', max_iter=10000),),
@@ -431,8 +433,7 @@ def create_grid_search(refit='balanced_accuracy', cv=5):
                'roc_auc': roc_m,
                #'precision': prec_m,
                'accuracy': acc_m}
-    #scoring ={'balanced_accuracy': bacc_m}
-    # scoring = ['recall', 'accuracy', 'balanced_accuracy', 'average_precision','precision', 'f1', 'roc_auc']
+
     return GridSearchCV(estimator=pipeline,
                         param_grid=params,
                         scoring=scoring,

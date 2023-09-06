@@ -669,12 +669,12 @@ def calculate_RVIP_cube(mask_whole, base_slices, midcavity_slices, apex_slices, 
                 print('a')
     else:
         ant, inf = get_ip_from_mask_3d(mask_whole[idx_ed], debug=False, keepdim=False, rev=False)
-        #ant = np.array(ant, dtype='object')[midcavity_slices]
-        #ant = [x for x in ant if x != None]
+        ant = np.array(ant, dtype='object')[midcavity_slices]
+        ant = [x for x in ant if x != None]
         RVIP_cube[:, :, 0] = np.nanmean(np.array(ant), axis=0)
 
-        #inf = np.array(inf, dtype='object')[midcavity_slices]
-        #inf = [x for x in inf if x != None]
+        inf = np.array(inf, dtype='object')[midcavity_slices]
+        inf = [x for x in inf if x != None]
         RVIP_cube[:, :, 1] = np.nanmean(np.array(inf), axis=0)
 
 
