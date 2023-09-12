@@ -103,7 +103,7 @@ def roll(x, rx, ry):
 
 def roll_to_center(x, cx, cy):
     nx, ny = x.shape[:2]
-    return roll(x, int(nx // 2 - cx), int(ny // 2 - cy))
+    #return roll(x, int(nx // 2 - cx), int(ny // 2 - cy))
     try:
         return roll(x, int(nx // 2 - cx), int(ny // 2 - cy))
     except Exception as e: # dont roll

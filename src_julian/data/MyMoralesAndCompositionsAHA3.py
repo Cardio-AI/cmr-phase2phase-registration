@@ -208,7 +208,7 @@ def calc_strain4singlepatient(path_to_patient_folder, N_TIMESTEPS, RVIP_method, 
     #mask_lvmyo = mask_lvmyo>0.1
     #mask_lvmyo = np.roll(mask_lvmyo, shift=1, axis=0)
     # WHOLE MASKS
-    mask_whole = stack_nii_masks(path_to_patient_folder, 'fullmask_moving_', N_TIMESTEPS)  # ED,MS, ES, PF, MD
+    mask_whole = stack_nii_masks(path_to_patient_folder, 'fullmask_moving_', N_TIMESTEPS)  # moving:ED,MS, ES, PF, MD
     mask_whole = np.roll(mask_whole, shift=1, axis=0)
     # FULL FLOWFIELD PHASE-PHASE
     idx_ed = 1
@@ -225,30 +225,40 @@ def calc_strain4singlepatient(path_to_patient_folder, N_TIMESTEPS, RVIP_method, 
     dim_ = ff_whole.ndim
     nt, nz, nx, ny, nc = shape_
 
+    # smooth the deformation field
+    from scipy.ndimage import gaussian_filter
+    #ff_whole = gaussian_filter(ff_whole, sigma=(0,0,2,2,0))
+
     # remove the most apical and basal slices, as they often are wrong
     # use different absolute border indices depending on t, as the heart size changes over time
     border = 1
     for t in range(mask_lvmyo.shape[0]):
         mask_given = np.argwhere(mask_lvmyo[t].sum(axis=(1, 2)) > 0) # get a list of indices along z
         # clean lvmyo mask
-        mask_lvmyo[t, 0:int(mask_given[border])] = 0
-        mask_lvmyo[t, int(mask_given[-border]):] = 0
+        mask_lvmyo[t, 0:int(mask_given[border])] = 0 # apex border
+        mask_lvmyo[t, int(mask_given[-border]):] = 0 # base border (x2)
         # clean mask whole
-        mask_whole[t,0:int(mask_given[border])] = 0
-        mask_whole[t, int(mask_given[-border]):] = 0
+        mask_whole[t,0:int(mask_given[border])] = 0 # apex border
+        mask_whole[t, int(mask_given[-border]):] = 0 # base border (x2)
+
+    # use the rvip will skip some apical and basal slices
+    #heart_borders = calculate_wholeheartvolumeborders_by_RVIP(mask_whole=mask_whole, idx_ed=3)
 
 
     # get the indexes showing the lvmyo on the ED keyframe
-    lvmyo_idxs = np.argwhere(mask_lvmyo[idx_ed].sum(axis=(1,2)) > 0)[:,0]
+    #lvmyo_idxs = np.argwhere(mask_lvmyo[idx_ed].sum(axis=(1,2)) > 0)[:,0]
     # define the heart border according to slices that show the blood-pool and the lvmyo
     # this should exclude failing slices and the most apical slices, which are not part of the AHA16 model
-    lvmyo_idxs = np.argwhere(((mask_whole[idx_ed] == 3).sum(axis=(1, 2)) > 0) & ((mask_whole[idx_ed] == 2).sum(axis=(1, 2)) > 0))[:,
-    0]
-    if len(lvmyo_idxs) == 0:
+    heart_borders = np.argwhere(((mask_whole[idx_ed] == 3).sum(axis=(1, 2)) > 0)
+                             & ((mask_whole[idx_ed] == 2).sum(axis=(1, 2)) > 0)
+                             #& ((mask_whole[idx_ed] == 1).sum(axis=(1, 2)) > 0)
+                             )[:,0]
+
+    if len(heart_borders) == 0:
         print(patient_name)
 
     # the most basal and most apical myo mask is often not reliable, we zero them out
-    base_slices, midcavity_slices, apex_slices = get_volumeborders(lvmyo_idxs,border=1)  # by lvmyo-range
+    base_slices, midcavity_slices, apex_slices = get_volumeborders(heart_borders,border=1)  # by lvmyo-range
 
     if len(base_slices)==0 or len(midcavity_slices)==0 or len(apex_slices)==0:
         raise NotImplementedError('some areas are empty')
@@ -277,7 +287,7 @@ def calc_strain4singlepatient(path_to_patient_folder, N_TIMESTEPS, RVIP_method, 
     # DeepStrain will not make use of cz, so only the first two entries are relevant
     com_cube_Moralesinput = np.zeros_like(com_cube)
     com_cube_Moralesinput[..., 0] = com_cube[..., 2]
-    com_cube_Moralesinput[..., 1] = com_cube[..., 1]
+    com_cube_Moralesinput[..., 1] = com_cube[..., 1] # changed with index above
     com_cube_Moralesinput[..., 2] = com_cube[..., 0]
     # validation plot: plot mask and center of mass before DeepStrain call
     # t, z = (2, 24)
@@ -375,9 +385,11 @@ def calc_strain4singlepatient(path_to_patient_folder, N_TIMESTEPS, RVIP_method, 
     sector_masks_rot_apex = roll_sector_mask_to_bloodpool_center(sector_mask_raw=sector_masks_raw_apex,
                                                                  com_cube=com_cube[:, 2, :])
     # it seems that the sector mask has a shape of: t,z,x,y
+    # all other volumes have an order of y,x
     # roll_sector_mask_to_bloodpool_center uses the function "roll_to_center" from morales
-    # This method expects an axis order of x,y
-    # we keep that part and change the axis afterwards.
+    # This method expects an axis order of x,y,
+    # this indicates that we have a different axis order for the sector mask vs rest
+    #
     # Changing the axis afterwards does not work properly
 
     """sector_masks_rot_base = np.einsum('tzxy->tzyx', sector_masks_rot_base)
@@ -420,7 +432,7 @@ def calc_strain4singlepatient(path_to_patient_folder, N_TIMESTEPS, RVIP_method, 
                                       N_AHA=N_AHA_apex, p2p_style=p2p_style)
 
 
-    # the strain per slice, axis=2 should be the same,
+    # the strain per slice (axis=2) should be the same, as we repeat the mean value in calculate_AHA_cube
     # no need to calc the mean, just take one of them
     rs_overtime_base = AHAcube_base[...,0, 0]
     cs_overtime_base = AHAcube_base[...,0, 1]

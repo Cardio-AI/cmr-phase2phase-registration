@@ -514,7 +514,6 @@ def calculate_AHA_cube(Err, Ecc, sector_masks_rot, masks_rot, Z_SLICES, N_AHA, p
     # here we derive the mean strain per segment mask and slice, every voxel is weighted equally,
     # for compatibility reasons with the per-slice average approach we repeat the mean strain value per slice
     # and average them later
-    # this clips values per apex/mid/base, we should change this
 
     for t in range(nt):
         for idx, AHA in enumerate(N_AHA): # check if this segment is visible in this slice
@@ -524,6 +523,11 @@ def calculate_AHA_cube(Err, Ecc, sector_masks_rot, masks_rot, Z_SLICES, N_AHA, p
                 ecc = Ecc[t]
                 # we create a masked array for mean derivation as here we will divide the sum by #masked voxels
                 # Otherwise we would consider the zero/masked values into the mean calculation
+                # Clip outliers
+                """quantile = .99
+                err[mask] = clip_quantile(err[mask], q=quantile)
+                ecc[mask] = clip_quantile(ecc[mask], q=quantile)"""
+
                 err = np.ma.mean(np.ma.array(err, mask=~mask))
                 ecc = np.ma.mean(np.ma.array(ecc, mask=~mask))
             else: # ignore slices where no segment is visible
@@ -653,9 +657,13 @@ def calculate_RVIP_cube(mask_whole, base_slices, midcavity_slices, apex_slices, 
     ant, inf = None, None
     if method=='dynamically':
         for t in range(nt):
+        #for slices_ in [base_slices, midcavity_slices,apex_slices]:
             # when mask_whole is provided zyx, the returned tuples are y,x
             # RVIP is derived from full mask, which is the rolled moving mask (MD, ED, MS, ES, PF)
             ant, inf = get_ip_from_mask_3d(mask_whole[t], debug=False, keepdim=False, rev=False)
+
+            #if not ant:
+            #    ant, inf = get_ip_from_mask_3d(mask_whole[t, midcavity_slices], debug=False, keepdim=False, rev=False)
 
             try:
                 #ant = np.array(ant, dtype='object')[midcavity_slices]
@@ -668,13 +676,17 @@ def calculate_RVIP_cube(mask_whole, base_slices, midcavity_slices, apex_slices, 
             except:
                 print('a')
     else:
+        #for slices_ in [base_slices, midcavity_slices, apex_slices]:
         ant, inf = get_ip_from_mask_3d(mask_whole[idx_ed], debug=False, keepdim=False, rev=False)
-        ant = np.array(ant, dtype='object')[midcavity_slices]
-        ant = [x for x in ant if x != None]
+
+            #if not ant:
+            #    ant, inf = get_ip_from_mask_3d(mask_whole[idx_ed, midcavity_slices], debug=False, keepdim=False, rev=False)
+        #ant = np.array(ant, dtype='object')[midcavity_slices]
+        #ant = [x for x in ant if x != None]
         RVIP_cube[:, :, 0] = np.nanmean(np.array(ant), axis=0)
 
-        inf = np.array(inf, dtype='object')[midcavity_slices]
-        inf = [x for x in inf if x != None]
+        #inf = np.array(inf, dtype='object')[midcavity_slices]
+        #inf = [x for x in inf if x != None]
         RVIP_cube[:, :, 1] = np.nanmean(np.array(inf), axis=0)
 
 
@@ -774,24 +786,26 @@ def calculate_RVIP_cube2(mask_whole, rvip_range, base_slices, midcavity_slices, 
 
     return RVIP_cube
 
-def calculate_wholeheartvolumeborders_by_RVIP(mask_whole):
+def calculate_wholeheartvolumeborders_by_RVIP(mask_whole, idx_ed=0):
     '''
     get whole heart volume borders by RVIP method
     '''
 
     nt = mask_whole.shape[0]
 
-    heartborders = np.zeros((nt, 2))
+    """heartborders = np.zeros((nt, 2))
     for t in range(nt):
         # calculate list or IPs
         RVIPup_glob, _ = get_ip_from_mask_3d(mask_whole[t], debug=False, keepdim=True)
         res = [i for i in range(len(RVIPup_glob)) if RVIPup_glob[i] != None]
         heartborders[t, 0] = res[0]
         heartborders[t, 1] = res[-1]
-    #wholeheartvolumeborders = [int(np.max(heartborders[:, 0])), int(np.min(heartborders[:, 1]))]
-    wholeheartvolumeborders = [int(heartborders[0, 0]), int(heartborders[0, 1])] # use the ED mask as border
+    #wholeheartvolumeborders = [int(np.max(heartborders[:, 0])), int(np.min(heartborders[:, 1]))]"""
+    RVIPup_glob, _ = get_ip_from_mask_3d(mask_whole[idx_ed], debug=False, keepdim=True)
+    res = [i for i in range(len(RVIPup_glob)) if RVIPup_glob[i] != None]
+    #wholeheartvolumeborders = [int(res[0]), int(res[-1])] # use the ED mask as border
 
-    return wholeheartvolumeborders
+    return res
 
 def plot_3x5_cmroverlaywithmasked_strainormagnitude(ff_composed, Err, Ecc, base_slices, midcavity_slices, apex_slices, vol_cube, com_cube, masks_rot_lvmyo, method):
     # 3x5 plot to overlay CMR, strain map and lvmyomask
@@ -1184,6 +1198,7 @@ def clip_quantile(nda, q = 0.999):
     # one lower/upper threshold per CS and RS
     lower_threshold = np.quantile(a=nda, q=q_lower)
     upper_threshold = np.quantile(a=nda, q=q)
+    #logging.info('q_lower/min: {}/{}, q_upper/max:{}/{}'.format(lower_threshold,nda.min(), upper_threshold, nda.max()))
 
     return np.clip(a=nda, a_min=lower_threshold,
             a_max=upper_threshold)

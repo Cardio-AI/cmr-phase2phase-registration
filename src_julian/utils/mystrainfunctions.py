@@ -470,8 +470,8 @@ def get_volumeborders(lvmyo_idxs, border =1):
 
     # inits
     # maybe we should remove the most apical and basal slices, they are very likely wrong
-
-    lvmyo_idxs = lvmyo_idxs[:-border]
+    if border>0:
+        lvmyo_idxs = lvmyo_idxs[:-border]
     size_heart = len(lvmyo_idxs)
 
 
