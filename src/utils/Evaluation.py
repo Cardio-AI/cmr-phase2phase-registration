@@ -252,11 +252,11 @@ def cross_validate_f1(x, y):
     clfs['MLP'] = make_pipeline(StandardScaler(),MLPClassifier(hidden_layer_sizes=(100,50,10), random_state=1,
               solver='adam', max_iter=10000))
     clfs['Logistic Regression'] = LogisticRegression(random_state=1, class_weight='balanced', max_iter=1000)
-    clfs['Random Forest'] = make_pipeline(MinMaxScaler(), RandomForestClassifier(n_estimators=500, random_state=1,
+    clfs['Random Forest'] = make_pipeline(None, RandomForestClassifier(n_estimators=500, random_state=1,
                                                                                    class_weight='balanced'))  # RandomForestClassifier(n_estimators=100, random_state=1, class_weight='balanced')
     clfs['Naive Bayes'] = GaussianNB()
-    clfs['Scaled DecissionTree'] = make_pipeline(MinMaxScaler(), tree.DecisionTreeClassifier(class_weight='balanced'))
-    clfs['KNN'] = make_pipeline(MinMaxScaler(), KNeighborsClassifier(n_neighbors=2))
+    clfs['Scaled DecissionTree'] = make_pipeline(None, tree.DecisionTreeClassifier(class_weight='balanced'))
+    clfs['KNN'] = make_pipeline(None, KNeighborsClassifier(n_neighbors=2))
     clfs['Scaled SVC(poly)'] = make_pipeline(MinMaxScaler(),
                                              SVC(kernel='poly', gamma='auto', class_weight='balanced', C=100))
     clfs['SVC(poly)'] = SVC(kernel='poly', gamma='auto', class_weight='balanced', C=100)

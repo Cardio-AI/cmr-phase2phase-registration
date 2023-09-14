@@ -521,12 +521,12 @@ def calculate_AHA_cube(Err, Ecc, sector_masks_rot, masks_rot, Z_SLICES, N_AHA, p
             if mask.sum()>0:
                 err = Err[t]
                 ecc = Ecc[t]
-                # we create a masked array for mean derivation as here we will divide the sum by #masked voxels
+                # we create a masked array for mean derivation as we divide by the sum of #masked voxels
                 # Otherwise we would consider the zero/masked values into the mean calculation
                 # Clip outliers
-                """quantile = .99
+                '''quantile = .99
                 err[mask] = clip_quantile(err[mask], q=quantile)
-                ecc[mask] = clip_quantile(ecc[mask], q=quantile)"""
+                ecc[mask] = clip_quantile(ecc[mask], q=quantile)'''
 
                 err = np.ma.mean(np.ma.array(err, mask=~mask))
                 ecc = np.ma.mean(np.ma.array(ecc, mask=~mask))

@@ -225,10 +225,6 @@ def calc_strain4singlepatient(path_to_patient_folder, N_TIMESTEPS, RVIP_method, 
     dim_ = ff_whole.ndim
     nt, nz, nx, ny, nc = shape_
 
-    # smooth the deformation field
-    from scipy.ndimage import gaussian_filter
-    #ff_whole = gaussian_filter(ff_whole, sigma=(0,0,2,2,0))
-
     # remove the most apical and basal slices, as they often are wrong
     # use different absolute border indices depending on t, as the heart size changes over time
     border = 1
@@ -242,7 +238,12 @@ def calc_strain4singlepatient(path_to_patient_folder, N_TIMESTEPS, RVIP_method, 
         mask_whole[t, int(mask_given[-border]):] = 0 # base border (x2)
 
     # use the rvip will skip some apical and basal slices
-    #heart_borders = calculate_wholeheartvolumeborders_by_RVIP(mask_whole=mask_whole, idx_ed=3)
+    # heart_borders = calculate_wholeheartvolumeborders_by_RVIP(mask_whole=mask_whole, idx_ed=idx_ed)
+    # smooth the deformation field
+    # This yields negative RS k2k strain while relaxation, which is more plausible
+    # But it is less predictive.
+    from scipy.ndimage import gaussian_filter
+    # ff_whole = gaussian_filter(ff_whole, sigma=(0, 0, 2, 2, 0))
 
 
     # get the indexes showing the lvmyo on the ED keyframe
@@ -257,7 +258,7 @@ def calc_strain4singlepatient(path_to_patient_folder, N_TIMESTEPS, RVIP_method, 
     if len(heart_borders) == 0:
         print(patient_name)
 
-    # the most basal and most apical myo mask is often not reliable, we zero them out
+    # the most basal and apical myo mask is often not reliable, we zero them out
     base_slices, midcavity_slices, apex_slices = get_volumeborders(heart_borders,border=1)  # by lvmyo-range
 
     if len(base_slices)==0 or len(midcavity_slices)==0 or len(apex_slices)==0:
@@ -269,7 +270,7 @@ def calc_strain4singlepatient(path_to_patient_folder, N_TIMESTEPS, RVIP_method, 
     # c = z,y,x
     RVIP_cube = calculate_RVIP_cube(mask_whole, base_slices, midcavity_slices, apex_slices, method=RVIP_method, idx_ed=idx_ed)
     # CALCULATE COM CUBE 5x3x3
-    # base, midcavity, apex : axis=1
+    # base, mid-cavity, apex : axis=1
     # c = z,y,x
     com_cube = calculate_center_of_mass_cube(mask_whole, label_bloodpool=label_bloodpool,
                                              base_slices=base_slices, midcavity_slices=midcavity_slices,
@@ -396,11 +397,11 @@ def calc_strain4singlepatient(path_to_patient_folder, N_TIMESTEPS, RVIP_method, 
     sector_masks_rot_midcavity = np.einsum('tzxy->tzyx', sector_masks_rot_midcavity)
     sector_masks_rot_apex = np.einsum('tzxy->tzyx', sector_masks_rot_apex)"""
 
-    """for t in range(masks_rot_lvmyo.shape[0]):
+    '''for t in range(masks_rot_lvmyo.shape[0]):
         quantile = .95
         msk_heart = (masks_rot_lvmyo[t] == 1)
         Err[t,msk_heart] = clip_quantile(Err[t,msk_heart], q=quantile)
-        Ecc[t,msk_heart] = clip_quantile(Ecc[t,msk_heart], q=quantile)"""
+        Ecc[t,msk_heart] = clip_quantile(Ecc[t,msk_heart], q=quantile)'''
 
     # Clip outliers
     quantile = .95
