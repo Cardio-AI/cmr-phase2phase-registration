@@ -82,7 +82,9 @@ def train_fold(config, in_memory=False):
     # check if we find each patient in the corresponding dataframe
     METADATA_FILE = DF_META
     df = pd.read_csv(METADATA_FILE)
+    df.columns = df.columns.str.lower()
     DF_METADATA = df[['patient', 'ed#', 'ms#', 'es#', 'pf#', 'md#']]
+    DF_METADATA[['ed#', 'ms#', 'es#', 'pf#', 'md#']] = DF_METADATA[['ed#', 'ms#', 'es#', 'pf#', 'md#']].astype('int')
     DF_METADATA.columns = DF_METADATA.columns.str.lower()
     DF_METADATA['patient'] = DF_METADATA['patient'].str.lower()
 
@@ -98,7 +100,7 @@ def train_fold(config, in_memory=False):
                 assert len(
                     patient_str) > 0, 'empty patient id found, please check the get_patient_id in fn train_fold()'
             else:
-                patient_str = re.search('-(.{8})_', x).group(1).upper()
+                patient_str = re.search('-(.{8})_', x).group(1).lower()
                 assert (len(patient_str) == 8), 'matched patient ID from the phase sheet has a length of: {}'.format(
                 len(patient_str))
             # returns the indices in the following order: 'ED#', 'MS#', 'ES#', 'PF#', 'MD#'

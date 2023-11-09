@@ -1326,7 +1326,7 @@ def get_phases_as_idx_gcn(file_path, df, temporal_sampling_factor, length):
     """
     import re
 
-    patient_str = re.search('-(.{8})_', file_path).group(1).upper()
+    patient_str = re.search('-(.{8})_', file_path).group(1).lower()
     assert (len(patient_str) == 8), 'matched patient ID from the phase sheet has a length of: {}'.format(
         len(patient_str))
 
@@ -1338,6 +1338,11 @@ def get_phases_as_idx_gcn(file_path, df, temporal_sampling_factor, length):
     indices = indices.values[0].astype(int)# - 1 # the excel sheet starts with 1, indices needs to start with 0
     # scale the idx as we resampled along t (we need to resample the indicies in the same way)
     indices = np.round(indices * temporal_sampling_factor).astype(int)
+    # if we have indicies that are bigger than the length, this is a strong indicator for indicies starting at 1 instead of 0
+    # here we need to subtract one in order to match the idx of the arrays
+    # the problem: this function only see the indicies of one patient
+    indices = indices - 1
+
     assert (indices<length-1).all(), 'invalid indicies, maybe they start with 1 instead of with 0?'
     #indices = np.clip(indices, a_min=0, a_max=length - 1)
     return  indices

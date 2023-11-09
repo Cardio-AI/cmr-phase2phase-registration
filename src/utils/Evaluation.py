@@ -460,7 +460,7 @@ def ttest_per_keyframe(df, hue='lge'):
     return ps
 
 
-def plot_strain_per_time(df, title=None, method=None, hue='lge', sig_niv = 0.05):
+def plot_strain_per_time(df, title=None, method=None, hue='lge', sig_niv = 0.05, scale=True, vert=True):
     """
     Plot a split violinplot per time (keyframe)
     Parameters
@@ -480,21 +480,28 @@ def plot_strain_per_time(df, title=None, method=None, hue='lge', sig_niv = 0.05)
     from scipy import stats
     sb.set_context('paper')
     sb.set(font_scale=1.5)
-    fig, ax = plt.subplots(1, 2, figsize=(15, 5))
+    if vert:
+        fig, ax = plt.subplots(1, 2, figsize=(15, 5))
+    else:
+        fig, ax = plt.subplots(2, 1, figsize=(15, 5))
 
     # scale to % values
     df = df.copy()
-    df['our_rs'] = df['our_rs'] * 100
-    df['our_cs'] = df['our_cs'] * 100
+    if scale:
+        df['our_rs'] = df['our_rs'] * 100
+        df['our_cs'] = df['our_cs'] * 100
 
 
-
+    ticks = [0, 1, 2, 3, 4]
     if method == 'p2p':
         phases = ['MD-ED', 'ED-MS', 'MS-ES', 'ES-PF', 'PF-MD']
     elif method == 'comp':
         phases = ['ED-ED', 'ED-MS', 'ED-ES', 'ED-PF', 'ED-MD']
     elif method == 'window':
         phases = ['ED-w-->ED', 'MS-w-->MS', 'ES-w-->ES', 'PF-w-->PF', 'MD-w-->MD']
+    else:
+        phases = [str(i) for i in range(30)]
+        ticks = [i for i in range(30)]
     ax1, ax2 = ax
     ax1 = sb.lineplot(x="phase", y="our_cs",
                       hue=hue,
@@ -505,13 +512,13 @@ def plot_strain_per_time(df, title=None, method=None, hue='lge', sig_niv = 0.05)
                         data=df,
                         split=True, hue=hue
                         )
-    ax1 = sb.stripplot(x="phase", y="our_cs",
+    if vert: ax1 = sb.stripplot(x="phase", y="our_cs",
                        ax=ax1,
                        data=df,
                        hue=hue
                        )
     # _ = ax1.set_ylim((-25., 25))
-    _ = ax1.set_xticks([0, 1, 2, 3, 4], minor=False)
+    _ = ax1.set_xticks(ticks, minor=False)
     _ = ax1.set_xticklabels(phases)
     _ = ax1.legend(['neg', 'pos'])
     _ = ax1.set_xlabel('')
@@ -526,14 +533,14 @@ def plot_strain_per_time(df, title=None, method=None, hue='lge', sig_niv = 0.05)
                         data=df,
                         split=True, hue=hue
                         )
-    ax2 = sb.stripplot(x="phase", y="our_rs",
+    if vert: ax2 = sb.stripplot(x="phase", y="our_rs",
                        ax=ax2,
                        data=df,
                        hue=hue
                        )
 
     # _ = ax2.set_ylim((-25, 150))
-    _ = ax2.set_xticks([0, 1, 2, 3, 4], minor=False)
+    _ = ax2.set_xticks(ticks, minor=False)
     _ = ax2.set_xticklabels(phases)
     _ = ax2.legend(['neg', 'pos'], framealpha=0.5)
     _ = ax2.set_xlabel('')
@@ -567,13 +574,15 @@ def plot_strain_per_time(df, title=None, method=None, hue='lge', sig_niv = 0.05)
         print(df_pvals_uncorrected.shape)
         msk_ss, df_pvals_corrected = get_pvals_corrected(df_pvals_uncorrected, alpha0=alpha0)
         plt.show()
+        values_ = len(ticks)
         for c in df_pvals_corrected.columns:
-            if c >= 5: # first 5 columns are the radial strain for the five phases, col 6 - 10 are the CS strain values
+            if c >= values_: # first 5 columns are the radial strain for the five phases, col 6 - 10 are the CS strain values
                 strain = 'CS'
                 strain_col = 'our_cs'
-                phase_idx = phase_idx % 5
+                phase_idx = phase_idx % values_
             sig_segments = df_pvals_corrected.index[df_pvals_corrected[c] < sig_niv].tolist()
             pvalues = df_pvals_corrected.iloc[sig_segments, c].tolist()
+            #print(pvalues)
             if sig_segments:
                 print('****'*10)
                 print(
@@ -615,6 +624,9 @@ def plot_report(clf, x, y, label=None, cv=5):
                              scoring={'specificity': spec_m, 'sensitivity': sens_m, 'roc': roc_m, 'recall': rec_m,
                                       'accuracy': acc_m, 'balanced_accuracy': bacc_m, 'precision': prec_m, 'f1': f1_m},
                              cv=skf)
+    print("Balanced Accuracy: {:0.2f} (+/- {:0.2f})".format(scores2['test_balanced_accuracy'].mean(),
+                                                            scores2['test_balanced_accuracy'].std()))
+    print("F1: {:0.2f} (+/- {:0.2f})".format(scores2['test_f1'].mean(), scores2['test_f1'].std()))
     print("Sensitivity: {:0.2f} (+/- {:0.2f})".format(scores2['test_sensitivity'].mean(),
                                                       scores2['test_sensitivity'].std(), ""))
     print(
@@ -625,9 +637,7 @@ def plot_report(clf, x, y, label=None, cv=5):
     print("Recall: {:0.2f} (+/- {:0.2f})".format(scores2['test_recall'].mean(), scores2['test_recall'].std()))
     print("Accuracy: {:0.2f} (+/- {:0.2f})".format(scores2['test_accuracy'].mean(), scores2['test_accuracy'].std()))
     print("Precision: {:0.2f} (+/- {:0.2f})".format(scores2['test_precision'].mean(), scores2['test_precision'].std()))
-    print("Balanced Accuracy: {:0.2f} (+/- {:0.2f})".format(scores2['test_balanced_accuracy'].mean(),
-                                                            scores2['test_balanced_accuracy'].std()))
-    print("F1: {:0.2f} (+/- {:0.2f})".format(scores2['test_f1'].mean(), scores2['test_f1'].std()))
+
     print("AUC: {:0.2f} (+/- {:0.2f})".format(scores2['test_roc'].mean(), scores2['test_roc'].std()))
     disp = ConfusionMatrixDisplay.from_predictions(y, y_pred, labels=[1, 0], display_labels=['positive', 'negative'],
                                                    colorbar=True)

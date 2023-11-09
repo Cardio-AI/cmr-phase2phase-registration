@@ -210,7 +210,7 @@ def calc_strain4singlepatient(path_to_patient_folder, N_TIMESTEPS, RVIP_method, 
     # WHOLE MASKS
     mask_whole = stack_nii_masks(path_to_patient_folder, 'fullmask_moving_', N_TIMESTEPS)  # moving:ED,MS, ES, PF, MD
     mask_whole = np.roll(mask_whole, shift=1, axis=0)
-    # FULL FLOWFIELD PHASE-PHASE
+    # FULL FLOWFIELD Keyframe2Keyframe
     idx_ed = 1
     if p2p_style:
         ff_whole = stack_nii_flowfield(path_to_patient_folder, 'flow_masked_', N_TIMESTEPS)

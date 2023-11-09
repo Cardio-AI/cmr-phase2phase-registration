@@ -1141,8 +1141,9 @@ class PhaseMaskWindowGenerator(DataGenerator):
         elif self.ISDMD:
             idx = get_phases_as_idx_dmd(x, self.DF_METADATA, temporal_sampling_factor, len(model_inputs))
         else:
-            raise NotImplementedError('need to validate if get_phases_as_idx_gcn works')
             idx = get_phases_as_idx_gcn(x, self.DF_METADATA, temporal_sampling_factor, len(model_inputs))
+            #raise NotImplementedError('need to validate if get_phases_as_idx_gcn works')
+            #idx = get_phases_as_idx_gcn(x, self.DF_METADATA, temporal_sampling_factor, len(model_inputs))
         logging.debug('index loading took: {:0.3f} s'.format(time() - t1))
 
         new_size_inputs = [list(model_inputs[0].GetSize())] * model_inputs.GetSize()[-1]  # fallback, if we dont resample
@@ -1328,7 +1329,7 @@ class PhaseMaskWindowGenerator(DataGenerator):
 
         # check if the mask for one time step is zero
         if not all(np.any(combined_m, axis=(1, 2, 3, 4))):
-            print('please check the masks!')
+            print('please check the masks, there are sliced keyframes that contain an empty mask!')
 
         logging.debug('stacking took: {:0.3f} s'.format(time() - t1))
         return combined, combined_m, i, idx
