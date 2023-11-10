@@ -144,8 +144,8 @@ def calculate_strain(data_root='', metadata_path='/mnt/ssd/julian/data/metadata/
         df_dmdahastrain = pd.read_excel(io=path_to_metadata_xls, sheet_name=sheet_name_ahastrain, index_col=0, header=0,engine='openpyxl')
         df_cleandmd = pd.read_excel(io=path_to_metadata_xls, sheet_name=sheet_name_soalge, engine='openpyxl')
     except Exception as e:
-        df_dmdahastrain = None
-        df_cleandmd = None
+        df_dmdahastrain = pd.DataFrame()
+        df_cleandmd = pd.DataFrame()
     pats = len(patient_folders)
     params = [N_TIMESTEPS, RVIP_method, Z_SPACING, com_method, df_style, ff_style,
                                                label_bloodpool, p2p_style, path_to_metadata_xls,
@@ -231,7 +231,7 @@ def calc_strain4singlepatient(path_to_patient_folder, N_TIMESTEPS, RVIP_method, 
     # remove the most apical and basal slices, as they often are wrong
     # use different absolute border indices depending on t, as the heart size changes over time
     # fallback scenario for original volumes with 8mm slice thickness or so, here we should avoid to cut-off apical or basal slices to avoid empty areas
-    if df_cleandmd:
+    if not df_cleandmd.empty:
         border = 1
 
         for t in range(mask_lvmyo.shape[0]):
