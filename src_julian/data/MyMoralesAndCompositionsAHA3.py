@@ -138,11 +138,14 @@ def calculate_strain(data_root='', metadata_path='/mnt/ssd/julian/data/metadata/
     else:
         ff_style='ed2p'
 
-    # compose metadata xls filepath
-    path_to_metadata_xls = os.path.join(metadata_path, metadata_filename)
-    df_dmdahastrain = pd.read_excel(io=path_to_metadata_xls, sheet_name=sheet_name_ahastrain, index_col=0, header=0,engine='openpyxl')
-    df_cleandmd = pd.read_excel(io=path_to_metadata_xls, sheet_name=sheet_name_soalge, engine='openpyxl')
-
+    try:
+        # compose metadata xls filepath
+        path_to_metadata_xls = os.path.join(metadata_path, metadata_filename)
+        df_dmdahastrain = pd.read_excel(io=path_to_metadata_xls, sheet_name=sheet_name_ahastrain, index_col=0, header=0,engine='openpyxl')
+        df_cleandmd = pd.read_excel(io=path_to_metadata_xls, sheet_name=sheet_name_soalge, engine='openpyxl')
+    except Exception as e:
+        df_dmdahastrain = None
+        df_cleandmd = None
     pats = len(patient_folders)
     params = [N_TIMESTEPS, RVIP_method, Z_SPACING, com_method, df_style, ff_style,
                                                label_bloodpool, p2p_style, path_to_metadata_xls,
@@ -227,15 +230,22 @@ def calc_strain4singlepatient(path_to_patient_folder, N_TIMESTEPS, RVIP_method, 
 
     # remove the most apical and basal slices, as they often are wrong
     # use different absolute border indices depending on t, as the heart size changes over time
-    border = 1
-    for t in range(mask_lvmyo.shape[0]):
-        mask_given = np.argwhere(mask_lvmyo[t].sum(axis=(1, 2)) > 0) # get a list of indices along z
-        # clean lvmyo mask
-        mask_lvmyo[t, 0:int(mask_given[border])] = 0 # apex border
-        mask_lvmyo[t, int(mask_given[-border]):] = 0 # base border (x2)
-        # clean mask whole
-        mask_whole[t,0:int(mask_given[border])] = 0 # apex border
-        mask_whole[t, int(mask_given[-border]):] = 0 # base border (x2)
+    # fallback scenario for original volumes with 8mm slice thickness or so, here we should avoid to cut-off apical or basal slices to avoid empty areas
+    if df_cleandmd:
+        border = 1
+
+        for t in range(mask_lvmyo.shape[0]):
+            mask_given = np.argwhere(mask_lvmyo[t].sum(axis=(1, 2)) > 0)  # get a list of indices along z
+            # clean lvmyo mask
+            mask_lvmyo[t, 0:int(mask_given[border])] = 0  # apex border
+            mask_lvmyo[t, int(mask_given[-border]):] = 0  # base border (x2)
+            # clean mask whole
+            mask_whole[t, 0:int(mask_given[border])] = 0  # apex border
+            mask_whole[t, int(mask_given[-border]):] = 0  # base border (x2)
+
+    else:
+        border = 0
+
 
     # use the rvip will skip some apical and basal slices
     # heart_borders = calculate_wholeheartvolumeborders_by_RVIP(mask_whole=mask_whole, idx_ed=idx_ed)
@@ -259,7 +269,7 @@ def calc_strain4singlepatient(path_to_patient_folder, N_TIMESTEPS, RVIP_method, 
         print(patient_name)
 
     # the most basal and apical myo mask is often not reliable, we zero them out
-    base_slices, midcavity_slices, apex_slices = get_volumeborders(heart_borders,border=1)  # by lvmyo-range
+    base_slices, midcavity_slices, apex_slices = get_volumeborders(heart_borders,border=border)  # by lvmyo-range
 
     if len(base_slices)==0 or len(midcavity_slices)==0 or len(apex_slices)==0:
         raise NotImplementedError('some areas are empty')
@@ -548,12 +558,12 @@ def calc_strain4singlepatient(path_to_patient_folder, N_TIMESTEPS, RVIP_method, 
     # get cvi Circle Peak Strain values for current patient
     # the arrays contain 16 values each; for every AHA segment
     cvi_given = False
-    try:
-        cvi_given = True
+    """try:
+        cvi_given = False
         INFO('metadata loaded, cvi_given={}'.format(cvi_given))
     except Exception as e:
         print(e)
-        cvi_given = False
+        cvi_given = False"""
 
     if cvi_given:cvi_prs = get_parameter_series_from_xls(df=df_dmdahastrain, parametername='radial peak strain (%)',
                                             patientname=patient_name)
