@@ -201,7 +201,7 @@ def calc_strain4singlepatient(path_to_patient_folder, N_TIMESTEPS, RVIP_method, 
     INFO('now processing: ' + patient_name)
     # overwrite the config spacing
     import SimpleITK as sitk
-    temp = sitk.ReadImage(sorted(glob.glob(os.path.join(path_to_patient_folder, '*fullmask*.nii')))[0])
+    temp = sitk.ReadImage(sorted(glob.glob(os.path.join(path_to_patient_folder, '*fullmask*.nii*')))[0])
     spacing = temp.GetSpacing()
     Z_SPACING = spacing[-1] # (1.5,1.5,2.5) x,y,z sitk representation
     # CMR of patient

@@ -175,18 +175,21 @@ def pred_fold(config, debug=True):
             print('please check the predicted masks, some timesteps of the target mask seem to be empty!')
 
         # save all files of this patient
-        p = os.path.basename(filename).split('_volume')[0].lower()
+        if 'volume' in os.path.basename(filename):
+            p = os.path.basename(filename).split('_volume')[0].lower()
+        else:
+            p = os.path.basename(filename).split('__')[0].lower()
         volumes = [cmr_mov,cmr_t,cmr_m,msk_mov,msk_t,msk_m,flow,flow_comp_m,flow_masked,fullmsk_t]
 
-        suffixes = ['cmr_moving.nii', 'cmr_target.nii', 'cmr_moved.nii',
-                    'myo_moving.nii', 'myo_target.nii', 'myo_moved.nii',
-                    'flow.nii', 'flow_composed.nii', 'flow_masked.nii',
-                    'fullmask_moving.nii']
+        suffixes = ['cmr_moving.nii.gz', 'cmr_target.nii.gz', 'cmr_moved.nii.gz',
+                    'myo_moving.nii.gz', 'myo_target.nii.gz', 'myo_moved.nii.gz',
+                    'flow.nii.gz', 'flow_composed.nii.gz', 'flow_masked.nii.gz',
+                    'fullmask_moving.nii.gz']
         if debug:
             save_all_3d_vols_new(volumes, vol_suffixes=suffixes,
                                  EXP_PATH=pred_path, exp=p, cfg=config)
 
-        save_gt_and_pred(gt=msk_t, pred=msk_m, exp_path=pred_path.replace('pred',''), patient=p, cfg=config)
+        #save_gt_and_pred(gt=msk_t, pred=msk_m, exp_path=pred_path.replace('pred',''), patient=p, cfg=config)
         # end new version
 
     return True

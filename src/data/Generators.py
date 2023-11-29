@@ -985,10 +985,11 @@ class PhaseMaskWindowGenerator(DataGenerator):
         if not self.ISACDC:
             self.METADATA_FILE = config.get('DF_META',
                                             None)
-            df = pd.read_csv(self.METADATA_FILE)
-            df.columns = df.columns.str.lower()
-            df['patient'] = df['patient'].str.lower()
-            self.DF_METADATA = df[['patient', 'ed#', 'ms#', 'es#', 'pf#', 'md#']]
+            if isinstance(self.METADATA_FILE, str):
+                df = pd.read_csv(self.METADATA_FILE)
+                df.columns = df.columns.str.lower()
+                df['patient'] = df['patient'].str.lower()
+                self.DF_METADATA = df[['patient', 'ed#', 'ms#', 'es#', 'pf#', 'md#']]
         # TODO: need to check if this is still necessary!
         self.MASKS = None
 

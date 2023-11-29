@@ -26,7 +26,7 @@ def stack_nii_flowfield(PATH_TO_NII_FILES, naming, Ntimesteps):
     # naming of nii files has to be _flow_0_.nii, _flow_1_.nii...
     list = []
     for t in range(Ntimesteps):
-        name_ff = naming + str(t) + '_.nii'
+        name_ff = naming + str(t) + '_.nii.gz'
         path_to_file = os.path.join(PATH_TO_NII_FILES, name_ff)
         data_ff = sitk.GetArrayFromImage(sitk.ReadImage(path_to_file))
         # data_ff=czxy
@@ -41,7 +41,7 @@ def stack_nii_masks(PATH_TO_NII_MASKS, naming, N_TIMESTEPS, ):
     # can then be saved to csv with the class "volume" and method "save as csv"
     list = []
     for t in range(N_TIMESTEPS):
-        filename = naming + str(t) + '_.nii'
+        filename = naming + str(t) + '_.nii.gz'
         path_to_file = os.path.join(PATH_TO_NII_MASKS, filename)
         arrayraw = sitk.GetArrayFromImage(sitk.ReadImage(path_to_file))
         list.append(arrayraw)

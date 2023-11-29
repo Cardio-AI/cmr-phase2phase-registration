@@ -489,8 +489,16 @@ def get_trainings_files(data_path, fold=0, path_to_folds_df=None):
     :return: x_train, y_train, x_val, y_val
     """
 
-    img_suffix = '*img.nrrd'
-    mask_suffix = '*msk.nrrd'
+    single_file = sorted(glob.glob(os.path.join(data_path,'*')))[0]
+    if 'nii.gz' in os.path.basename(single_file):
+        ftype= '.nii.gz'
+    elif '.nrrd' in os.path.basename(single_file):
+        ftype = '.nrrd'
+    else:
+        print('no nii and nrrd files found: {}'.format(single_file))
+
+    img_suffix = '*img{}'.format(ftype)
+    mask_suffix = '*msk{}'.format(ftype)
 
     # load the nrrd files with given pattern from the data path
     x = sorted(glob.glob(os.path.join(data_path, img_suffix)))
@@ -498,8 +506,8 @@ def get_trainings_files(data_path, fold=0, path_to_folds_df=None):
     if len(x) == 0:
         logging.info('no files found, try to load with clean.nrrd/mask.nrrd pattern')
         logging.info('searched in: {}'.format(data_path))
-        img_suffix = '*clean.nrrd'
-        mask_suffix = '*mask.nrrd'
+        img_suffix = '*clean{}'.format(ftype)
+        mask_suffix = '*mask{}'.format(ftype)
         x = sorted(glob.glob(os.path.join(data_path, img_suffix)))
         y = sorted(glob.glob(os.path.join(data_path, mask_suffix)))
 
@@ -1325,10 +1333,16 @@ def get_phases_as_idx_gcn(file_path, df, temporal_sampling_factor, length):
 
     """
     import re
+    str_match = re.search('-(.{8})_', file_path)
+    if str_match: # gcn
+        patient_str = str.match.group(1).lower()
+        assert (len(patient_str) == 8), 'matched patient ID from the phase sheet has a length of: {}'.format(
+            len(patient_str))
+    else: # indicator
+        patient_str = os.path.basename(file_path).split('__')[0].lower()
 
-    patient_str = re.search('-(.{8})_', file_path).group(1).lower()
-    assert (len(patient_str) == 8), 'matched patient ID from the phase sheet has a length of: {}'.format(
-        len(patient_str))
+    assert len(patient_str) > 0, 'len(patient_str) = 0'
+
 
     # Returns the indices in the following order: 'ED#', 'MS#', 'ES#', 'PF#', 'MD#'
     # Reduce the indices of the excel sheet by one, as the indexes start at 0, the excel-sheet at 1
@@ -1341,7 +1355,7 @@ def get_phases_as_idx_gcn(file_path, df, temporal_sampling_factor, length):
     # if we have indicies that are bigger than the length, this is a strong indicator for indicies starting at 1 instead of 0
     # here we need to subtract one in order to match the idx of the arrays
     # the problem: this function only see the indicies of one patient
-    indices = indices - 1
+    #indices = indices - 1
 
     assert (indices<length-1).all(), 'invalid indicies, maybe they start with 1 instead of with 0?'
     #indices = np.clip(indices, a_min=0, a_max=length - 1)
