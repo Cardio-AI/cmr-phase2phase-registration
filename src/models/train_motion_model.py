@@ -1,4 +1,6 @@
 import logging
+import os
+import re
 
 import numpy as np
 
@@ -156,7 +158,7 @@ def train_fold(config, in_memory=False):
 
 def check_if_patients_in_metadata_file(DF_METADATA, config, files_):
     ISDMD = config.get('ISDMDDATA')
-    info('ISDMD: {}'.format(ISDMD))
+    logging.info('ISDMD: {}'.format(ISDMD))
     for x in files_:
         try:
             if ISDMD:
@@ -177,7 +179,7 @@ def check_if_patients_in_metadata_file(DF_METADATA, config, files_):
             logging.info(patient_str)
             logging.info(ind)
             logging.info('indices: \n{}'.format(indices))
-    info('Check Done!')
+    logging.info('Check Done!')
 
 
 def main(args=None):

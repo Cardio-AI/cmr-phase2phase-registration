@@ -1288,6 +1288,19 @@ class PhaseMaskWindowGenerator(DataGenerator):
                     model_m_inputs[t] = (smooth > 0.2).astype(np.float32)
         #show_2D_or_3D(model_inputs[5, ...], model_m_inputs[5, ...])'''
 
+        # avoid having slices with a mask in t but no mask in t+1 as anatomical regularisation
+        a_border = 0
+        b_border = model_m_inputs.shape[1]
+        t = np.squeeze(np.argwhere(model_m_inputs.sum(axis=(1, 2, 3)) > 0))
+        for kf in t:
+            mask_given = np.argwhere(model_m_inputs[kf].sum(axis=(1, 2)) > 0)
+            a_border = max(a_border, min(mask_given))
+            b_border = min(b_border, max(mask_given))
+
+
+        model_m_inputs[:,:int(a_border)] = 0
+        model_m_inputs[:, int(b_border):] = 0
+
         # --------------- SLICE PAIRS OF INPUT AND TARGET VOLUMES ACCORDING TO CARDIAC PHASE IDX -------------
         # register backwards returns: [x_k-1, x_k]
         if self.BETWEEN_PHASES:
