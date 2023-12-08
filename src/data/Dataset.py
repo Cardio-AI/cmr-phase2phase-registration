@@ -1314,7 +1314,7 @@ def get_extremas(df, col='vol in ml', target_col='t_norm'):
 
 
 
-def get_phases_as_idx_gcn(file_path, df, temporal_sampling_factor, length):
+def get_phases_as_idx_gcn(file_path, df, temporal_sampling_factor, length, label_start_with_1=False):
     """
     load the phase info of a gcn data structure
     and converts it into a onehot vector
@@ -1335,7 +1335,7 @@ def get_phases_as_idx_gcn(file_path, df, temporal_sampling_factor, length):
     import re
     str_match = re.search('-(.{8})_', file_path)
     if str_match: # gcn
-        patient_str = str.match.group(1).lower()
+        patient_str = str_match.group(1).lower()
         assert (len(patient_str) == 8), 'matched patient ID from the phase sheet has a length of: {}'.format(
             len(patient_str))
     else: # indicator
@@ -1350,6 +1350,7 @@ def get_phases_as_idx_gcn(file_path, df, temporal_sampling_factor, length):
     indices = df[df.patient.str.contains(patient_str)][
         ['ed#', 'ms#', 'es#', 'pf#', 'md#']]
     indices = indices.values[0].astype(int)# - 1 # the excel sheet starts with 1, indices needs to start with 0
+    if label_start_with_1: indices = indices -1
     # scale the idx as we resampled along t (we need to resample the indicies in the same way)
     indices = np.round(indices * temporal_sampling_factor).astype(int)
     # if we have indicies that are bigger than the length, this is a strong indicator for indicies starting at 1 instead of 0

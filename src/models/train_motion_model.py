@@ -83,51 +83,29 @@ def train_fold(config, in_memory=False):
     METADATA_FILE = DF_META
     df = pd.read_csv(METADATA_FILE)
     df.columns = df.columns.str.lower()
-    DF_METADATA = df[['patient', 'ed#', 'ms#', 'es#', 'pf#', 'md#']]
-    DF_METADATA[['ed#', 'ms#', 'es#', 'pf#', 'md#']] = DF_METADATA[['ed#', 'ms#', 'es#', 'pf#', 'md#']].astype('int')
+    DF_METADATA = df[['patient', 'ed#', 'ms#', 'es#', 'pf#', 'md#']].copy()
+    DF_METADATA[['ed#', 'ms#', 'es#', 'pf#', 'md#']] = DF_METADATA[['ed#', 'ms#', 'es#', 'pf#', 'md#']].astype('int').copy()
     DF_METADATA.columns = DF_METADATA.columns.str.lower()
-    DF_METADATA['patient'] = DF_METADATA['patient'].str.lower()
+    DF_METADATA['patient'] = DF_METADATA.loc[:,'patient'].str.lower()
 
     files_ = x_train_sax + x_val_sax
     info('Check if we find the patient ID and phase mapping for all: {} files.'.format(len(files_)))
 
-    ISDMD = config.get('ISDMDDATA')
-    info('ISDMD: {}'.format(ISDMD))
-    for x in files_:
-        try:
-            if ISDMD:
-                patient_str = os.path.basename(x).split('_volume')[0].lower()
-                assert len(
-                    patient_str) > 0, 'empty patient id found, please check the get_patient_id in fn train_fold()'
-            else:
-                patient_str = re.search('-(.{8})_', x).group(1).lower()
-                assert (len(patient_str) == 8), 'matched patient ID from the phase sheet has a length of: {}'.format(
-                len(patient_str))
-            # returns the indices in the following order: 'ED#', 'MS#', 'ES#', 'PF#', 'MD#'
-            # reduce by one, as the indexes start at 0, the excel-sheet at 1
-            ind = DF_METADATA[DF_METADATA.patient.str.contains(patient_str)][['ed#', 'ms#', 'es#', 'pf#', 'md#']]
-            # for the original dmd ind we need to reduce the idx by one, no modulo necessary as there are no idx with 0
-            indices = ind.values[0].astype(int) #- 1
-
-        except Exception as e:
-            logging.info(patient_str)
-            logging.info(ind)
-            logging.info('indices: \n{}'.format(indices))
-    info('Check Done!')
+    check_if_patients_in_metadata_file(DF_METADATA, config, files_)
 
     # instantiate the batch generators
     """n = 10
     x_train_sax = x_train_sax[:n]
     x_val_sax = x_val_sax[:n]"""
     config['ISTRAINING'] = False
-    batch_generator = PhaseMaskWindowGenerator(x_train_sax, x_train_sax, config=config, in_memory=in_memory)
+    batch_generator = PhaseMaskWindowGenerator(x_train_sax, y_train_sax, config=config, in_memory=in_memory)
     val_config = config.copy()
     val_config['AUGMENT'] = False
     val_config['HIST_MATCHING'] = False
     val_config['AUGMENT_TEMP'] = False
     val_config['ISTRAINING'] = False
     # val_config['RESAMPLE_T'] = False # this could yield phases which does not fit into the given dim
-    validation_generator = PhaseMaskWindowGenerator(x_val_sax, x_val_sax, config=val_config, in_memory=in_memory)
+    validation_generator = PhaseMaskWindowGenerator(x_val_sax, y_val_sax, config=val_config, in_memory=in_memory)
 
     # get model
     model = create_RegistrationModel_inkl_mask(config)
@@ -174,6 +152,32 @@ def train_fold(config, in_memory=False):
 
     logging.info('Fold {} finished after {:0.3f} sec'.format(FOLD, time() - t0))
     return config
+
+
+def check_if_patients_in_metadata_file(DF_METADATA, config, files_):
+    ISDMD = config.get('ISDMDDATA')
+    info('ISDMD: {}'.format(ISDMD))
+    for x in files_:
+        try:
+            if ISDMD:
+                patient_str = os.path.basename(x).split('_volume')[0].lower()
+                assert len(
+                    patient_str) > 0, 'empty patient id found, please check the get_patient_id in fn train_fold()'
+            else:
+                patient_str = re.search('-(.{8})_', x).group(1).lower()
+                assert (len(patient_str) == 8), 'matched patient ID from the phase sheet has a length of: {}'.format(
+                    len(patient_str))
+            # returns the indices in the following order: 'ED#', 'MS#', 'ES#', 'PF#', 'MD#'
+            # reduce by one, as the indexes start at 0, the excel-sheet at 1
+            ind = DF_METADATA[DF_METADATA.patient.str.contains(patient_str)][['ed#', 'ms#', 'es#', 'pf#', 'md#']]
+            # for the original dmd ind we need to reduce the idx by one, no modulo necessary as there are no idx with 0
+            indices = ind.values[0].astype(int)  # - 1
+
+        except Exception as e:
+            logging.info(patient_str)
+            logging.info(ind)
+            logging.info('indices: \n{}'.format(indices))
+    info('Check Done!')
 
 
 def main(args=None):

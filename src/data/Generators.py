@@ -968,6 +968,7 @@ class PhaseMaskWindowGenerator(DataGenerator):
         self.ISTRAINING = config.get('ISTRAINING', True)  # true == sparse myo mask for displacement
         self.COMPOSE_CONSISTENCY = config.get('COMPOSE_CONSISTENCY', False)
         self.REGISTER_BACKWARDS = config.get('REGISTER_BACKWARDS', False)
+        self.IS_ORIG_GCN_LABELS = config.get('IS_ORIG_GCN_LABELS', False)
 
         self.X_SHAPE = np.empty((self.BATCHSIZE, self.PHASES, *self.DIM, self.IMG_CHANNELS), dtype=np.float32)
         self.X2_SHAPE = np.empty((self.BATCHSIZE, self.PHASES, *self.DIM, self.IMG_CHANNELS), dtype=np.float32)
@@ -1105,12 +1106,13 @@ class PhaseMaskWindowGenerator(DataGenerator):
         t1 = time()
 
         x = self.IMAGES[ID]
+        y = self.LABELS[ID]
 
         # use the load_masked_img wrapper to enable masking of the images, currently not necessary, but nice to have
         # Note replace mask = False with mask=sel.MASKING_IMAGE
         model_inputs = load_masked_img(sitk_img_f=x, mask=self.MASKING_IMAGE,
                                        masking_values=self.MASKING_VALUES, replace=self.REPLACE_WILDCARD, maskAll=False)
-        model_m_inputs = load_msk(f_name=x.replace(self.REPLACE_WILDCARD[0], self.REPLACE_WILDCARD[1]),
+        model_m_inputs = load_msk(f_name=y,
                                   valid_labels=self.MASK_VALUES)
         logging.debug('load and masking took: {:0.3f} s'.format(time() - t1))
         t1 = time()
@@ -1142,7 +1144,7 @@ class PhaseMaskWindowGenerator(DataGenerator):
         elif self.ISDMD:
             idx = get_phases_as_idx_dmd(x, self.DF_METADATA, temporal_sampling_factor, len(model_inputs))
         else:
-            idx = get_phases_as_idx_gcn(x, self.DF_METADATA, temporal_sampling_factor, len(model_inputs))
+            idx = get_phases_as_idx_gcn(x, df=self.DF_METADATA, temporal_sampling_factor=temporal_sampling_factor, length=len(model_inputs),label_start_with_1=self.IS_ORIG_GCN_LABELS)
             #raise NotImplementedError('need to validate if get_phases_as_idx_gcn works')
             #idx = get_phases_as_idx_gcn(x, self.DF_METADATA, temporal_sampling_factor, len(model_inputs))
         logging.debug('index loading took: {:0.3f} s'.format(time() - t1))
