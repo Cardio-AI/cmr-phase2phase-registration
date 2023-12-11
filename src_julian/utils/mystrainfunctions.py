@@ -484,6 +484,17 @@ def get_volumeborders(lvmyo_idxs, border =1):
     midcavity_slices = lvmyo_idxs[end_apex:end_midcavity]
     base_slices = lvmyo_idxs[end_midcavity:]
 
+    # maske sure that we have at least two slices per area, to derive a spatial gradient
+    if len(apex_slices) < 2:
+        lvmyo_idxs[0:end_apex+1]
+
+    if len(midcavity_slices) < 2:
+        midcavity_slices = lvmyo_idxs[end_apex:end_midcavity+1]
+
+    if len(base_slices) < 2:
+        base_slices = lvmyo_idxs[end_midcavity-1:]
+
+
     return base_slices, midcavity_slices, apex_slices
 
 def calc_distance_2D(x0,y0,x1,y1): # simple function, I hope you are more comfortable

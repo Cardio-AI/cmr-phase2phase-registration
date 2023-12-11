@@ -1041,17 +1041,17 @@ class PhaseMaskWindowGenerator(DataGenerator):
         # Generate data
         for i, ID in enumerate(list_IDs_temp):
 
-            try:
+            #try:
                 # remember the ordering of the shuffled indexes,
                 # otherwise files, that take longer are always at the batch end
-                futures.add(self.THREAD_POOL.submit(self.__preprocess_one_image__, i, ID))
+            futures.add(self.THREAD_POOL.submit(self.__preprocess_one_image__, i, ID))
 
-            except Exception as e:
-                PrintException()
-                print(e)
-                logging.error(
-                    'Exception {} in datagenerator with: image: {} or mask: {}'.format(str(e), self.IMAGES[ID],
-                                                                                       self.LABELS[ID]))
+            # except Exception as e:
+            #     PrintException()
+            #     print(e)
+            #     logging.error(
+            #         'Exception {} in datagenerator with: image: {} or mask: {}'.format(str(e), self.IMAGES[ID],
+            #                                                                            self.LABELS[ID]))
 
         for i, future in enumerate(as_completed(futures)):
             # use the indexes to order the batch
@@ -1291,13 +1291,12 @@ class PhaseMaskWindowGenerator(DataGenerator):
         # avoid having slices with a mask in t but no mask in t+1 as anatomical regularisation
         a_border = 0
         b_border = model_m_inputs.shape[1]
-        t = np.squeeze(np.argwhere(model_m_inputs.sum(axis=(1, 2, 3)) > 0))
-        for kf in t:
+        # this fails for sequences that have more labels than only at the 5 key frames
+        #t = np.squeeze(np.argwhere(model_m_inputs.sum(axis=(1, 2, 3)) > 0))
+        for kf in idx:
             mask_given = np.argwhere(model_m_inputs[kf].sum(axis=(1, 2)) > 0)
             a_border = max(a_border, min(mask_given))
             b_border = min(b_border, max(mask_given))
-
-
         model_m_inputs[:,:int(a_border)] = 0
         model_m_inputs[:, int(b_border):] = 0
 

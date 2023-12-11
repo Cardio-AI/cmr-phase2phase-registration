@@ -95,7 +95,7 @@ def pred_fold(config, debug=True):
     pred_config['HIST_MATCHING'] = False
     pred_config['ISTRAINING'] = False
     INPUT_T_ELEM = config.get('INPUT_T_ELEM', 0)
-    pred_generator = PhaseMaskWindowGenerator(x_val_sax, x_val_sax, config=pred_config)
+    pred_generator = PhaseMaskWindowGenerator(x_val_sax, y_val_sax, config=pred_config)
     x_train_sax_masks = [f.replace('clean', 'mask') for f in x_val_sax]
     pred_mask_config = pred_config.copy()
     pred_mask_config['IMG_INTERPOLATION'] = sitk.sitkNearestNeighbor
@@ -107,7 +107,7 @@ def pred_fold(config, debug=True):
     compose_given = config.get('COMPOSE_CONSISTENCY', False)
     #masks_all_labels_generator = PhaseWindowGenerator(x_train_sax_masks, x_train_sax_masks, config=pred_mask_config,
     #                                              yield_masks=True)
-    masks_all_labels_generator = PhaseMaskWindowGenerator(x_val_sax, x_val_sax, config=pred_mask_config)
+    masks_all_labels_generator = PhaseMaskWindowGenerator(x_val_sax, y_val_sax, config=pred_mask_config)
 
     # iterate over the patients and
     for i in range(len(x_val_sax)):
@@ -173,6 +173,7 @@ def pred_fold(config, debug=True):
 
         if not all(np.any(msk_t, axis=(1,2,3))):
             print('please check the predicted masks, some timesteps of the target mask seem to be empty!')
+            print('{}'.format(np.any(msk_t, axis=(1,2,3))))
 
         # save all files of this patient
         if 'volume' in os.path.basename(filename):

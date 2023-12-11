@@ -232,7 +232,7 @@ def calc_strain4singlepatient(path_to_patient_folder, N_TIMESTEPS, RVIP_method, 
     # use different absolute border indices depending on t, as the heart size changes over time
     # fallback scenario for original volumes with 8mm slice thickness or so, here we should avoid to cut-off apical or basal slices to avoid empty areas
     if not df_cleandmd.empty:
-        border = 1
+        border = 0
 
         for t in range(mask_lvmyo.shape[0]):
             mask_given = np.argwhere(mask_lvmyo[t].sum(axis=(1, 2)) > 0)  # get a list of indices along z
@@ -271,7 +271,7 @@ def calc_strain4singlepatient(path_to_patient_folder, N_TIMESTEPS, RVIP_method, 
     # the most basal and apical myo mask is often not reliable, we zero them out
     base_slices, midcavity_slices, apex_slices = get_volumeborders(heart_borders,border=border)  # by lvmyo-range
 
-    if len(base_slices)==0 or len(midcavity_slices)==0 or len(apex_slices)==0:
+    if len(base_slices)<2 or len(midcavity_slices)<2 or len(apex_slices)<2:
         raise NotImplementedError('some areas are empty')
 
     # c = y,x
