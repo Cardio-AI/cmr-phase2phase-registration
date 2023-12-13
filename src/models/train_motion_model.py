@@ -1,11 +1,3 @@
-import logging
-import os
-import re
-
-import numpy as np
-
-
-
 
 def train_fold(config, in_memory=False):
     # make sure all neccessary params in config are set
@@ -17,12 +9,16 @@ def train_fold(config, in_memory=False):
     print(GPUS)
     # ------------------------------------------ import helpers
     # this should import glob, os, and many other standard libs
-    from tensorflow.python.client import device_lib
+    #from tensorflow.python.client import device_lib
+    import logging
+    import os
+    import re
+
     import tensorflow as tf
     import numpy as np
     tf.get_logger().setLevel('FATAL')
-    tf.random.set_seed(config.get('SEED', 42))
-    np.random.seed(config.get('SEED', 42))
+    tf.random.set_seed(42)
+    np.random.seed(42)
     import gc, logging, os, datetime, re
     from logging import info
 
@@ -157,6 +153,7 @@ def train_fold(config, in_memory=False):
 
 
 def check_if_patients_in_metadata_file(DF_METADATA, config, files_):
+    import logging, os, re
     ISDMD = config.get('ISDMDDATA')
     logging.info('ISDMD: {}'.format(ISDMD))
     for x in files_:
@@ -193,11 +190,9 @@ def main(args=None):
     # ------------------------------------------define GPU id/s to use, if given
 
     # local imports
-    from src.utils.Utils_io import Console_and_file_logger, init_config
     # import external libs
     import tensorflow as tf
     tf.get_logger().setLevel('ERROR')
-    import cv2
 
     EXPERIMENTS_ROOT = 'exp/'
 
@@ -235,7 +230,7 @@ def main(args=None):
         print('no config given, build a new one')
         raise NotImplementedError('Please specify a valid config!')
 
-    import os
+    import os, logging
     from src.models.Evaluate_moved_myo import calc_dice
     from src.models.predict_motion_model import pred_fold
 

@@ -484,15 +484,16 @@ def get_volumeborders(lvmyo_idxs, border =1):
     midcavity_slices = lvmyo_idxs[end_apex:end_midcavity]
     base_slices = lvmyo_idxs[end_midcavity:]
 
-    # maske sure that we have at least two slices per area, to derive a spatial gradient
+    # make sure that we have at least two slices per area,
+    # otherwise a spatial gradient will fail
     if len(apex_slices) < 2:
-        lvmyo_idxs[0:end_apex+1]
+        apex_slices = lvmyo_idxs[0:2]
 
     if len(midcavity_slices) < 2:
-        midcavity_slices = lvmyo_idxs[end_apex:end_midcavity+1]
+        midcavity_slices = lvmyo_idxs[end_apex:end_apex+2]
 
     if len(base_slices) < 2:
-        base_slices = lvmyo_idxs[end_midcavity-1:]
+        base_slices = lvmyo_idxs[-2:]
 
 
     return base_slices, midcavity_slices, apex_slices

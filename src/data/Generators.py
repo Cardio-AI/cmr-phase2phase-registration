@@ -1343,8 +1343,7 @@ class PhaseMaskWindowGenerator(DataGenerator):
         combined_m = np.stack(combined_m, axis=-1)
 
         # check if the mask for one time step is zero
-        if not all(np.any(combined_m, axis=(1, 2, 3, 4))):
-            print('please check the masks, there are sliced keyframes that contain an empty mask!')
+        assert all(np.any(combined_m, axis=(1, 2, 3, 4))), 'please check the masks, there are sliced keyframes that contain an empty mask!'
 
         logging.debug('stacking took: {:0.3f} s'.format(time() - t1))
         return combined, combined_m, i, idx
@@ -1373,7 +1372,7 @@ class PhaseMaskWindowGenerator(DataGenerator):
             else:
                 ref_id = choice(range(len(self.IMAGES)))
                 ref = sitk.GetArrayFromImage(sitk.ReadImage(self.IMAGES[ref_id]))
-                ref_m = sitk.GetArrayFromImage(sitk.ReadImage(self.IMAGES[ref_id].replace('clean', 'mask')))
+                ref_m = sitk.GetArrayFromImage(sitk.ReadImage(self.LABELS[ref_id]))
                 ref, ref_m = align_inplane_with_ip(model_inputs=ref,
                                                    msk_file_name=ref_m,
                                                    roll2septum=False,
