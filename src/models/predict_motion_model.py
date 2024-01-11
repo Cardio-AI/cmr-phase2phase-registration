@@ -12,7 +12,7 @@ def pred_fold(config, debug=True):
     print(GPUS)
     # ------------------------------------------ import helpers
     # this should import glob, os, and many other standard libs
-    from tensorflow.python.client import device_lib
+    #from tensorflow.python.client import device_lib
     import tensorflow as tf
     tf.get_logger().setLevel('FATAL')
     import gc, logging, os, datetime, re

@@ -473,7 +473,7 @@ def calc_strain4singlepatient(path_to_patient_folder, N_TIMESTEPS, RVIP_method, 
     # rs_AHA_overtime = np.nan_to_num(rs_AHA_overtime)
     # cs_AHA_overtime = np.nan_to_num(cs_AHA_overtime)
     if (np.isnan(rs_AHA_overtime).any() or np.isnan(cs_AHA_overtime).any()):
-        print('Some AHA segments have NaN values, please check!')
+        print('Some AHA segments have NaN values, please check! patient {}'.format(patient_name))
         #raise NotImplementedError('Some AHA segments have NaN values, please check!')
     INFO('Strain method: {}'.format(ff_style))
     INFO('Err min: {:3.1f}%, max: {:3.1f}%, mean: {:3.1f}%'.format(100 * rs_AHA_overtime.min(),

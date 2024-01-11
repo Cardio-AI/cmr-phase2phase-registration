@@ -1041,17 +1041,17 @@ class PhaseMaskWindowGenerator(DataGenerator):
         # Generate data
         for i, ID in enumerate(list_IDs_temp):
 
-            #try:
+            try:
                 # remember the ordering of the shuffled indexes,
                 # otherwise files, that take longer are always at the batch end
-            futures.add(self.THREAD_POOL.submit(self.__preprocess_one_image__, i, ID))
+                futures.add(self.THREAD_POOL.submit(self.__preprocess_one_image__, i, ID))
 
-            # except Exception as e:
-            #     PrintException()
-            #     print(e)
-            #     logging.error(
-            #         'Exception {} in datagenerator with: image: {} or mask: {}'.format(str(e), self.IMAGES[ID],
-            #                                                                            self.LABELS[ID]))
+            except Exception as e:
+                PrintException()
+                print(e)
+                logging.error(
+                    'Exception {} in datagenerator with: image: {} or mask: {}'.format(str(e), self.IMAGES[ID],
+                                                                                       self.LABELS[ID]))
 
         for i, future in enumerate(as_completed(futures)):
             # use the indexes to order the batch
@@ -1064,16 +1064,22 @@ class PhaseMaskWindowGenerator(DataGenerator):
             x2[i,], y2[i,] =s_k,  s_k_shifted # shifted to an earlier frame
             logging.debug('img finished after {:0.3f} sec.'.format(needed_time))
                 #pass
-            """except Exception as e:
-                # write these files into a dedicated error log
-                PrintException()
-                print(e)
-                logging.error(
-                    'Exception {} in datagenerator with:\n'
-                    'image:\n'
-                    '{}\n'
-                    'mask:\n'
-                    '{}'.format(str(e), self.IMAGES[ID], self.LABELS[ID]))"""
+            # except Exception as e:
+            #     # write these files into a dedicated error log
+            #     logging.error(
+            #         'Exception {} in datagenerator with:\n'
+            #         'image:\n'
+            #         '{}\n'
+            #         'mask:\n'
+            #         '{}'.format(str(e), self.IMAGES[ID], self.LABELS[ID]))
+            #     PrintException()
+            #     print(e)
+            #     logging.error(
+            #         'Exception {} in datagenerator with:\n'
+            #         'image:\n'
+            #         '{}\n'
+            #         'mask:\n'
+            #         '{}'.format(str(e), self.IMAGES[ID], self.LABELS[ID]))
         # TODO: move the stacking part to self.__preprocess_one_image___()
         # data_generation should only contain the multi-threading logic
         # x = x_k
@@ -1219,6 +1225,10 @@ class PhaseMaskWindowGenerator(DataGenerator):
         else: # no resampling, no 3D splitting, use the image as it is
             model_inputs = sitk.GetArrayFromImage(model_inputs)
             model_m_inputs = sitk.GetArrayFromImage(model_m_inputs)
+
+        if self.config.get('FLIP_Z', False):
+            model_inputs = np.flip(model_inputs, axis=1)
+            model_m_inputs = np.flip(model_m_inputs, axis=1)
 
         t1 = time()
 
