@@ -96,7 +96,7 @@ def calculate_strain(data_root='', metadata_path='/mnt/ssd/julian/data/metadata/
     if debug:
         patient_folders = [p for p in patient_folders if debug_patient in p]
 
-    ###initial inits###
+    ###inits###
     import json
     try:
         cfg = os.path.join(data_root, 'f0', 'config/config.json')
@@ -228,11 +228,12 @@ def calc_strain4singlepatient(path_to_patient_folder, N_TIMESTEPS, RVIP_method, 
     dim_ = ff_whole.ndim
     nt, nz, nx, ny, nc = shape_
 
-    # remove the most apical and basal slices, as they often are wrong
+    # remove the most apical and basal slices, as they are often wrong
     # use different absolute border indices depending on t, as the heart size changes over time
     # fallback scenario for original volumes with 8mm slice thickness or so, here we should avoid to cut-off apical or basal slices to avoid empty areas
-    if not df_cleandmd.empty:
-        border = 0
+    border = 0
+    if not df_cleandmd.empty and border>0:
+
 
         for t in range(mask_lvmyo.shape[0]):
             mask_given = np.argwhere(mask_lvmyo[t].sum(axis=(1, 2)) > 0)  # get a list of indices along z
@@ -557,7 +558,9 @@ def calc_strain4singlepatient(path_to_patient_folder, N_TIMESTEPS, RVIP_method, 
     #                                     # minmin=-15, maxmax=15, type='Ecc')
     # get cvi Circle Peak Strain values for current patient
     # the arrays contain 16 values each; for every AHA segment
-    cvi_given = False
+    cvi_given = True
+    if df_dmdahastrain.empty:
+        cvi_given = False
     """try:
         cvi_given = False
         INFO('metadata loaded, cvi_given={}'.format(cvi_given))

@@ -990,7 +990,7 @@ class PhaseMaskWindowGenerator(DataGenerator):
                 df = pd.read_csv(self.METADATA_FILE)
                 df.columns = df.columns.str.lower()
                 df['patient'] = df['patient'].str.lower()
-                self.DF_METADATA = df[['patient', 'ed#', 'ms#', 'es#', 'pf#', 'md#']]
+                self.DF_METADATA = df
         # TODO: need to check if this is still necessary!
         self.MASKS = None
 
@@ -1041,17 +1041,17 @@ class PhaseMaskWindowGenerator(DataGenerator):
         # Generate data
         for i, ID in enumerate(list_IDs_temp):
 
-            try:
-                # remember the ordering of the shuffled indexes,
-                # otherwise files, that take longer are always at the batch end
-                futures.add(self.THREAD_POOL.submit(self.__preprocess_one_image__, i, ID))
+            # try:
+            #     # remember the ordering of the shuffled indexes,
+            #     # otherwise files, that take longer are always at the batch end
+            futures.add(self.THREAD_POOL.submit(self.__preprocess_one_image__, i, ID))
 
-            except Exception as e:
-                PrintException()
-                print(e)
-                logging.error(
-                    'Exception {} in datagenerator with: image: {} or mask: {}'.format(str(e), self.IMAGES[ID],
-                                                                                       self.LABELS[ID]))
+            # except Exception as e:
+            #     PrintException()
+            #     print(e)
+            #     logging.error(
+            #         'Exception {} in datagenerator with: image: {} or mask: {}'.format(str(e), self.IMAGES[ID],
+            #                                                                            self.LABELS[ID]))
 
         for i, future in enumerate(as_completed(futures)):
             # use the indexes to order the batch
@@ -1144,13 +1144,17 @@ class PhaseMaskWindowGenerator(DataGenerator):
 
         # --------------- LOAD INDICES FOR CARDIAC PHASES--------------
         # Returns the indices in the following order: 'ED#', 'MS#', 'ES#', 'PF#', 'MD#'
+        if isinstance(model_inputs,list):
+            timesteps = len(model_inputs)
+        else:
+            timesteps = model_inputs.GetSize()[-1]
         if self.ISACDC:
             raise NotImplementedError('need to validate if get_phases_as_idx_acdc works')
-            idx = get_phases_as_idx_acdc(x, temporal_sampling_factor, len(model_inputs))
+            idx = get_phases_as_idx_acdc(x, temporal_sampling_factor, length=timesteps)
         elif self.ISDMD:
-            idx = get_phases_as_idx_dmd(x, self.DF_METADATA, temporal_sampling_factor, len(model_inputs))
+            idx = get_phases_as_idx_dmd(x, self.DF_METADATA, temporal_sampling_factor, length=timesteps)
         else:
-            idx = get_phases_as_idx_gcn(x, df=self.DF_METADATA, temporal_sampling_factor=temporal_sampling_factor, length=len(model_inputs),label_start_with_1=self.IS_ORIG_GCN_LABELS)
+            idx = get_phases_as_idx_gcn(x, df=self.DF_METADATA, temporal_sampling_factor=temporal_sampling_factor, length=timesteps,label_start_with_1=self.IS_ORIG_GCN_LABELS)
             #raise NotImplementedError('need to validate if get_phases_as_idx_gcn works')
             #idx = get_phases_as_idx_gcn(x, self.DF_METADATA, temporal_sampling_factor, len(model_inputs))
         logging.debug('index loading took: {:0.3f} s'.format(time() - t1))
@@ -1303,12 +1307,15 @@ class PhaseMaskWindowGenerator(DataGenerator):
         b_border = model_m_inputs.shape[1]
         # this fails for sequences that have more labels than only at the 5 key frames
         #t = np.squeeze(np.argwhere(model_m_inputs.sum(axis=(1, 2, 3)) > 0))
-        for kf in idx:
-            mask_given = np.argwhere(model_m_inputs[kf].sum(axis=(1, 2)) > 0)
-            a_border = max(a_border, min(mask_given))
-            b_border = min(b_border, max(mask_given))
-        model_m_inputs[:,:int(a_border)] = 0
-        model_m_inputs[:, int(b_border):] = 0
+        try:
+            for kf in idx:
+                mask_given = np.argwhere(model_m_inputs[kf].sum(axis=(1, 2)) > 0)
+                a_border = max(a_border, min(mask_given))
+                b_border = min(b_border, max(mask_given))
+            model_m_inputs[:,:int(a_border)] = 0
+            model_m_inputs[:, int(b_border):] = 0
+        except Exception as e:
+            print(e)
 
         # --------------- SLICE PAIRS OF INPUT AND TARGET VOLUMES ACCORDING TO CARDIAC PHASE IDX -------------
         # register backwards returns: [x_k-1, x_k]

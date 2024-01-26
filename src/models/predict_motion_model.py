@@ -20,10 +20,7 @@ def pred_fold(config, debug=True):
 
     # local imports
     from src.utils.Utils_io import Console_and_file_logger, init_config, ensure_dir
-    from src.utils.KerasCallbacks import get_callbacks
     from src.data.Dataset import get_trainings_files
-    #from src.data.Generators import PhaseWindowGenerator
-    from src.models.Models import create_RegistrationModel
     import numpy as np
 
     from src.data.Dataset import save_gt_and_pred
@@ -32,16 +29,14 @@ def pred_fold(config, debug=True):
     from src.data.Dataset import save_all_3d_vols_new
 
     # import external libs
-    import pandas as pd
     from time import time
     import SimpleITK as sitk
-    from scipy import ndimage
     from src.models.Models import create_dense_compose
-    from src.data.Dataset import save_all_3d_vols
     import os
 
     # make all config params known to the local namespace
     locals().update(config)
+
 
     # overwrite the experiment names and paths, so that each cv gets an own sub-folder
     EXPERIMENT = config.get('EXPERIMENT')
@@ -63,7 +58,7 @@ def pred_fold(config, debug=True):
     EPOCHS = config.get('EPOCHS', 100)
 
     Console_and_file_logger(path=EXPERIMENT, log_lvl=logging.INFO)
-    # get kfolded data from DATA_ROOT and subdirectories
+    # get k-folded data from DATA_ROOT and subdirectories
     # Load SAX volumes
     x_train_sax, y_train_sax, x_val_sax, y_val_sax = get_trainings_files(data_path=DATA_PATH_SAX,
                                                                          path_to_folds_df=DF_FOLDS,
@@ -87,6 +82,10 @@ def pred_fold(config, debug=True):
     # create a generator with idempotent behaviour (no shuffle etc.)
     # make sure we save always the same patient
     pred_config = config.copy()
+
+    # hack for indicator data
+    #pred_config['FLIP_Z'] = True
+
     pred_config['SHUFFLE'] = False
     pred_config['AUGMENT'] = False
     pred_config['AUGMENT_PHASES'] = False
@@ -252,6 +251,8 @@ def main(args=None):
         # make relative paths absolute
         config['MODEL_PATH'] = os.path.join(args.exp, 'model/')
         config['EXP_PATH'] = args.exp
+        config['FLIP_Z'] = args.flipz
+        config['IS_ORIG_GCN_LABELS'] = args.isoriglabel
 
         # Load SAX volumes
         # cluster to local data mapping
@@ -292,6 +293,8 @@ def main(args=None):
             # make relative paths absolute
             config['MODEL_PATH'] = os.path.join(exp_fold, 'model/')
             config['EXP_PATH'] = exp_fold
+            config['FLIP_Z'] = args.flipz
+            config['IS_ORIG_GCN_LABELS'] = args.isoriglabel
 
                     # Load SAX volumes
                     # cluster to local data mapping
@@ -349,6 +352,8 @@ if __name__ == "__main__":
     parser.add_argument('-exp', action='store', default=None)
     parser.add_argument('-data', action='store', default=None)
     parser.add_argument('-iscontrol', choices=['True','False','true','false'],action='store', default='false')
+    parser.add_argument('-flipz', choices=['True', 'False', 'true', 'false'], action='store', default='false')
+    parser.add_argument('-isoriglabel', choices=['True', 'False', 'true', 'false'], action='store', default='false')
 
     results = parser.parse_args()
     print('given parameters: {}'.format(results))

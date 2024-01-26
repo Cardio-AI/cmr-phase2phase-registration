@@ -1358,7 +1358,7 @@ def get_phases_as_idx_gcn(file_path, df, temporal_sampling_factor, length, label
     # the problem: this function only see the indicies of one patient
     #indices = indices - 1
 
-    assert (indices<length-1).all(), 'invalid indicies, maybe they start with 1 instead of with 0?'
+    assert (indices<length).all(), 'invalid indicies, maybe they start with 1 instead of with 0? --> {}, length: {}'.format(indices, length)
     #indices = np.clip(indices, a_min=0, a_max=length - 1)
     return  indices
 
@@ -1386,9 +1386,17 @@ def get_phases_as_idx_dmd(file_path, df, temporal_sampling_factor, length):
     # Returns the indices in the following order: 'ED#', 'MS#', 'ES#', 'PF#', 'MD#'
     # Reduce the indices of the excel sheet by one, as the indexes start at 0, the excel-sheet at 1
     # Transform them into an one-hot representation
-    indices = df[df.patient.str.contains(patient_str, case=False)][
+    use_gt = True
+    if use_gt:
+        indices = df[df.patient.str.contains(patient_str, case=False)][
+            ['ed_gt', 'ms_gt', 'es_gt', 'pf_gt', 'md_gt']]
+    else:
+        indices = df[df.patient.str.contains(patient_str, case=False)][
         ['ed#', 'ms#', 'es#', 'pf#', 'md#']]
-    indices = indices.values[0].astype(int) # only the GT started with 1. All predictions start with 0- 1 # the excel sheet starts with 1, indices needs to start with 0
+    if len(indices) == 1:
+        indices = indices.values[0].astype(int) # only the GT started with 1. All predictions start with 0- 1 # the excel sheet starts with 1, indices needs to start with 0
+    else:
+        print('failed to load the key frame indices with patient:',patient_str)
     # scale the idx as we resampled along t (we need to resample the indicies in the same way)
     indices = np.round(indices * temporal_sampling_factor).astype(int)
     assert ((indices >=0).all()) and ((indices<length).all()), 'indicies are: {}, but we have only {} frames'.format(indices, length)
