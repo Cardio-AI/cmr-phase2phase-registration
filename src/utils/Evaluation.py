@@ -520,7 +520,7 @@ def plot_strain_per_time(df, title=None, method=None, hue='lge', sig_niv = 0.05,
     # _ = ax1.set_ylim((-25., 25))
     _ = ax1.set_xticks(ticks, minor=False)
     _ = ax1.set_xticklabels(phases)
-    _ = ax1.legend(['neg', 'pos'])
+    _ = ax1.legend(['{}: neg'.format(hue), '{}: pos'.format(hue)], framealpha=0.5)
     _ = ax1.set_xlabel('')
     _ = ax1.set_ylabel('Circumferential Strain (%)')
 
@@ -542,7 +542,7 @@ def plot_strain_per_time(df, title=None, method=None, hue='lge', sig_niv = 0.05,
     # _ = ax2.set_ylim((-25, 150))
     _ = ax2.set_xticks(ticks, minor=False)
     _ = ax2.set_xticklabels(phases)
-    _ = ax2.legend(['neg', 'pos'], framealpha=0.5)
+    _ = ax2.legend(['{}: neg'.format(hue), '{}: pos'.format(hue)], framealpha=0.5)
     _ = ax2.set_xlabel('')
     _ = ax2.set_ylabel('Radial Strain (%)')
     if title is not None:

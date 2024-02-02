@@ -163,9 +163,13 @@ def check_if_patients_in_metadata_file(DF_METADATA, config, files_):
                 assert len(
                     patient_str) > 0, 'empty patient id found, please check the get_patient_id in fn train_fold()'
             else:
-                patient_str = re.search('-(.{8})_', x).group(1).lower()
-                assert (len(patient_str) == 8), 'matched patient ID from the phase sheet has a length of: {}'.format(
-                    len(patient_str))
+                patient_str = re.search('-(.{8})_', x)
+                if patient_str:
+                    patient_str = patient_str.group(1).lower()
+                    assert (len(patient_str) == 8), 'matched patient ID from the phase sheet has a length of: {}'.format(len(patient_str))
+                else:
+                    patient_str = os.path.basename(x).split('__')[0].lower()
+
             # returns the indices in the following order: 'ED#', 'MS#', 'ES#', 'PF#', 'MD#'
             # reduce by one, as the indexes start at 0, the excel-sheet at 1
             ind = DF_METADATA[DF_METADATA.patient.str.contains(patient_str)][['ed#', 'ms#', 'es#', 'pf#', 'md#']]

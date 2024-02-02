@@ -1,5 +1,8 @@
 from src.data.Preprocess import from_channel_to_flat
 from src.models.Evaluate_moved_myo import calc_dice
+import json, os, logging
+from logging import info
+from src.utils.Utils_io import Console_and_file_logger, init_config, ensure_dir
 
 
 def pred_fold(config, debug=True):
@@ -83,8 +86,6 @@ def pred_fold(config, debug=True):
     # make sure we save always the same patient
     pred_config = config.copy()
 
-    # hack for indicator data
-    #pred_config['FLIP_Z'] = True
 
     pred_config['SHUFFLE'] = False
     pred_config['AUGMENT'] = False
@@ -239,85 +240,13 @@ def main(args=None):
     if os.path.isdir(os.path.join(args.exp, 'model')):
 
         cfg = os.path.join(args.exp, 'config/config.json')
-        print('config given: {}'.format(cfg))
-        # load the experiment config
-        with open(cfg, encoding='utf-8') as data_file:
-            config = json.loads(data_file.read())
-
-        EXPERIMENT = config.get('EXPERIMENT', 'UNDEFINED')
-        Console_and_file_logger(EXPERIMENT, logging.INFO)
-        info('Loaded config for experiment: {}'.format(EXPERIMENT))
-
-        # make relative paths absolute
-        config['MODEL_PATH'] = os.path.join(args.exp, 'model/')
-        config['EXP_PATH'] = args.exp
-        config['FLIP_Z'] = args.flipz
-        config['IS_ORIG_GCN_LABELS'] = args.isoriglabel
-
-        # Load SAX volumes
-        # cluster to local data mapping
-        # if args.data:
-        data_root = args.data
-        config['DATA_PATH_SAX'] = os.path.join(data_root, 'sax')
-        df_folds = os.path.join(data_root, 'df_kfold.csv')
-        # this part is necessary if we try to predict on files that are not in the df folds file
-        # meaning dta which we did not use in the cv (e.g. dmd control)
-        if os.path.isfile(df_folds):
-            config['DF_FOLDS'] = df_folds
-        else:
-            config['DF_FOLDS'] = None
-
-        df_meta = os.path.join(data_root, 'SAx_3D_dicomTags_phase.csv')
-        if os.path.isfile(df_meta):
-            config['DF_META'] = df_meta
-        else:
-            config['DF_META'] = None
-        pred_fold(config)
-        from pathlib import Path
-        exp_path = Path(args.exp).parent
-        gt_path = os.path.join(exp_path, 'gt_m')
-        pred_path = os.path.join(exp_path, 'pred_m')
+        config, gt_path, pred_path = pred_with_single_cfg(args, cfg)
     else: # predict a CV
         for exp_fold in list(sorted(glob.glob(os.path.join(args.exp, 'f*/')))):
 
             cfg = os.path.join(exp_fold, 'config/config.json')
-            print('config given: {}'.format(cfg))
-            # load the experiment config
-            with open(cfg, encoding='utf-8') as data_file:
-                config = json.loads(data_file.read())
+            config, gt_path, pred_path = pred_with_single_cfg(args, cfg)
 
-            EXPERIMENT = config.get('EXPERIMENT', 'UNDEFINED')
-            Console_and_file_logger(EXPERIMENT, logging.INFO)
-            info('Loaded config for experiment: {}'.format(EXPERIMENT))
-
-            # make relative paths absolute
-            config['MODEL_PATH'] = os.path.join(exp_fold, 'model/')
-            config['EXP_PATH'] = exp_fold
-            config['FLIP_Z'] = args.flipz
-            config['IS_ORIG_GCN_LABELS'] = args.isoriglabel
-
-                    # Load SAX volumes
-                    # cluster to local data mapping
-            #if args.data:
-            data_root = args.data
-            config['DATA_PATH_SAX'] = os.path.join(data_root, 'sax')
-            df_folds = os.path.join(data_root, 'df_kfold.csv')
-            # this part is necessary if we try to predict on files that are not in the df folds file
-            # meaning dta which we did not use in the cv (e.g. dmd control)
-            if os.path.isfile(df_folds) :
-                config['DF_FOLDS'] = df_folds
-            else :
-                config['DF_FOLDS'] = None
-
-            df_meta = os.path.join(data_root, 'SAx_3D_dicomTags_phase.csv')
-            if os.path.isfile(df_meta):
-                config['DF_META'] = df_meta
-            else:
-                config['DF_META'] = None
-            pred_fold(config)
-
-        gt_path = os.path.join(args.exp, 'gt_m')
-        pred_path = os.path.join(args.exp, 'pred_m')
     try:
         logging.info('start dice calculation with: {}{}{}'.format(gt_path, pred_path, args.exp))
         calc_dice(gt_path, pred_path, args.exp)
@@ -343,6 +272,56 @@ def main(args=None):
     except Exception as e:
         print(e)
 
+
+def pred_with_single_cfg(args, cfg):
+
+    print('config given: {}'.format(cfg))
+    # load the experiment config
+    with open(cfg, encoding='utf-8') as data_file:
+        config = json.loads(data_file.read())
+    flipz = False
+    isoriglabel = False
+    isdmd = False
+    if args.flipz.lower() == 'true':
+        flipz = True
+    if args.isoriglabel.lower() == 'true':
+        isoriglabel = True
+    if args.isdmd.lower() == 'true':
+        isdmd = True
+    EXPERIMENT = config.get('EXPERIMENT', 'UNDEFINED')
+    Console_and_file_logger(EXPERIMENT, logging.INFO)
+    info('Loaded config for experiment: {}'.format(EXPERIMENT))
+    # make relative paths absolute
+    config['MODEL_PATH'] = os.path.join(args.exp, 'model/')
+    config['EXP_PATH'] = args.exp
+    config['FLIP_Z'] = flipz
+    config['IS_ORIG_GCN_LABELS'] = isoriglabel
+    config['ISDMDDATA'] = isdmd
+    # Load SAX volumes
+    # cluster to local data mapping
+    # if args.data:
+    data_root = args.data
+    config['DATA_PATH_SAX'] = os.path.join(data_root, 'sax')
+    df_folds = os.path.join(data_root, 'df_kfold.csv')
+    # this part is necessary if we try to predict on files that are not in the df folds file
+    # meaning data which we did not use in the cv (e.g. dmd control)
+    if os.path.isfile(df_folds):
+        config['DF_FOLDS'] = df_folds
+    else:
+        config['DF_FOLDS'] = None
+    df_meta = os.path.join(data_root, 'SAx_3D_dicomTags_phase.csv')
+    if os.path.isfile(df_meta):
+        config['DF_META'] = df_meta
+    else:
+        config['DF_META'] = None
+    pred_fold(config)
+    from pathlib import Path
+    exp_path = Path(args.exp).parent
+    gt_path = os.path.join(exp_path, 'gt_m')
+    pred_path = os.path.join(exp_path, 'pred_m')
+    return config, gt_path, pred_path
+
+
 if __name__ == "__main__":
     import argparse
 
@@ -354,6 +333,7 @@ if __name__ == "__main__":
     parser.add_argument('-iscontrol', choices=['True','False','true','false'],action='store', default='false')
     parser.add_argument('-flipz', choices=['True', 'False', 'true', 'false'], action='store', default='false')
     parser.add_argument('-isoriglabel', choices=['True', 'False', 'true', 'false'], action='store', default='false')
+    parser.add_argument('-isdmd', choices=['True', 'False', 'true', 'false'], action='store', default='false')
 
     results = parser.parse_args()
     print('given parameters: {}'.format(results))
