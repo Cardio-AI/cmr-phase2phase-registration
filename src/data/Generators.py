@@ -994,10 +994,33 @@ class PhaseMaskWindowGenerator(DataGenerator):
         # TODO: need to check if this is still necessary!
         self.MASKS = None
 
-        # in memory training for the cluster
+        # in memory file loading
         if self.IN_MEMORY:
-            zipped = [self.__pre_load_one_image__(i, i) for i in range(len(self.IMAGES))]
-            self.IMAGES_SITK, self.MASKS_SITK, _, self.INDICIES = list(map(list, zip(*zipped)))
+            futures = []
+            for i, ID in enumerate(range((len(self.IMAGES)))):
+                # try:
+                #     # remember the ordering of the shuffled indexes,
+                #     # otherwise files, that take longer are always at the batch end
+                futures.append(self.THREAD_POOL.submit(self.__pre_load_one_image__, i, ID))
+
+            images_sitk = []
+            masks_sitk = []
+            indices = []
+            for i, future in enumerate(as_completed(futures)):
+                # use the indexes to order the batch
+                # otherwise slower images will always be at the end of the batch
+                # for backwards, shifted is earlier in time (shift = k-1 or k-w)
+                #x_k, s_k, x_k_shifted, s_k_shifted, i, ID, needed_time = future.result()
+                image, mask, _, ind = future.result()
+                images_sitk.append(image)
+                masks_sitk.append(mask)
+                indices.append(ind)
+
+            self.IMAGES_SITK, self.MASKS_SITK, self.INDICIES = images_sitk, masks_sitk, indices
+
+
+            #zipped = [self.__pre_load_one_image__(i, i) for i in range(len(self.IMAGES))]
+            #self.IMAGES_SITK, self.MASKS_SITK, _, self.INDICIES = list(map(list, zip(*zipped)))
 
         # define a random seed for albumentations
         random.seed(config.get('SEED', 42))
