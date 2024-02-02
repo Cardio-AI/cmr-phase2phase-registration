@@ -134,9 +134,8 @@ def train_fold(config, in_memory=False):
         callbacks=cb,
         initial_epoch=initial_epoch,
         max_queue_size=config.get('QUEUE_SIZE',6),
-        verbose=2)
-
-
+        verbose=2 if in_memory else 1)
+    # 2 if in_memory else 1
     try:
         # free as much memory as possible
         del batch_generator

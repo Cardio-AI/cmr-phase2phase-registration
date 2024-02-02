@@ -1028,7 +1028,7 @@ class PhaseMaskWindowGenerator(DataGenerator):
             'params of generator:')  # print the parameters of this generator, exclude in memory sitk files of file names
         logging.info(list((k, v) for k, v in vars(self).items() if
                           type(v) in [int, str, list, bool] and str(k) not in ['IMAGES', 'LABELS', 'IMAGES_SITK',
-                                                                               'MASKS_SITK']))
+                                                                               'MASKS_SITK', 'INDICIES']))
 
     def on_batch_end(self):
         """

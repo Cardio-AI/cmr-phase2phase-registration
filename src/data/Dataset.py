@@ -1386,7 +1386,7 @@ def get_phases_as_idx_dmd(file_path, df, temporal_sampling_factor, length):
     # Returns the indices in the following order: 'ED#', 'MS#', 'ES#', 'PF#', 'MD#'
     # Reduce the indices of the excel sheet by one, as the indexes start at 0, the excel-sheet at 1
     # Transform them into an one-hot representation
-    use_gt = True
+    use_gt = False
     if use_gt:
         indices = df[df.patient.str.contains(patient_str, case=False)][
             ['ed_gt', 'ms_gt', 'es_gt', 'pf_gt', 'md_gt']]
