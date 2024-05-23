@@ -568,7 +568,8 @@ def calc_strain4singlepatient(path_to_patient_folder, N_TIMESTEPS, RVIP_method, 
         print(e)
         cvi_given = False"""
 
-    if cvi_given:cvi_prs = get_parameter_series_from_xls(df=df_dmdahastrain, parametername='radial peak strain (%)',
+    if cvi_given:
+        cvi_prs = get_parameter_series_from_xls(df=df_dmdahastrain, parametername='radial peak strain (%)',
                                             patientname=patient_name)
     if cvi_given: cvi_pcs = get_parameter_series_from_xls(df=df_dmdahastrain, parametername='circumferential peak strain (%)',
                                             patientname=patient_name)

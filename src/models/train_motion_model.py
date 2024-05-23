@@ -166,7 +166,7 @@ def check_if_patients_in_metadata_file(DF_METADATA, config, files_):
                 if patient_str:
                     patient_str = patient_str.group(1).lower()
                     assert (len(patient_str) == 8), 'matched patient ID from the phase sheet has a length of: {}'.format(len(patient_str))
-                else:
+                elif '__' in os.path.basename(x):
                     patient_str = os.path.basename(x).split('__')[0].lower()
 
             # returns the indices in the following order: 'ED#', 'MS#', 'ES#', 'PF#', 'MD#'

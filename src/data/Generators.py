@@ -18,7 +18,7 @@ from scipy.ndimage import gaussian_filter1d
 
 from src.data.Dataset import describe_sitk, split_one_4d_sitk_in_list_of_3d_sitk, get_phases_as_onehot_gcn, \
     get_phases_as_onehot_acdc, get_n_windows_from_single4D, get_phases_as_idx_gcn, get_phases_as_idx_acdc, match_hist, \
-    get_n_windows_between_phases_from_single4D, get_phases_as_idx_dmd, match_hist_any_dim
+    get_n_windows_between_phases_from_single4D, get_phases_as_idx_dmd, match_hist_any_dim, get_phases_patient_split_by__
 from src.data.Preprocess import resample_3D, clip_quantile, normalise_image, transform_to_binary_mask, load_masked_img, \
     augmentation_compose_2d_3d_4d, pad_and_crop, resample_t_of_4d, load_msk, calc_resampled_size, \
     align_inplane_with_ip
@@ -934,6 +934,7 @@ class PhaseWindowGenerator(DataGenerator):
         return model_inputs, model_targets, i, ID, time() - t0
 '''
 
+
 class PhaseMaskWindowGenerator(DataGenerator):
     """
     yields n input volumes and n output volumes
@@ -983,14 +984,13 @@ class PhaseMaskWindowGenerator(DataGenerator):
             self.ISACDC = True
 
         # opens a dataframe with cleaned phases per patient
-        if not self.ISACDC:
-            self.METADATA_FILE = config.get('DF_META',
-                                            None)
-            if isinstance(self.METADATA_FILE, str):
-                df = pd.read_csv(self.METADATA_FILE)
-                df.columns = df.columns.str.lower()
-                df['patient'] = df['patient'].str.lower()
-                self.DF_METADATA = df
+        self.METADATA_FILE = config.get('DF_META',
+                                        None)
+        if isinstance(self.METADATA_FILE, str):
+            df = pd.read_csv(self.METADATA_FILE)
+            df.columns = df.columns.str.lower()
+            df['patient'] = df['patient'].str.lower()
+            self.DF_METADATA = df
         # TODO: need to check if this is still necessary!
         self.MASKS = None
 
@@ -1171,9 +1171,10 @@ class PhaseMaskWindowGenerator(DataGenerator):
             timesteps = len(model_inputs)
         else:
             timesteps = model_inputs.GetSize()[-1]
-        if self.ISACDC:
-            raise NotImplementedError('need to validate if get_phases_as_idx_acdc works')
-            idx = get_phases_as_idx_acdc(x, temporal_sampling_factor, length=timesteps)
+        if '__' in os.path.basename(x):
+            idx = get_phases_patient_split_by__(file_path=x, df=self.DF_METADATA, temporal_sampling_factor=temporal_sampling_factor, length=timesteps)
+            #raise NotImplementedError('need to validate if get_phases_as_idx_acdc works')
+            #idx = get_phases_as_idx_acdc(x, temporal_sampling_factor, length=timesteps)
         elif self.ISDMD:
             idx = get_phases_as_idx_dmd(x, self.DF_METADATA, temporal_sampling_factor, length=timesteps)
         else:
