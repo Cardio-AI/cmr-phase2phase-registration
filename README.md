@@ -2,7 +2,7 @@ Deep Learning-based aligned strain from cine MRI improves the detection of fibro
 ==============================
 This repository provides a pipeline to derive cardiac-phase-specific strain values from one key frame to the next and throughout the cardiac cycle. The image source are short stacks of short axis cine SSFP cardiac MR images.
 
-Please Note:
+**Please Note:**
 Repository is work in progress and contains the source code for many different experiments, as the corresponding paper is under review. Once the manuscript and method is accepted for publication further descriptions and instructions on how to reproduce the results of the accepted manuscript are provided.
 
 Abstract:
