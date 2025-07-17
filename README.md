@@ -1,9 +1,35 @@
-dynamic-cmr-models
+Deep Learning-based aligned strain from cine MRI improves the detection of fibrotic myocardial tissue in patients with Duchenne Muscular Dystrophy
 ==============================
+This repository provides a pipeline to derive cardiac-phase-specific strain values from one key frame to the next and throughout the cardiac cycle. The image source are short stacks of short axis cine SSFP cardiac MR images.
 
-Extract the cardiac motion from dynamic CMR images.
+**Please Note:**
+Repository is work in progress and contains the source code for many different experiments, as the corresponding paper is under review. Once the manuscript and method is accepted for publication further descriptions and instructions on how to reproduce the results of the accepted manuscript are provided.
 
-Code version for the JCMR submission with "Exp1":
+Abstract:
+--------
+Background: Rare pathologies like Duchenne muscular dystrophy (DMD) are monitored using
+late gadolinium-enhanced (LGE) cine Cardiac Magnetic Resonance (CMR) sequences to track
+myocardial fibrosis. However, reducing gadolinium exposure is crucial due to its invasive and
+time-consuming nature. Strain analysis from cine (non-contrast) CMR serves as a valuable
+indicator for detecting abnormal cardiac function.
+Purpose: Unfortunately, traditional strain lack temporal alignment between patients. Peak or
+end-systolic strain disregard diastolic deformation patterns, while markers like early diastolic
+strain-rates necessitate manual frame selection.
+Materials and Methods: Our Deep Learning pipeline detects five key frames throughout the
+cardiac cycle, allowing for temporally aligned, phase-specific strain analysis across patients by
+deriving them from one key frame to the next. We evaluated the effectiveness of these strain
+values in identifying abnormal deformations associated with fibrotic segments in a
+retrospective study of 57 patients and assessed reproducibility in 82 patients, comparing our
+method with existing feature-tracking and DL-based strain methods. The study involved cine
+CMR from 139 DMD patients collected in one centre between 2018 and 2023.
+Results: Aligned strain revealed five times more differences (29 vs. 5, p < 0.01) between
+fibrotic and non-fibrotic segments and identified abnormal diastolic deformation patterns often
+missed by traditional strain-methods. Additionally, it enhanced model robustness for fibrosis
+detection, improving specificity by 40%, accuracy by 17%, and accuracy for detecting fibrosis
+in DMD with preserved ejection fraction by 61%.
+Conclusion: The pathology-independent technique enables motion-based detection of
+myocardial dysfunction, potentially reducing contrast agent exposure, facilitating detailed interpatient
+strain analysis, and allowing precise tracking of disease progression in DMD.
 
 Checkout commit:
 - [commit](https://github.com/Cardio-AI/cmr-phase2phase-registration/commit/15a15c8bd9abf2319027357397597b4931db3765)
